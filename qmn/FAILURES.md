@@ -1287,7 +1287,7 @@ designed failure; every typed refusal the node can emit belongs here.
   VPS/cloud/credential/network path, a partial-model registration, a
   sealed-holdout peek, or a reproducibility mismatch. Inspect
   `read_failure_detail` on the evidence channel. Re-run
-  `python -m qmn.mis.regime_train` (via the in-library API over prepared
+  `python -m qmf.readings.regime_train` (via the in-library API over prepared
   labeled/cleaned corpora) on your own machine; do not train on the
   trading VPS; do not register partial outputs.
 
@@ -1328,7 +1328,7 @@ designed failure; every typed refusal the node can emit belongs here.
   profit/live-authority/post-hoc-threshold claim, an artifact or holdout
   mutation, an incomplete training input, or a reproducibility mismatch.
   Inspect `read_failure_detail` on the evidence channel. Re-run
-  `python -m qmn.mis.regime_eval` (via the in-library API over prepared
+  `python -m qmf.readings.regime_eval` (via the in-library API over prepared
   training/labeled/cleaned artifacts) on your own machine; do not change
   thresholds after seeing results; do not grant money-path authority from
   evaluation alone.
@@ -1368,7 +1368,7 @@ designed failure; every typed refusal the node can emit belongs here.
   governed/active status claim, a live-consumer binding, a composition_fp
   mutation, a pretrained-reputation shortcut, or an incomplete/mismatched
   accepted-path registration. Inspect `read_failure_detail` on the evidence
-  channel. Register through `qmn.mis.regime_register` over prepared
+  channel. Register through `qmf.readings.regime_register` over prepared
   training/evaluation artifacts; do not grant money-path authority from
   registration alone; do not expect hub publish of sandbox provenance.
 

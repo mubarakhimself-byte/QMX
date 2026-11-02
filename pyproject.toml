@@ -232,6 +232,7 @@ pythonpath = [
     "packages/qmf-structure/src",
     "packages/qmf-venue/src",
     "packages/qmf-risk/src",
+    "packages/qmf-readings/src",
     "extensions/qmf-calendar-forex/src",
     "qml/src",
     "qmb/src",
@@ -362,6 +363,7 @@ extraPaths = [
     "packages/qmf-structure/src",
     "packages/qmf-venue/src",
     "packages/qmf-risk/src",
+    "packages/qmf-readings/src",
     "extensions/qmf-calendar-forex/src",
     "qml/src",
     "qmb/src",
@@ -493,7 +495,7 @@ lint = "ruff check packages extensions qml qmb qmn tools"
 # python -m: direct `pyright` console script can be blocked by host App Control.
 types = "python -m pyright"
 # python -m: direct `pytest` console script can be blocked by host App Control.
-test = "python -m pytest packages extensions qml qmb qmn --cov=packages/qmf-core/src --cov=packages/qmf-data/src --cov=packages/qmf-registry/src --cov=packages/qmf-indicators/src --cov=packages/qmf-structure/src --cov=packages/qmf-risk/src --cov=packages/qmf-venue/src --cov=extensions/qmf-calendar-forex/src --cov=qml/src --cov=qmb/src --cov=qmn/src --cov=qmn/deploy --cov-branch --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80"
+test = "python -m pytest packages extensions qml qmb qmn --cov=packages/qmf-core/src --cov=packages/qmf-data/src --cov=packages/qmf-registry/src --cov=packages/qmf-indicators/src --cov=packages/qmf-structure/src --cov=packages/qmf-risk/src --cov=packages/qmf-venue/src --cov=packages/qmf-readings/src --cov=extensions/qmf-calendar-forex/src --cov=qml/src --cov=qmb/src --cov=qmn/src --cov=qmn/deploy --cov-branch --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80"
 qa-verify = "python qa/run_qa_verify.py"
 # Mechanical per-package + contract-module enforcement on top of the aggregate floor
 # above: reads the coverage.json `test` writes and fails the gate if any package drops

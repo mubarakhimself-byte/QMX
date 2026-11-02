@@ -122,7 +122,7 @@ from qmn.ledger import (
     seed_binding_ledger,
 )
 from qmn.ledger.binding_ledger import BindingVirtualLedger
-from qmn.mis import (
+from qmf.readings import (
     CanonicalFeedState,
     ProducerReadiness,
     ProducerSlot,

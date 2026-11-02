@@ -9,7 +9,7 @@ from qmf.core import CalendarIdentity, Instant, WriterId, fingerprint, is_ok, is
 from qmf.core.refusal import RefusalCategory, Result
 from qmf.data.dukascopy import DUKASCOPY_SOURCE, PERSONAL_USE_LICENSE
 from qmf.registry import EdgeLog, EdgeType, KindRegistry, Registrar, WriteOutcome
-from qmn.mis import (
+from qmf.readings import (
     BAR_INTERVAL_M5_NS,
     DECLARED_TRADING_SESSIONS,
     DEFAULT_TRAINING_SEED,
@@ -32,7 +32,6 @@ from qmn.mis import (
     build_acquisition_plan,
     build_non_authoritative_registration,
     clean_corpus,
-    enter_passive_hub_as_sandbox,
     install_regime_model_kind,
     materialize_corpus_splits,
     materialize_labeled_corpus,
@@ -46,12 +45,11 @@ from qmn.mis import (
     run_offline_evaluation,
     run_offline_training,
 )
-from qmn.promotion.hub import SANDBOX_PROVENANCE
-from qmn.promotion.passive_hub import PassiveHubTree, publish_inbox_fragment
+from qmf.readings.regime_register import SANDBOX_PROVENANCE
 
 T = TypeVar("T")
 
-_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmn" / "mis"
+_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmf" / "readings"
 _T0 = 1_700_000_000_000_000_000
 _HOLDOUT_MONTHS = 12
 _CLOSE = 100_000
@@ -273,7 +271,7 @@ def test_accepted_registration_links_full_lineage(tmp_path: Path) -> None:
     assert (tmp_path / "reg" / "lineage_edges.jsonl").is_file()
     # Still unbound on the governed producer catalog.
     assert is_refusal(refuse_trained_regime_classifier(REGIME_CLASSIFIER_PRODUCER_ID))
-    assert REGIME_REGISTER_SURFACE == "qmn.mis.regime_register"
+    assert REGIME_REGISTER_SURFACE == "qmf.readings.regime_register"
 
 
 def test_changed_content_mints_new_version(tmp_path: Path) -> None:
@@ -414,48 +412,6 @@ def test_incomplete_and_external_candidates_have_no_authority(tmp_path: Path) ->
     assert is_refusal(build_accepted_registration(artifact=artifact, evaluation=report))
 
 
-def test_passive_hub_keeps_sandbox_and_preserves_composition_fp(tmp_path: Path) -> None:
-    _cleaned, _labeled, artifact, report = _evaluated(tmp_path)
-    registration = _ok(
-        build_accepted_registration(
-            artifact=artifact,
-            evaluation=_accepted_report(report),
-        )
-    )
-    composition = _ok(fingerprint({"class": "composition_fp", "label": "hub-epoch"}))
-    registrar, edges, writer = _registry()
-    bundle = _ok(
-        register_model_lineage(
-            registration,
-            registrar=registrar,
-            edge_log=edges,
-            writer=writer,
-            sequence=0,
-            created_at=_instant(),
-            composition_fp=composition,
-        )
-    )
-    tree = PassiveHubTree(tmp_path / "hub")
-    published = _ok(
-        enter_passive_hub_as_sandbox(
-            bundle,
-            tree=tree,
-            writer=writer,
-            artifact_key="regime-candidate",
-        )
-    )
-    assert published.provenance == SANDBOX_PROVENANCE
-    assert published.write_only_inbox is True
-    assert published.promotion_refused is True
-    assert published.publish_refused is True
-    assert published.composition_fp_unchanged is True
-    # Operator publish still refuses sandbox provenance.
-    refused_publish = publish_inbox_fragment(tree, writer=writer, artifact_key="regime-candidate")
-    assert is_refusal(refused_publish)
-    assert refused_publish.context["field"] == "provenance"
-    assert is_ok(assert_registration_preserves_composition_fp(bundle, composition_fp=composition))
-
-
 def test_registration_module_stays_offline_without_training_or_deploy() -> None:
     text = (_MIS_SRC / "regime_register.py").read_text(encoding="utf-8")
     forbidden = (
@@ -475,7 +431,7 @@ def test_registration_module_stays_offline_without_training_or_deploy() -> None:
     assert "mis.regime_register.governed_status" in text
     assert "mis.regime_register.composition_fp_mutation" in text
     assert "mis.regime_register.pretrained_reputation" in text
-    assert "python -m qmn.mis.regime_register" in text or "qmn.mis.regime_register" in text
+    assert "python -m qmf.readings.regime_register" in text or "qmf.readings.regime_register" in text
     assert is_refusal(refuse_trained_regime_classifier("regime_classifier_v1"))
     assert (
         refuse_governed_or_active_status(status="active").category

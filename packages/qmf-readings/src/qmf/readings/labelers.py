@@ -20,9 +20,8 @@ from qmf.core import (
     UnitKind,
     is_refusal,
 )
-
-from qmn.mis._refuse import invalid, policy
-from qmn.mis.catalog import (
+from qmf.readings._refuse import invalid, policy
+from qmf.readings.catalog import (
     DEGRADED_SENSORS_PRODUCER_ID,
     FEED_STATE_PRODUCER_ID,
     GAP_EVENT_PRODUCER_ID,
@@ -37,8 +36,8 @@ from qmn.mis.catalog import (
     SpreadState,
     SqsBaselineArtifact,
 )
-from qmn.mis.liquidity import evaluate_liquidity_stress
-from qmn.mis.signal_snapshot import (
+from qmf.readings.liquidity import evaluate_liquidity_stress
+from qmf.readings.signal_snapshot import (
     SQS_PRODUCER_ID,
     CanonicalFeedState,
     ProducerReadiness,
@@ -64,7 +63,7 @@ __all__ = [
     "require_frontier_bound",
 ]
 
-LABELERS_SURFACE: Final[str] = "qmn.mis.labelers"
+LABELERS_SURFACE: Final[str] = "qmf.readings.labelers"
 SQS_TICK_CADENCES: Final[frozenset[str]] = frozenset({"tick", "quote"})
 _BAR_CADENCE: Final[str] = "bar"
 

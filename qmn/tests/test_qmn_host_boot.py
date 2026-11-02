@@ -375,7 +375,6 @@ def test_no_cli_and_only_host_owns_boot_ceremony() -> None:
         "reconcile",
         "seats",
         "promotion",
-        "mis",
         "data",
         "time",
         "secrets",

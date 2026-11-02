@@ -15,9 +15,8 @@ from enum import StrEnum
 from typing import Final
 
 from qmf.core import Fingerprint, Ok, Result, fingerprint, is_refusal
-
-from qmn.mis._refuse import invalid, policy
-from qmn.mis.catalog import (
+from qmf.readings._refuse import invalid, policy
+from qmf.readings.catalog import (
     REGIME_CLASSIFIER_PRODUCER_ID,
     UNAUTHORITATIVE_CANDIDATES,
     refuse_unauthoritative_candidate,
@@ -26,10 +25,10 @@ from qmn.mis.catalog import (
 __all__ = [
     "CHOSEN_MODEL_FAMILY",
     "DECLARED_TRADING_SESSIONS",
-    "REGIME_CLASS_VOCABULARY",
     "REGIME_DESIGN_ARTIFACT_ID",
     "REGIME_DESIGN_FORMAT_VERSION",
     "REGIME_DESIGN_SURFACE",
+    "VOLATILITY_STATE_VOCABULARY",
     "CandidateFamilyEvaluation",
     "DataWindowContract",
     "EvaluationContract",
@@ -40,10 +39,10 @@ __all__ = [
     "LabelContract",
     "LeakageControls",
     "ModelFamilyId",
-    "RegimeClass",
     "RegimeClassifierDesign",
     "SplitStrategy",
     "TradingSession",
+    "VolatilityState",
     "accepted_regime_classifier_design",
     "assert_design_unchanged",
     "evaluate_candidate_families",
@@ -52,7 +51,7 @@ __all__ = [
     "validate_regime_design_leakage",
 ]
 
-REGIME_DESIGN_SURFACE: Final[str] = "qmn.mis.regime_design"
+REGIME_DESIGN_SURFACE: Final[str] = "qmf.readings.regime_design"
 REGIME_DESIGN_FORMAT_VERSION: Final[int] = 1
 REGIME_DESIGN_ARTIFACT_ID: Final[str] = "regime_classifier_v1_design"
 CHOSEN_MODEL_FAMILY: Final[str] = "lightgbm-multiclass"
@@ -69,8 +68,11 @@ class ModelFamilyId(StrEnum):
     ONLINE_RIVER = "online-river"
 
 
-class RegimeClass(StrEnum):
-    """Closed volatility/risk-state vocabulary — never a direction claim."""
+class VolatilityState(StrEnum):
+    """The closed volatility state buckets, never a direction claim.
+
+    "Regime" means trend against range (LC-A0-20); these buckets measure volatility only.
+    """
 
     QUIET = "quiet"
     NORMAL = "normal"
@@ -93,7 +95,7 @@ class ImbalanceTreatment(StrEnum):
     EXCLUDE_INSUFFICIENT = "exclude-insufficient-evidence"
 
 
-REGIME_CLASS_VOCABULARY: Final[tuple[str, ...]] = tuple(c.value for c in RegimeClass)
+VOLATILITY_STATE_VOCABULARY: Final[tuple[str, ...]] = tuple(c.value for c in VolatilityState)
 DECLARED_TRADING_SESSIONS: Final[tuple[str, ...]] = tuple(s.value for s in TradingSession)
 
 
@@ -538,7 +540,7 @@ def accepted_regime_classifier_design() -> RegimeClassifierDesign:
     )
     labels = LabelContract(
         method="forward-realized-range-quantile-buckets",
-        class_vocabulary=REGIME_CLASS_VOCABULARY,
+        class_vocabulary=VOLATILITY_STATE_VOCABULARY,
         exclusion_class="insufficient_evidence",
         horizon_bars=12,
         quantile_edges=("0.25", "0.50", "0.75"),
@@ -813,10 +815,10 @@ def validate_regime_design_leakage(
             "the design artifact grants neither money-path nor governed binding",
         )
     vocab = tuple(design.label_contract.class_vocabulary)
-    if vocab != REGIME_CLASS_VOCABULARY:
+    if vocab != VOLATILITY_STATE_VOCABULARY:
         return policy(
             "class_vocabulary",
-            "closed regime class vocabulary is quiet|normal|elevated|stressed",
+            "closed volatility state vocabulary is quiet|normal|elevated|stressed",
             given=list(vocab),
         )
     if design.label_contract.exclusion_class != "insufficient_evidence":

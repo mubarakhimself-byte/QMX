@@ -9,7 +9,7 @@ import pytest
 from qmf.core import CalendarIdentity, RefusalCategory, is_ok, is_refusal
 from qmf.core.refusal import Result
 from qmf.data.dukascopy import DUKASCOPY_SOURCE, PERSONAL_USE_LICENSE
-from qmn.mis import (
+from qmf.readings import (
     BAR_INTERVAL_M5_NS,
     DECLARED_TRADING_SESSIONS,
     DEFAULT_TRAINING_SEED,
@@ -41,7 +41,7 @@ from qmn.mis import (
 
 T = TypeVar("T")
 
-_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmn" / "mis"
+_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmf" / "readings"
 _T0 = 1_700_000_000_000_000_000
 _HOLDOUT_MONTHS = 12
 _CLOSE = 100_000
@@ -182,7 +182,7 @@ def test_evaluation_follows_story_30_1_contract(tmp_path: Path) -> None:
     )
     assert (tmp_path / "eval" / "evaluation_report.json").is_file()
     assert (tmp_path / "eval" / "evaluation_config.json").is_file()
-    assert REGIME_EVAL_SURFACE == "qmn.mis.regime_eval"
+    assert REGIME_EVAL_SURFACE == "qmf.readings.regime_eval"
     # Still unbound — evaluation is not registration or live authority.
     assert is_refusal(refuse_trained_regime_classifier("regime_classifier_v1"))
 
@@ -217,7 +217,7 @@ def test_identical_inputs_reproduce_evaluation_report(tmp_path: Path) -> None:
 
 
 def test_explicit_lightgbm_refuses_deterministic_surrogate_artifact(tmp_path: Path) -> None:
-    from qmn.mis.regime_eval import EVALUATION_BACKEND_LIGHTGBM, build_evaluation_config
+    from qmf.readings.regime_eval import EVALUATION_BACKEND_LIGHTGBM, build_evaluation_config
 
     cleaned, labeled, artifact = _trained(tmp_path)
     result = build_evaluation_config(
@@ -232,7 +232,7 @@ def test_explicit_lightgbm_refuses_deterministic_surrogate_artifact(tmp_path: Pa
 
 
 def test_predictor_refuses_backend_artifact_mismatch_and_keeps_surrogate_positive() -> None:
-    from qmn.mis.regime_eval import (
+    from qmf.readings.regime_eval import (
         EVALUATION_BACKEND_DETERMINISTIC,
         EVALUATION_BACKEND_LIGHTGBM,
         _select_predictor,  # pyright: ignore[reportPrivateUsage] -- artifact encoding mismatch is a private predictor invariant not constructible through valid TrainingArtifact fixtures.
@@ -317,7 +317,7 @@ def test_evaluation_module_stays_offline_without_eager_lightgbm() -> None:
     assert text.find("import lightgbm as lgb") > text.find("def _lightgbm_predict")
     assert "mis.regime_eval.profit_inference" in text
     assert "mis.regime_eval.post_hoc_threshold" in text
-    assert "python -m qmn.mis.regime_eval" in text
+    assert "python -m qmf.readings.regime_eval" in text
     assert "run_offline_training" not in text
     assert "write_bytes_exclusive_no_follow" in text
     assert ".write_text(" not in text
@@ -378,7 +378,7 @@ def test_evaluation_does_not_follow_planted_config_symlink(tmp_path: Path) -> No
 
 
 def test_eval_cli_json_loader_still_refuses(tmp_path: Path) -> None:
-    from qmn.mis.regime_eval import main as eval_main
+    from qmf.readings.regime_eval import main as eval_main
 
     artifact = tmp_path / "artifact.json"
     labeled = tmp_path / "labeled.json"

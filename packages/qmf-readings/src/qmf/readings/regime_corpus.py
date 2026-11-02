@@ -36,9 +36,8 @@ from qmf.data import (
 )
 from qmf.data.dukascopy import DUKASCOPY_SOURCE, PERSONAL_USE_LICENSE
 from qmf.data.splits import SplitSegment
-
-from qmn.mis._refuse import clean_token, invalid, policy
-from qmn.mis.regime_design import (
+from qmf.readings._refuse import clean_token, invalid, policy
+from qmf.readings.regime_design import (
     DECLARED_TRADING_SESSIONS,
     DataWindowContract,
     ExecutableRegimeContract,
@@ -77,7 +76,7 @@ __all__ = [
     "refuse_silent_repair",
 ]
 
-REGIME_CORPUS_SURFACE: Final[str] = "qmn.mis.regime_corpus"
+REGIME_CORPUS_SURFACE: Final[str] = "qmf.readings.regime_corpus"
 REGIME_CORPUS_ARTIFACT_ID: Final[str] = "regime_classifier_v1_training_corpus"
 CORPUS_FORMAT_VERSION: Final[int] = 1
 ACQUISITION_CONTEXT: Final[str] = "operator-machine-offline-acquisition"

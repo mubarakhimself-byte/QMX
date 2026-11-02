@@ -21,7 +21,7 @@ from qmf.data.journal_producer import JournalWriter
 from qmf.data.store import JournalStore
 from qmn.host.decision_root import HostedDecisionRoot, HostedDecisionTranscript
 from qmn.loop import CommandStreamLoop, RecordingAccumulator, clear_first_writer_registry
-from qmn.mis import SQS_PRODUCER_ID, SignalSnapshot, mint_signal_snapshot
+from qmf.readings import SQS_PRODUCER_ID, SignalSnapshot, mint_signal_snapshot
 from qmn.order.identity import NativeExecutionMap
 from qmn.seats import SeatTransitionStream
 

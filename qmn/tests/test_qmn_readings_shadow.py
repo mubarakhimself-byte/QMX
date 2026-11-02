@@ -33,7 +33,7 @@ from qmn.host.boot_ceremony import (
     run_check_mode,
 )
 from qmn.journal_dispatch import RecordingJournalSink
-from qmn.mis import (
+from qmf.readings import (
     IDENTITY_PRODUCER_ID,
     MONEY_PATH_CONSUMERS,
     SHADOW_COMPARISON_PROJECTION_KEY,
@@ -74,13 +74,13 @@ from qmn.mis import (
     shadow_writer_stream_pair,
     sqs_baseline_key,
 )
-from qmn.mis.catalog import DeclaredFourBounds, MisProducerRole
-from qmn.mis.shadow import ShadowLaneConfig
-from qmn.mis.signal_snapshot import SqsReading
+from qmf.readings.catalog import DeclaredFourBounds, MisProducerRole
+from qmf.readings.shadow import ShadowLaneConfig
+from qmf.readings.signal_snapshot import SqsReading
 
 T = TypeVar("T")
 
-_MIS_SRC = Path(__file__).resolve().parents[1] / "src" / "qmn" / "mis"
+_MIS_SRC = Path(__file__).resolve().parents[2] / "packages" / "qmf-readings" / "src" / "qmf" / "readings"
 
 
 def _ok(result: Result[T]) -> T:
@@ -220,7 +220,7 @@ def _candidate_identity():
 
 
 def test_shadow_surface_constants_and_zero_authority() -> None:
-    assert SHADOW_SURFACE == "qmn.mis.shadow"
+    assert SHADOW_SURFACE == "qmf.readings.shadow"
     assert SHADOW_WRITER_ROLE == "mis-shadow"
     assert SHADOW_WRITER_STREAM == "shadow-snapshot"
     assert SHADOW_MANIFEST_PREFIX == "mis/shadow/"

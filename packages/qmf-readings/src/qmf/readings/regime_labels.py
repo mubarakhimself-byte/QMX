@@ -28,22 +28,21 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.data import SegmentRole
-
-from qmn.mis._refuse import clean_token, invalid, policy
-from qmn.mis.liquidity import exact_nearest_rank_quantile
-from qmn.mis.regime_corpus import (
+from qmf.readings._refuse import clean_token, invalid, policy
+from qmf.readings.liquidity import exact_nearest_rank_quantile
+from qmf.readings.regime_corpus import (
     BAR_INTERVAL_M5_NS,
     CleanedCorpus,
     CleanedCorpusRow,
     CorpusSplitBundle,
 )
-from qmn.mis.regime_design import (
+from qmf.readings.regime_design import (
     DECLARED_TRADING_SESSIONS,
-    REGIME_CLASS_VOCABULARY,
+    VOLATILITY_STATE_VOCABULARY,
     ExecutableRegimeContract,
     LabelContract,
-    RegimeClass,
     RegimeClassifierDesign,
+    VolatilityState,
     assert_design_unchanged,
     executable_regime_contract,
 )
@@ -68,7 +67,7 @@ __all__ = [
     "refuse_sealed_holdout_outcome_peek",
 ]
 
-REGIME_LABELS_SURFACE: Final[str] = "qmn.mis.regime_labels"
+REGIME_LABELS_SURFACE: Final[str] = "qmf.readings.regime_labels"
 REGIME_LABELS_ARTIFACT_ID: Final[str] = "regime_classifier_v1_labeled_corpus"
 LABELS_FORMAT_VERSION: Final[int] = 1
 LABEL_GENERATOR_ID: Final[str] = "forward-realized-range-quantile-buckets"
@@ -427,12 +426,12 @@ def generate_regime_labels(
             given=label_contract.exclusion_class,
             required=EXCLUSION_CLASS,
         )
-    if tuple(label_contract.class_vocabulary) != REGIME_CLASS_VOCABULARY:
+    if tuple(label_contract.class_vocabulary) != VOLATILITY_STATE_VOCABULARY:
         return policy(
             "class_vocabulary",
-            "labels map only to the closed regime class vocabulary",
+            "labels map only to the closed volatility state vocabulary",
             given=list(label_contract.class_vocabulary),
-            required=list(REGIME_CLASS_VOCABULARY),
+            required=list(VOLATILITY_STATE_VOCABULARY),
         )
 
     resolved_edges = edges
@@ -566,12 +565,12 @@ def audit_regime_labels(
             )
         admitted.append(raw)
 
-    labeled_counts: dict[str, int] = dict.fromkeys(REGIME_CLASS_VOCABULARY, 0)
+    labeled_counts: dict[str, int] = dict.fromkeys(VOLATILITY_STATE_VOCABULARY, 0)
     labeled_counts[EXCLUSION_CLASS] = 0
-    class_counts: dict[str, int] = dict.fromkeys(REGIME_CLASS_VOCABULARY, 0)
+    class_counts: dict[str, int] = dict.fromkeys(VOLATILITY_STATE_VOCABULARY, 0)
     missingness: dict[str, int] = {reason.value: 0 for reason in ExclusionReason}
     session_distribution: dict[str, dict[str, int]] = {
-        session: dict.fromkeys((*REGIME_CLASS_VOCABULARY, EXCLUSION_CLASS), 0)
+        session: dict.fromkeys((*VOLATILITY_STATE_VOCABULARY, EXCLUSION_CLASS), 0)
         for session in DECLARED_TRADING_SESSIONS
     }
     instrument_distribution: dict[str, dict[str, int]] = {}
@@ -601,12 +600,12 @@ def audit_regime_labels(
             session_distribution[row.session][row.class_label] += 1
         instrument_distribution.setdefault(
             row.instrument,
-            dict.fromkeys((*REGIME_CLASS_VOCABULARY, EXCLUSION_CLASS), 0),
+            dict.fromkeys((*VOLATILITY_STATE_VOCABULARY, EXCLUSION_CLASS), 0),
         )
         instrument_distribution[row.instrument][row.class_label] += 1
         split_distribution.setdefault(
             row.split_role,
-            dict.fromkeys((*REGIME_CLASS_VOCABULARY, EXCLUSION_CLASS), 0),
+            dict.fromkeys((*VOLATILITY_STATE_VOCABULARY, EXCLUSION_CLASS), 0),
         )
         split_distribution[row.split_role][row.class_label] += 1
         window_key = f"{row.split_role}:{row.session}"
@@ -623,7 +622,9 @@ def audit_regime_labels(
             previous = row.class_label
 
     train_counts = split_distribution.get(SegmentRole.TRAIN.value, {})
-    unsupported = tuple(name for name in REGIME_CLASS_VOCABULARY if train_counts.get(name, 0) <= 0)
+    unsupported = tuple(
+        name for name in VOLATILITY_STATE_VOCABULARY if train_counts.get(name, 0) <= 0
+    )
     total_classed = sum(class_counts.values())
     balance: dict[str, tuple[int, int]] = {}
     for name, count in class_counts.items():
@@ -998,11 +999,11 @@ def _bucket_class(range_ppb: int, edges: Sequence[int]) -> str:
     # edges are (q25, q50, q75) for the four closed classes.
     if len(edges) != 3:
         # Defensive: contract validation already requires three edges.
-        return RegimeClass.STRESSED.value if range_ppb > 0 else RegimeClass.QUIET.value
+        return VolatilityState.STRESSED.value if range_ppb > 0 else VolatilityState.QUIET.value
     if range_ppb <= edges[0]:
-        return RegimeClass.QUIET.value
+        return VolatilityState.QUIET.value
     if range_ppb <= edges[1]:
-        return RegimeClass.NORMAL.value
+        return VolatilityState.NORMAL.value
     if range_ppb <= edges[2]:
-        return RegimeClass.ELEVATED.value
-    return RegimeClass.STRESSED.value
+        return VolatilityState.ELEVATED.value
+    return VolatilityState.STRESSED.value

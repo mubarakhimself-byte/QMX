@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from qmf.core.refusal import is_ok
-from qmn.mis import (
+from qmf.readings import (
     EVALUATION_BACKEND_DETERMINISTIC,
     TRAINING_BACKEND_DETERMINISTIC,
     TrainingArtifact,
@@ -16,8 +16,8 @@ from qmn.mis import (
     run_offline_evaluation,
     run_offline_training,
 )
-from test_qmn_mis_regime_eval import fixture_trained_regime_evaluation
-from test_qmn_mis_regime_train import fixture_prepared_regime_training
+from test_readings_regime_eval import fixture_trained_regime_evaluation
+from test_readings_regime_train import fixture_prepared_regime_training
 
 
 def test_training_restart_reproduces_uninterrupted_trials(tmp_path: Path) -> None:

@@ -28,6 +28,7 @@ from qmf.core import (
 )
 from qmf.data.store import EvidenceStore, StoreReceipt, WorldStore
 from qmf.data.store.rooms import RoomRole
+from qmf.readings.signal_snapshot import SqsBaselineKey
 from qmf.registry import LoadedRecord
 from qmf.risk.binding import (
     BookBindingRecord,
@@ -48,7 +49,6 @@ from qmn.host.configured_runtime import (
 )
 from qmn.host.registered_templates import decode_bms_definition, decode_book_definition
 from qmn.host.shakedown import ShakedownEvidence, ShakedownSignaturePage
-from qmn.mis.signal_snapshot import SqsBaselineKey
 
 __all__ = [
     "ADMISSION_EVIDENCE_FORMAT_VERSION",

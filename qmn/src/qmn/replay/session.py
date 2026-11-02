@@ -32,10 +32,10 @@ from qmf.core import (
     is_ok,
     is_refusal,
 )
+from qmf.readings.signal_snapshot import ProducerReadiness
 
 from qmn.config.compiler import ResolvedNodeConfig
 from qmn.loop import CommandStreamLoop, RecordingAccumulator
-from qmn.mis.signal_snapshot import ProducerReadiness
 from qmn.replay._refuse import clean_token, invalid, policy, unavailable
 from qmn.replay.port import (
     FILL_SIMULATION_IN_REPLAY,

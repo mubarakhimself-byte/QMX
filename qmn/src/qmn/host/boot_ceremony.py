@@ -877,7 +877,7 @@ def run_boot_ceremony(
         composition_inputs, composition_classes.identity_content
     )
 
-    from qmn.mis.shadow import (  # noqa: PLC0415 — leaf isolation check at Compose
+    from qmf.readings.shadow import (  # noqa: PLC0415 — leaf isolation check at Compose
         refuse_shadow_governed_wiring,
     )
 

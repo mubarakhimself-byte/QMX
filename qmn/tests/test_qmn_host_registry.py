@@ -278,7 +278,6 @@ def test_only_host_mints_through_registrar_seam() -> None:
         "reconcile",
         "seats",
         "promotion",
-        "mis",
         "data",
         "time",
         "secrets",

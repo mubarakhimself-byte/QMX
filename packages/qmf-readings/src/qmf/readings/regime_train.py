@@ -28,22 +28,21 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final, cast
 
-from qmb.orchestrator.paths import (
+from qmf.core import Fingerprint, Ok, Result, TypedRefusal, fingerprint, is_refusal
+from qmf.data import SegmentRole
+from qmf.readings._files import (
     MAX_JSONL_BYTES,
     append_bytes_no_follow,
     read_contained_bytes,
     read_contained_text,
     write_bytes_exclusive_no_follow,
 )
-from qmf.core import Fingerprint, Ok, Result, TypedRefusal, fingerprint, is_refusal
-from qmf.data import SegmentRole
-
-from qmn.mis._refuse import clean_token, invalid, policy, unavailable
-from qmn.mis.regime_corpus import BAR_INTERVAL_M5_NS, CleanedCorpus, CleanedCorpusRow
-from qmn.mis.regime_design import (
+from qmf.readings._refuse import clean_token, invalid, policy, unavailable
+from qmf.readings.regime_corpus import BAR_INTERVAL_M5_NS, CleanedCorpus, CleanedCorpusRow
+from qmf.readings.regime_design import (
     CHOSEN_MODEL_FAMILY,
     DECLARED_TRADING_SESSIONS,
-    REGIME_CLASS_VOCABULARY,
+    VOLATILITY_STATE_VOCABULARY,
     ExecutableRegimeContract,
     HyperparameterBounds,
     RegimeClassifierDesign,
@@ -51,7 +50,7 @@ from qmn.mis.regime_design import (
     assert_design_unchanged,
     executable_regime_contract,
 )
-from qmn.mis.regime_labels import EXCLUSION_CLASS, LabeledCorpus
+from qmf.readings.regime_labels import EXCLUSION_CLASS, LabeledCorpus
 
 __all__ = [
     "DEFAULT_TRAINING_SEED",
@@ -88,7 +87,7 @@ __all__ = [
     "run_offline_training",
 ]
 
-REGIME_TRAIN_SURFACE: Final[str] = "qmn.mis.regime_train"
+REGIME_TRAIN_SURFACE: Final[str] = "qmf.readings.regime_train"
 REGIME_TRAIN_ARTIFACT_ID: Final[str] = "regime_classifier_v1_training_run"
 REGIME_TRAIN_FORMAT_VERSION: Final[int] = 1
 TRAINING_LOCATION: Final[str] = "operator-machine-offline-script"
@@ -715,7 +714,7 @@ def build_training_config(
 
     cmd: tuple[str, ...]
     if command is None:
-        cmd = ("python", "-m", "qmn.mis.regime_train", "--output-dir", out)
+        cmd = ("python", "-m", "qmf.readings.regime_train", "--output-dir", out)
     elif isinstance(command, Sequence) and not isinstance(command, (str, bytes)):
         tokens = tuple(str(item) for item in cast("Sequence[object]", command))
         if not tokens:
@@ -831,7 +830,7 @@ def build_labeled_feature_rows(
         if labeled_row.class_label == EXCLUSION_CLASS:
             excluded += 1
             continue
-        if labeled_row.class_label not in REGIME_CLASS_VOCABULARY:
+        if labeled_row.class_label not in VOLATILITY_STATE_VOCABULARY:
             return policy(
                 "class_label",
                 "labels must stay inside the closed regime vocabulary",
@@ -874,7 +873,7 @@ def build_labeled_feature_rows(
             )
         )
     frozen = {role: tuple(rows) for role, rows in buckets.items()}
-    return Ok((feature_ids, REGIME_CLASS_VOCABULARY, frozen, excluded))
+    return Ok((feature_ids, VOLATILITY_STATE_VOCABULARY, frozen, excluded))
 
 
 def build_training_matrix(
@@ -1400,9 +1399,9 @@ def assert_registerable_training_artifact(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Operator entry: ``python -m qmn.mis.regime_train`` (never a node CLI)."""
+    """Operator entry: ``python -m qmf.readings.regime_train`` (never a node CLI)."""
     parser = argparse.ArgumentParser(
-        prog="qmn.mis.regime_train",
+        prog="qmf.readings.regime_train",
         description=(
             "Offline operator-machine regime_classifier_v1 training script. "
             "No VPS/cloud, no broker/node credentials, no money-path authority."
@@ -1796,11 +1795,11 @@ def _deterministic_surrogate_fit(
         feature_ids = [str(item) for item in cast("Sequence[object]", feature_ids_obj)]
     else:
         feature_ids = []
-    vocab_obj = context.get("class_vocabulary", list(REGIME_CLASS_VOCABULARY))
+    vocab_obj = context.get("class_vocabulary", list(VOLATILITY_STATE_VOCABULARY))
     if isinstance(vocab_obj, Sequence) and not isinstance(vocab_obj, (str, bytes)):
         vocabulary = [str(item) for item in cast("Sequence[object]", vocab_obj)]
     else:
-        vocabulary = list(REGIME_CLASS_VOCABULARY)
+        vocabulary = list(VOLATILITY_STATE_VOCABULARY)
     validation_obj = context.get("validation_rows")
     validation_rows: tuple[_TrainRow, ...]
     if isinstance(validation_obj, Sequence) and not isinstance(validation_obj, (str, bytes)):
@@ -1884,11 +1883,11 @@ def _lightgbm_fit(
     if not isinstance(hyper_obj, Mapping):
         raise TypeError("hyperparameters mapping required")
     hyper = cast("Mapping[str, object]", hyper_obj)
-    vocab_obj = context.get("class_vocabulary", list(REGIME_CLASS_VOCABULARY))
+    vocab_obj = context.get("class_vocabulary", list(VOLATILITY_STATE_VOCABULARY))
     if isinstance(vocab_obj, Sequence) and not isinstance(vocab_obj, (str, bytes)):
         vocabulary = [str(item) for item in cast("Sequence[object]", vocab_obj)]
     else:
-        vocabulary = list(REGIME_CLASS_VOCABULARY)
+        vocabulary = list(VOLATILITY_STATE_VOCABULARY)
     label_to_index = {name: index for index, name in enumerate(vocabulary)}
     x_train = [list(row[1]) for row in train_rows]
     y_train = [label_to_index[row[2]] for row in train_rows]
