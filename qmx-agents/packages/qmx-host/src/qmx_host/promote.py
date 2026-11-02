@@ -152,6 +152,14 @@ def deployment_id(digest: str) -> str:
     return f"dep-{digest}"
 
 
+def withdraw_op(digest: str, deployment: str) -> str:
+    return f"withdraw-{digest}-{deployment}"
+
+
+def _markets(document: Mapping[str, object]) -> list[Mapping[str, object]]:
+    return cast("list[Mapping[str, object]]", document.get("markets") or [])
+
+
 def deployment_of(event: Event) -> str | None:
     """The deployment his click into paper or live put on the node, named by its event."""
     if event.to_state not in TRADING or not event.event_id.startswith("click-"):
@@ -319,6 +327,10 @@ class Promoter:
                 self.nodes.flush(change.place)
                 change = self.nodes.outbox.get(ask) or change
                 return _done(made, _shown(change), ask)
+        if self.nodes.outbox.get(withdraw_op(f"{digest}-undo", ask)) is not None:
+            raise self._undo(
+                digest, ask, f"{click.op_id} was sent before and its move was not recorded"
+            )
         if click.node is None or click.account is None:
             raise Refused(
                 "bad_request",
@@ -336,6 +348,7 @@ class Promoter:
         document, compiled = self._unit(click)
         probe = self._event(click, digest, current, compiled.compiled_fingerprint.value, None)
         self._allowed(probe, known)
+        self._one_deployment(click, known)
         lane: Lane = "paper" if click.target is State.PAPER else "live"
         report = self._g_record(compiled.compiled_fingerprint.value)
         account = _one(
@@ -350,6 +363,15 @@ class Promoter:
                     f"account {click.account.id} is a live-world account and the host at {place}"
                     " is not in the trading profile",
                     "Bind live money through the deliberate live path first.",
+                )
+            if account.fields.get("world") == "live" and len(_markets(document)) > 1:
+                raise Refused(
+                    "multi_market_live",
+                    f"the node runs every market of a unit, and {click.unit.id} trades"
+                    f" {len(_markets(document))} markets; a live-world account takes a one-market"
+                    " unit until the node reads deployment.markets",
+                    "Make a one-market version of the unit for live money, or promote it onto a"
+                    " demo account.",
                 )
             if compiled.placeholders and not click.placeholders_acknowledged:
                 raise Refused(
@@ -372,13 +394,57 @@ class Promoter:
         try:
             self.lifecycle.record_move(event)
         except MoveRefused as refused:
-            self._withdraw(f"{digest}-undo", [ask])
-            raise Refused(
-                "illegal_move",
-                f"{refused.refusal}: {refused}",
-                "The node was asked to withdraw the deployment; nothing moved.",
-            ) from None
+            raise self._undo(digest, ask, f"{refused.refusal}: {refused}") from None
+        except OSError as error:
+            raise self._undo(digest, ask, f"storage: {error}") from None
         return _done(made, answer, ask)
+
+    def _undo(self, digest: str, ask: str, why: str) -> Refused:
+        """The node took deployment `ask` and its move is not recorded, so no park can reach it:
+        ask the node to withdraw it. Only a withdraw the node accepted lets his answer say that
+        nothing moved; any other answer names the deployment the node still holds."""
+        undone = self._withdraw(f"{digest}-undo", [ask])
+        if undone.word == "accepted":
+            return Refused(
+                "illegal_move",
+                why,
+                "The node withdrew the deployment and nothing moved; click again.",
+            )
+        refused = Refused(
+            "node_not_ready",
+            f"{why}, and the node did not withdraw deployment {ask}:"
+            f" {undone.code or 'the withdraw is queued'}",
+            f"Kill deployment {ask} on the node's card.",
+        )
+        refused.value = {"deployment_id": ask}
+        return refused
+
+    def _one_deployment(self, click: Click, known: Sequence[Event]) -> None:
+        """Refuse a second deployment of this unit version while his clicks keep one on another
+        of its markets: the node runs every market of the unit document it holds, so a second
+        deployment would run each market twice. A market parked or retired, or a deploy the
+        node refused, holds none."""
+        folded = fold(known, auto_paper=self.lifecycle.auto_paper())
+        for move in reversed(folded.applied):
+            placed = deployment_of(move)
+            if (
+                placed is None
+                or move.version_ref != click.unit.version
+                or move.market_id == click.market_id
+                or folded.state(move.key) in LEAVING
+            ):
+                continue
+            change = self.nodes.outbox.get(placed)
+            if change is not None and change.state == "refused":
+                continue
+            refused = Refused(
+                "already_deployed",
+                f"deployment {placed} already runs {click.unit.id} on {move.market_id}, and the"
+                f" node runs every market of a unit, {click.market_id} among them",
+                f"Park {move.market_id} first, then click again.",
+            )
+            refused.value = {"deployment_id": placed}
+            raise refused
 
     def _leave(self, click: Click, digest: str, known: Sequence[Event]) -> Document:
         """Park or retire: record the move, then ask the node to withdraw each deployment his
@@ -422,7 +488,7 @@ class Promoter:
                 "withdraw",
                 {"deployment_id": deployment, "when": "flat"},
                 principal=OPERATOR.principal,
-                op_id=f"withdraw-{digest}-{deployment}",
+                op_id=withdraw_op(digest, deployment),
             )
             answer = cast("Mapping[str, object]", change.answer or {})
             if change.state == "refused" and answer.get("code") != GONE:
@@ -443,7 +509,7 @@ class Promoter:
                 "Name the unit version his Library holds.",
             )
         document = cast("Mapping[str, object]", view.fields)
-        markets = cast("list[Mapping[str, object]]", document.get("markets") or [])
+        markets = _markets(document)
         if click.market_id not in {str(m.get("market_id")) for m in markets}:
             raise Refused(
                 "no_record",
@@ -479,7 +545,7 @@ class Promoter:
         account: Held,
         lifecycle_event: str,
     ) -> Document:
-        markets = cast("list[Mapping[str, object]]", document.get("markets") or [])
+        markets = _markets(document)
         records = [self._instrument(market) for market in markets]
         admitted = next(
             held

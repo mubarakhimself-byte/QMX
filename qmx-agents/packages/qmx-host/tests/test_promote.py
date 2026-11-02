@@ -36,7 +36,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from qmx_host.first_start import land_dummy
 from qmx_host.host import HostStore, LanderLibrary, open_store, register_checkers
-from qmx_host.lifecycle import LifecycleWriter
+from qmx_host.lifecycle import LifecycleWriter, MoveRefused
 from qmx_host.market_data import MarketDoor
 from qmx_host.node_link import NodeLink
 from qmx_host.promote import ROUTE, Promoter, harvested_calibrations, promote_router
@@ -126,6 +126,7 @@ class Rig:
     app: FastAPI
     unit: str
     compiled: CompiledUnit
+    promoter: Promoter
 
     def click(self, caller: Caller = HIM, **body: Any) -> tuple[int, dict[str, Any]]:
         sent: dict[str, Any] = {
@@ -249,7 +250,7 @@ def rig(tmp_path: Path) -> Iterator[Rig]:
         )
         app = FastAPI()
         app.include_router(promote_router(promoter))
-        yield Rig(home, store, writer, node, app, unit, compiled)
+        yield Rig(home, store, writer, node, app, unit, compiled, promoter)
         writer.close()
 
 
@@ -500,6 +501,111 @@ def test_a_withdraw_that_times_out_keeps_the_park_and_a_second_click_finishes_it
         ("tested", "paper"),
         ("paper", "parked"),
     ]
+
+
+def test_a_live_world_account_refuses_a_two_market_unit_before_the_node(rig: Rig) -> None:
+    def trading(place: str) -> bool:
+        return place == "pc"
+
+    rig.promoter.trading_profile = trading
+    paper(rig)
+
+    status, answer = rig.click(
+        op_id="click-live", to="live", account={"id": "live-1"}, placeholders_acknowledged=True
+    )
+
+    assert (status, answer["code"], answer["message"], answer["next_step"]) == (
+        409,
+        "multi_market_live",
+        "the node runs every market of a unit, and dummy-trend-pullback trades 2 markets;"
+        " a live-world account takes a one-market unit until the node reads deployment.markets",
+        "Make a one-market version of the unit for live money, or promote it onto a demo account.",
+    )
+    assert (len(rig.moves()), len(rig.node.deploys())) == (2, 1)
+
+
+def test_a_second_market_of_a_running_version_answers_the_deployment_that_runs_it(
+    rig: Rig,
+) -> None:
+    judged(rig.lifecycle, rig.unit, rig.compiled.compiled_fingerprint.value, "metal.xauusd")
+    running = paper(rig)
+
+    second = rig.click(op_id="click-gold", to="paper", market_id="metal.xauusd")
+    rig.click(op_id="click-park", to="parked", node=None, account=None)
+    after_park = rig.click(op_id="click-gold-2", to="paper", market_id="metal.xauusd")
+
+    assert (second[0], second[1]["code"], second[1]["value"]) == (
+        409,
+        "already_deployed",
+        {"deployment_id": running},
+    )
+    assert second[1]["message"] == (
+        f"deployment {running} already runs dummy-trend-pullback on fx.eurusd, and the node runs"
+        " every market of a unit, metal.xauusd among them"
+    )
+    assert (after_park[0], after_park[1]["value"]["node_answer"]) == (200, "accepted")
+    assert [move[:3] for move in rig.moves()] == [
+        ("fx.eurusd", "draft", "tested"),
+        ("metal.xauusd", "draft", "tested"),
+        ("fx.eurusd", "tested", "paper"),
+        ("fx.eurusd", "paper", "parked"),
+        ("metal.xauusd", "tested", "paper"),
+    ]
+    assert len(rig.node.deploys()) == 2
+
+
+def test_a_record_that_fails_after_the_deploy_names_what_a_timed_out_withdraw_left(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    g_report(rig.store, rig.compiled.compiled_fingerprint.value)
+
+    def full(event: Event) -> str:
+        raise MoveRefused("storage", "the lifecycle row was not written: disk full")
+
+    monkeypatch.setattr(rig.lifecycle, "record_move", full)
+    rig.node.withdraw_times_out = True
+
+    status, answer = rig.click(op_id="click-1", to="paper")
+
+    (held,) = rig.node.held
+    assert (status, answer["code"], answer["value"]) == (
+        409,
+        "node_not_ready",
+        {"deployment_id": held},
+    )
+    assert answer["message"] == (
+        "storage: the lifecycle row was not written: disk full, and the node did not withdraw"
+        f" deployment {held}: tool_timeout"
+    )
+    assert answer["next_step"] == f"Kill deployment {held} on the node's card."
+    assert (len(rig.moves()), rig.node.withdraws()) == (1, [held])
+
+
+def test_an_os_error_from_the_record_withdraws_and_the_same_click_again_moves_nothing(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    g_report(rig.store, rig.compiled.compiled_fingerprint.value)
+
+    def full(event: Event) -> str:
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(rig.lifecycle, "record_move", full)
+    first = rig.click(op_id="click-1", to="paper")
+    monkeypatch.undo()
+    again = rig.click(op_id="click-1", to="paper")
+
+    assert (first[0], first[1]["code"], first[1]["message"], first[1]["next_step"]) == (
+        409,
+        "illegal_move",
+        "storage: [Errno 28] No space left on device",
+        "The node withdrew the deployment and nothing moved; click again.",
+    )
+    assert (again[0], again[1]["code"], again[1]["message"]) == (
+        409,
+        "illegal_move",
+        "click-1 was sent before and its move was not recorded",
+    )
+    assert (len(rig.moves()), len(rig.node.deploys()), rig.node.held) == (1, 1, {})
 
 
 def test_no_agent_tool_reaches_the_promote_route() -> None:
