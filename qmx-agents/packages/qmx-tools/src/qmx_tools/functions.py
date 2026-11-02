@@ -583,7 +583,7 @@ def block_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any
         code = None if source is None else source.encode("utf-8")
         computed = compute_status(entry, code)
         mine = entry.get("entry_id")
-        others = [h.entry for h in catalogue() if h.entry.get("entry_id") != mine]
+        others = [h.entry for h in catalogue()]
         clashes = [p for p in corpus_problems([*others, entry]) if p.where.startswith(f"{mine}@")]
         problems = [*computed.problems, *clashes]
         return {

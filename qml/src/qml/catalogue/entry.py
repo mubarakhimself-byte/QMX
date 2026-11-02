@@ -19,6 +19,7 @@ computes them yet, because no record of a run on a recorded slice per class exis
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -29,7 +30,15 @@ from typing import Final, cast
 from qmf.core.fingerprint import fingerprint
 from qmf.core.refusal import is_refusal
 
-from qml.blocks.api import ENTRY_SCHEMA, Instance, Mirroring, OutputType, Signal
+from qml.blocks.api import (
+    ENTRY_SCHEMA,
+    FaceProblem,
+    Instance,
+    Mirroring,
+    OutputType,
+    Signal,
+    parse_entry,
+)
 from qml.catalogue.datalevel import HOST_FACTS, level_of, split_problems
 from qml.catalogue.loader import LockEntry, block_fingerprint, load
 from qml.catalogue.roles import role_problem
@@ -653,6 +662,9 @@ def _implementation(
                 "state the fingerprint of the code you saved",
             )
         ], []
+    face = parse_entry(json.dumps(raw).encode("utf-8"))
+    if isinstance(face, FaceProblem):
+        return [EntryProblem(face.where, face.message, "the compiler reads this face")], []
     scan = check_block(pin, str(raw.get("origin")), source, "/code")
     problems = [EntryProblem("/code", p.message, p.hint) for p in scan.errors]
     if problems:
