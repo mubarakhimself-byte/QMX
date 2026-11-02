@@ -9,8 +9,10 @@ names and gaps, each with its receipts. Zero tokens, and it changes nothing: it 
   entry's id or alias, or one pin holding two entries.
 - `gaps`: entries the checker refuses, and entries whose next status lacks something, with the
   checker's own words.
+- `notices`: what the scan could not read, such as a QML install with no seed folder beside it.
 
-Every finding names its pins and fingerprints, which `blocks_get` and `blocks_check` show again.
+The seed folder is found beside the installed `qml` package, where the host lands it from. Every
+finding names its pins and fingerprints, which `blocks_get` and `blocks_check` show again.
 A script never opens the Library, so an entry only the Library holds (the port's drafts, his own
 components) is not scanned here; see the README. A seed entry carries no code, so it is checked
 by its face alone.
@@ -27,14 +29,14 @@ from qml.catalogue.entry import compute_status, corpus_problems
 from qml.catalogue.loader import block_fingerprint
 from qmx_tools.gather import STDLIB
 
-REPO = Path(qml.__file__).resolve().parents[3]
-SEED = REPO / "qml" / "catalogue-seed" / "wave-1"
+QML = Path(qml.__file__).resolve().parents[2]
+SEED = QML / "catalogue-seed" / "wave-1"
 
 
 def golden(entry):
     declared = entry.get("golden")
     cases = declared.get("cases") if isinstance(declared, dict) else None
-    path = REPO / cases if isinstance(cases, str) else None
+    path = QML.parent / cases if isinstance(cases, str) else None
     return json.loads(path.read_text("utf-8")) if path is not None and path.is_file() else None
 
 
@@ -80,6 +82,7 @@ report = {
     "repeated_code": repeated,
     "clashes": clashes,
     "gaps": gaps,
+    "notices": [] if SEED.is_dir() else [f"no seed folder at {SEED}, so no seed entry is scanned"],
 }
 bodies = Path(os.environ["QMX_WORK"]) / "library"
 bodies.mkdir(parents=True, exist_ok=True)

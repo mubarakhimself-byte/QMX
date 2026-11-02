@@ -1018,11 +1018,14 @@ def test_where_its_rules_hold_proposes_admitting_only_the_market_that_held(home:
         ["fx.eurusd"],
         [{"from": 7, "to": 16}],
     )
-    assert {k: out["card"][k] for k in ("subject", "ask", "evidence", "placeholders")} == {
+    assert {k: out["card"][k] for k in ("subject", "ask", "evidence", "placeholders", "why")} == {
         "subject": "unit-object-fixture",
         "ask": "admit_market",
         "evidence": ["verdict-fixture-contexts", "result-fixture-sweep", "result-fixture-whatif"],
         "placeholders": {"markets": ["fx.gbpusd"]},
+        "why": "the rules hold on fx.gbpusd, with the sessions 7:00 to 16:00 UTC tried and "
+        "counted. Did not hold everywhere. fx.gbpusd holds; fx.eurusd fails the try-corrected "
+        "step. Behind it: 4 tries, 4 effective.",
     }
 
 
@@ -1102,6 +1105,7 @@ def test_the_librarian_reports_with_receipts_and_lands_only_its_report(home: Pat
     assert report.status == "passed", report.reason
     assert out["repeated_code"] == []
     assert out["clashes"] == []
+    assert out["notices"] == []
     assert seed == [
         {"pin": "anchored-vwap@1", "status": "specified", "missing": ["implementation: code"]}
     ]
