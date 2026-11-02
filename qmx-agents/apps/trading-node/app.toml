@@ -1,0 +1,139 @@
+id = "trading-node"
+name = "Trading node"
+version = "0.1.0"
+risk = "money"
+kind = "headless"
+startup_timeout_seconds = 90
+
+[entrypoints]
+mcp = "server.py"
+
+[capabilities]
+secrets = { NODE_KEYS = "qmx/trading-node-keys" }
+network = [
+    "live.ctraderapi.com",
+    "demo.ctraderapi.com",
+    "api.hyperliquid.xyz",
+    "api.hyperliquid-testnet.xyz",
+    "ntfy.sh",
+    "hc-ping.com",
+]
+
+[breaker]
+max_errors = 1000
+heartbeat_timeout = 30
+restart = "backoff"
+
+[operations.status]
+description = "The node's state: its word, reasons, identity, venues, units, kill level and whether it is safe to restart."
+approval = "domain_write"
+reversibility = "none"
+state = "instance"
+
+[operations.units]
+description = "The units this node hosts, optionally for one deployment_id."
+approval = "domain_write"
+reversibility = "none"
+state = "instance"
+
+[operations.positions]
+description = "The positions this node holds, optionally for one account."
+approval = "domain_write"
+reversibility = "none"
+state = "instance"
+
+[operations.journal_tail]
+description = "The node's committed journal rows after after_sequence (at most 500), optionally for some streams."
+approval = "domain_write"
+reversibility = "none"
+state = "instance"
+
+[operations.passport]
+description = "The node's passport: its identity and the checks its last self-test proved."
+approval = "domain_write"
+reversibility = "none"
+state = "instance"
+
+[operations.deployments]
+description = "The deployments this node was asked to run."
+approval = "domain_write"
+reversibility = "none"
+state = "instance"
+
+[operations.deploy]
+description = "Accept a deployment document (qmx.node.deployment/1) for this node into what it should run."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.withdraw]
+description = "Stop new entries for a deployment and remove it once flat."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.pause]
+description = "Pause new entries at a scope: all, an account, a deployment_id or an instrument."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.resume]
+description = "Resume new entries at a scope, listing any cause still open."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.kill]
+description = "Escalate the kill switch at a scope to a level from YELLOW to BLACK; it never lowers."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.flatten]
+description = "Close every position at a scope."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.bind]
+description = "Add or remove an account binding."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.confirm_same_node]
+description = "His word that this volume is the same node, moved: bind its identity to this machine."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.take_over]
+description = "Take over a dead node's tagged positions, with his word that the old node is gone."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.sign_in_begin]
+description = "Begin the venue sign-in for this node's own trading app."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.sign_in_code]
+description = "Finish the venue sign-in with the one-time code."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.self_test]
+description = "Run the self-test on a demo binding."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"
+
+[operations.rotate_keys]
+description = "Read the node's keys document again at the next safe point."
+approval = "manage"
+reversibility = "compensable"
+state = "instance"

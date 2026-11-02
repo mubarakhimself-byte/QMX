@@ -56,6 +56,12 @@ SYSTEM_ENV = frozenset(
 OPERATION_NAME: Final = re.compile(r"\A[a-z][a-z0-9_]*\Z")
 """An operation is a snake_case word. It is the second half of the tool's wire name, so it stays
 inside `[a-zA-Z0-9_-]` and its own name can never carry a dash or a dot."""
+NODE_APP: Final = "trading-node"
+TRADING_GRANT_SECRETS: Final = frozenset({"qmx/trading-node-keys"})
+TRADING_GRANT_PREFIXES: Final = ("qmx/trading-node-keys-", "qmx/node-")
+"""The venue trading-grant secrets only the trading node may name (Level 0 AD-33's secret map,
+Part C AD-306): its keys document, the per-venue split of it, and its own grant entries
+`qmx/node-<tag>-<venue>`. Compared case-folded, because Credential Manager and NTFS ignore case."""
 RETIRED: Final = frozenset({"emits", "accepts"})
 """`app.<id>.<event>` and webhook routes are gone: the app's landing is the event (AD-64)."""
 
@@ -351,6 +357,17 @@ class Definition:
                     )
                 if not re.fullmatch(r"qmx/[a-zA-Z0-9_-]+", service):
                     raise ValueError("Secrets must reference qmx/* Credential Manager services.")
+            grants = [
+                service
+                for service in manifest.capabilities.secrets.values()
+                if service.casefold() in TRADING_GRANT_SECRETS
+                or service.casefold().startswith(TRADING_GRANT_PREFIXES)
+            ]
+            if grants and manifest.id != NODE_APP:
+                raise ValueError(
+                    f"Only the {NODE_APP} app may name the venue trading-grant secrets; "
+                    f"{manifest.id} names {', '.join(sorted(grants))}."
+                )
             for name, operation in manifest.operations.items():
                 if not OPERATION_NAME.fullmatch(name):
                     raise ValueError(
