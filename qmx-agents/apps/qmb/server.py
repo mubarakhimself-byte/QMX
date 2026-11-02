@@ -17,6 +17,7 @@ from typing import Final
 
 from fastmcp import FastMCP
 from pydantic import JsonValue
+from qmb.analysis.whatif import SCENARIOS
 
 import qmb_tester as tester
 
@@ -53,7 +54,17 @@ lower_priority()
 
 mcp = FastMCP("QMB")
 
-RUN_KINDS = ["backtest", "behaviour_check", "conformance"]
+RUN_KINDS = [
+    "backtest",
+    "behaviour_check",
+    "conformance",
+    "sweep",
+    "walk_forward",
+    "robustness",
+    "optimize",
+    "whatif",
+    "replay_check",
+]
 FIDELITIES = ["bars"]
 INSTRUMENT_CLASSES = ["fx", "metal"]
 
@@ -72,7 +83,9 @@ def capabilities() -> dict[str, JsonValue]:
         "carry_adapters": ["swap", "financing", "funding", "dividend"],
         "margin_models": ["isolated_maintenance"],
         "instrument_classes": list(INSTRUMENT_CLASSES),
-        "whatif_scenarios": [],
+        "whatif_scenarios": [
+            {"name": name, "direction": scenario.direction} for name, scenario in SCENARIOS.items()
+        ],
     }
 
 

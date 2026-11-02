@@ -24,7 +24,9 @@ import json
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import PurePosixPath
+from types import MappingProxyType
 from typing import Final, Protocol, cast
 
 from qmf.core import fingerprint_bytes
@@ -37,11 +39,13 @@ from qmx_judge.runs import (
     mint_run_id,
     new_ulid,
 )
-from qmx_judge.tries import TRY_KIND, Try, TryState, try_item
+from qmx_judge.tries import TRY_KIND, Try, TryKind, TryState, try_item
 
 __all__ = [
     "BASE_PRINCIPAL",
     "CHECK_KIND",
+    "COUNTED",
+    "EVIDENCE",
     "G_CHECK",
     "REPORT_SLOT",
     "RESULT_KIND",
@@ -173,6 +177,101 @@ CHECK_KIND: Final = "behaviour_check"
 G_CHECK: Final = "qml-g/1"
 """The `check` a `test-report` names when it is a unit's layer G record (Part A CONTRACTS §3.3)."""
 TEST_REPORT: Final = "test-report"
+
+
+COUNTED: Final[Mapping[str, TryKind]] = MappingProxyType(
+    {"sweep": "run", "walk_forward": "run", "optimize": "run", "whatif": "whatif_rerun"}
+)
+"""Run kinds whose result tried more than one thing, and the try kind each thing lands as: a
+sweep's cells, a walk-forward's folds, an optimize run's candidates and a what-if run's
+`may_improve` scenarios (QB-22). Each lands one `recorded` try in the unit's family."""
+
+EVIDENCE: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "random_entries": "robustness",
+        "cost_stress": "robustness",
+        "walk_forward": "walk_forward",
+        "pbo": "optimize",
+    }
+)
+"""The judge's chain evidence and the one run kind each may come from, so a plain backtest's
+measures never carry a check it did not run."""
+
+WORSEN_ONLY: Final = "worsen_only"
+MAY_IMPROVE: Final = "may_improve"
+
+
+@dataclass(frozen=True, slots=True)
+class Counted:
+    """One thing a run tried that the core counts: its name in the run, and its market when it
+    traded that market alone."""
+
+    name: str
+    market: str | None = None
+
+
+def _number(value: object) -> Decimal | None:
+    try:
+        found = Decimal(value) if isinstance(value, str) else None
+    except InvalidOperation:
+        return None
+    return found if found is not None and found.is_finite() else None
+
+
+def _whatif(measures: Mapping[str, object], problems: list[str]) -> list[Counted]:
+    """A what-if run's `may_improve` scenarios, each counted, and a refusal of every
+    `worsen_only` one that came out better than its base (`judge.md` §4)."""
+    listed = measures.get("scenarios")
+    if not isinstance(listed, list) or not listed:
+        problems.append("a whatif result lists its scenarios with direction, base and value")
+        return []
+    counted: list[Counted] = []
+    for entry in cast(list[object], listed):
+        named = cast(Mapping[str, object], entry) if isinstance(entry, Mapping) else {}
+        name, direction = named.get("name"), named.get("direction")
+        base, value = _number(named.get("base")), _number(named.get("value"))
+        if not isinstance(name, str) or direction not in (WORSEN_ONLY, MAY_IMPROVE):
+            problems.append("each scenario names itself and its direction")
+        elif base is None or value is None:
+            problems.append(f"scenario {name} carries its base and value as decimal text")
+        elif direction == MAY_IMPROVE:
+            counted.append(Counted(name))
+        elif value > base:
+            problems.append(
+                f"scenario {name} is declared worsen only but improved "
+                f"{named.get('measure', 'its measure')} from {base} to {value}; a scenario that "
+                "can improve a result is a counted rerun"
+            )
+    return counted
+
+
+def _counted(kind: str, measures: Mapping[str, object], problems: list[str]) -> list[Counted]:
+    """What a finished result of `kind` tried, and every reason to refuse it: chain evidence
+    from another kind's run, a counted kind that lists nothing, a worsen-only what-if that
+    improved."""
+    problems += [
+        f"{name} evidence lands only from a {source} run, not a {kind} run"
+        for name, source in EVIDENCE.items()
+        if name in measures and source != kind
+    ]
+    if kind == "whatif":
+        return _whatif(measures, problems)
+    if kind not in COUNTED:
+        return []
+    listed = measures.get("counted")
+    counted: list[Counted] = []
+    for entry in cast(list[object], listed) if isinstance(listed, list) else []:
+        named = cast(Mapping[str, object], entry) if isinstance(entry, Mapping) else {}
+        name, market = named.get("name"), named.get("market")
+        if not isinstance(name, str) or not name or not (market is None or isinstance(market, str)):
+            problems.append(f"each thing a {kind} run tried has a name, and a market when alone")
+            continue
+        counted.append(Counted(name, market))
+    if not counted:
+        problems.append(f"a {kind} result lists what it tried under measures.counted")
+    if len({c.name for c in counted}) != len(counted):
+        problems.append(f"a {kind} result names each thing it tried once")
+    return counted
 
 
 def run_kind(job: str) -> str:
@@ -381,8 +480,14 @@ class Lander:
         ticket, bundle = landing.ticket, landing.bundle
         if bundle.run_id != ticket.run_id:
             raise BundleRefused([f"the bundle answers {bundle.run_id}, not {ticket.run_id}"])
-        if run_kind(ticket.job) == CHECK_KIND:
+        kind = run_kind(ticket.job)
+        if kind == CHECK_KIND:
             return self._close_check(landing)
+        problems: list[str] = []
+        finished = bundle.status == "finished"
+        counted = _counted(kind, bundle.measures or {}, problems) if finished else []
+        if problems:
+            raise BundleRefused(problems)
         result_id = self.library.find(ticket.run_id)
         if result_id is None:
             fields = _result_fields(ticket, bundle.status, bundle.reason)
@@ -401,8 +506,10 @@ class Lander:
                 RESULT_KIND, ticket.run_id, fields, _blobs(landing), _title(ticket, bundle.status)
             )
         self._link(result_id, ticket, [("consumed", card) for card in bundle.consumed])
-        state: TryState = "landed" if bundle.status == "finished" else "failed"
+        state: TryState = "landed" if finished else "failed"
         self._closing_try(ticket, state, result_id)
+        for tried in counted:
+            self._counted_try(ticket, COUNTED[kind], tried, result_id)
         return result_id
 
     def fail(self, ticket: Ticket, reason: str, *, status: RunStatus = "killed") -> str:
@@ -468,6 +575,26 @@ class Lander:
         )
         title = f"{ticket.job} {ticket.run_id} {state}"
         self._once(TRY_KIND, try_item(ticket.run_id, state), closing.fields(), {}, title)
+
+    def _counted_try(self, ticket: Ticket, kind: TryKind, tried: Counted, result_id: str) -> None:
+        """One `recorded` try for a cell, fold, candidate or scenario of the run, named by the
+        run id and its name in the run, so a retried close finds it."""
+        run_id = f"{ticket.run_id}/{tried.name}"
+        recorded = Try(
+            kind=kind,
+            state="recorded",
+            run_id=run_id,
+            family=ticket.family,
+            unit=ticket.unit,
+            principal=ticket.principal,
+            at=self.clock().isoformat(),
+            study=ticket.study,
+            market=tried.market,
+            tester={"app": ticket.app_id, "version": ticket.version},
+            links=(ticket.opened, result_id),
+        )
+        title = f"{ticket.job} {run_id} recorded"
+        self._once(TRY_KIND, try_item(run_id, "recorded"), recorded.fields(), {}, title)
 
     def _link(self, result_id: str, ticket: Ticket, edges: list[tuple[str, str]]) -> None:
         """Write the result's edges; the Library keeps one of each, so a retry adds none."""
