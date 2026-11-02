@@ -11,7 +11,7 @@
   "origin": "qml",
   "component_type": "indicator",
   "definition": "Chaikin's running total of each bar's close location ((close - low) - (high - close)) / (high - low) times its volume.",
-  "boundaries": "Starts at the first bar it is given; a bar with no range adds nothing.",
+  "boundaries": "Starts at the first bar it is given; a bar with no range adds nothing. QML's unit runtime does not yet pass a bars input its volume, so inside a unit this value stays missing until it does.",
   "recognition": "A/D rising while price falls reads as accumulation under the decline.",
   "eligible_roles": [
     "context",

@@ -10,7 +10,7 @@
   "origin": "qml",
   "component_type": "indicator",
   "definition": "The lowest low of the current session so far. Each bar carries its close time in nanoseconds UTC as time; a session opens at session_start seconds into the UTC day and lasts a day.",
-  "boundaries": "One session per UTC-day slot; bars without a time are missing.",
+  "boundaries": "One session per UTC-day slot; bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
   "recognition": "A break of the session's high or low is a common breakout level.",
   "eligible_roles": [
     "context",

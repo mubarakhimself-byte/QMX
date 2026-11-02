@@ -10,7 +10,7 @@
   "origin": "qml",
   "component_type": "indicator",
   "definition": "A volume-weighted RSI: typical price times volume, split by whether the typical price rose or fell, as 100 x rising flow over all flow in period bars.",
-  "boundaries": "On FX and CFD bars the volume is a tick count, so it weighs by quote activity.",
+  "boundaries": "On FX and CFD bars the volume is a tick count, so it weighs by quote activity. QML's unit runtime does not yet pass a bars input its volume, so inside a unit this value stays missing until it does.",
   "recognition": "Above 80 reads as overbought, below 20 as oversold, by convention.",
   "eligible_roles": [
     "context",

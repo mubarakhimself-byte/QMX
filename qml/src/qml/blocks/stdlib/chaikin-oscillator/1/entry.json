@@ -10,7 +10,7 @@
   "origin": "qml",
   "component_type": "indicator",
   "definition": "A fast EMA of the A/D line less a slow EMA of it, both started at the first bar.",
-  "boundaries": "Inherits A/D's arbitrary start, which the difference of the two EMAs cancels.",
+  "boundaries": "Inherits A/D's arbitrary start, which the difference of the two EMAs cancels. QML's unit runtime does not yet pass a bars input its volume, so inside a unit this value stays missing until it does.",
   "recognition": "A cross of zero reads as money flow turning.",
   "eligible_roles": [
     "context",

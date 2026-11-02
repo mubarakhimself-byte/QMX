@@ -10,7 +10,7 @@
   "origin": "qml",
   "component_type": "indicator",
   "definition": "Granville's running total of volume, added on a bar whose close rose and taken away on one whose close fell.",
-  "boundaries": "Starts at the first bar it is given, so its level is arbitrary; its slope reads.",
+  "boundaries": "Starts at the first bar it is given, so its level is arbitrary; its slope reads. QML's unit runtime does not yet pass a bars input its volume, so inside a unit this value stays missing until it does.",
   "recognition": "OBV rising while price is flat reads as accumulation.",
   "eligible_roles": [
     "context",

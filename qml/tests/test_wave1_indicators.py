@@ -16,6 +16,7 @@ import pytest
 from qml.blocks.api import Block, EntryFace, Instance, Signal, parse_entry
 from qml.catalogue import Loaded, LockEntry, load
 from qml.catalogue.index import match, row
+from qml.protocol.unit import OHLC
 
 _QML = Path(__file__).resolve().parents[1]
 _STDLIB = _QML / "src" / "qml" / "blocks" / "stdlib"
@@ -210,3 +211,40 @@ def test_metatrader_sentences_map_to_wave_entries_and_an_unknown_one_is_an_appen
             }
         ],
     }
+
+
+def _silent_on_unit_bars(case: str) -> bool:
+    instance = _make(case)
+    fed = (
+        OHLC(
+            open=cast("Decimal", b["open"]),
+            high=cast("Decimal", b["high"]),
+            low=cast("Decimal", b["low"]),
+            close=cast("Decimal", b["close"]),
+        ).fields()
+        for b in _BARS
+    )
+    return all(_value(instance.update({"series": x})) is None for x in fed)
+
+
+def test_blocks_left_missing_by_the_unit_runtime_say_which_input_it_does_not_pass() -> None:
+    bars_cases = [c for c in _CASES if _face(c.split("@", maxsplit=1)[0]).inputs[0].stream_kind == "bars"]
+
+    silent = {c.split("@", maxsplit=1)[0] for c in bars_cases if _silent_on_unit_bars(c)}
+
+    lacks = {
+        "accumulation-distribution": "volume",
+        "chaikin-oscillator": "volume",
+        "force-index": "volume",
+        "market-facilitation-index": "volume",
+        "money-flow-index": "volume",
+        "on-balance-volume": "volume",
+        "vwap-session-anchored": "volume or its time",
+        "session-running-high": "time",
+        "session-running-low": "time",
+        "session-running-range": "time",
+    }
+    assert silent == set(lacks)
+    for entry_id, what in lacks.items():
+        entry = json.loads((_STDLIB / entry_id / "1" / "entry.json").read_text("utf-8"))
+        assert f"does not yet pass a bars input its {what}," in entry["boundaries"], entry_id

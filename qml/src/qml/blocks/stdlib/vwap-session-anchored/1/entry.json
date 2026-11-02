@@ -13,7 +13,7 @@
   "origin": "qml",
   "component_type": "indicator",
   "definition": "The volume-weighted mean of the typical price (high + low + close) / 3 since the session opened. Each bar carries its close time in nanoseconds UTC as time; a session opens at session_start seconds into the UTC day and lasts a day.",
-  "boundaries": "On FX and CFD bars the volume is a tick count, so it is a quote-weighted proxy. Bars without a time are missing.",
+  "boundaries": "On FX and CFD bars the volume is a tick count, so it is a quote-weighted proxy. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its volume or its time, so inside a unit this value stays missing until it does.",
   "recognition": "Price above the session VWAP reads as buyers in control of the day.",
   "eligible_roles": [
     "context",

@@ -10,7 +10,7 @@
   "origin": "qml",
   "component_type": "indicator",
   "definition": "Elder's EMA of (close - previous close) x volume over period bars.",
-  "boundaries": "MetaTrader lets the average be any of its four kinds; this entry is Elder's EMA. On FX and CFD bars the volume is a tick count.",
+  "boundaries": "MetaTrader lets the average be any of its four kinds; this entry is Elder's EMA. On FX and CFD bars the volume is a tick count. QML's unit runtime does not yet pass a bars input its volume, so inside a unit this value stays missing until it does.",
   "recognition": "Above zero buyers pushed price up on volume, below zero sellers down.",
   "eligible_roles": [
     "context",

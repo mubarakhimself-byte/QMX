@@ -10,7 +10,7 @@
   "origin": "qml",
   "component_type": "indicator",
   "definition": "Williams' bar range (high - low) divided by the bar's volume.",
-  "boundaries": "Missing on a bar with no volume; on FX and CFD bars it is price move per tick.",
+  "boundaries": "Missing on a bar with no volume; on FX and CFD bars it is price move per tick. QML's unit runtime does not yet pass a bars input its volume, so inside a unit this value stays missing until it does.",
   "recognition": "Read with volume: both up is green, both down is fade, in Williams' words.",
   "eligible_roles": [
     "context",
