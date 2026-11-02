@@ -857,13 +857,33 @@ def fetch_file(
 
 
 class Outcome(StrEnum):
-    """What one listed partition came to in a round; the watermark stops at the first failure."""
+    """What one listed partition came to in a round; the watermark stops at the first one that
+    is not home."""
 
     HOME = "home"
     """Committed here now, or already here with the listed fingerprint."""
     WAITING = "waiting"
-    """An open month whose class is not due yet; it is listed again after its next harvest."""
+    """An open month whose class is not due yet. The watermark stays before it, so a change that
+    lands while it waits is listed again and fetched once the pull falls due."""
     FAILED = "failed"
+
+
+def series_key(text: str) -> SeriesKey | None:
+    """The partition key a `<source>/<subject>/<kind>/<variant>/<YYYY-MM>` text names."""
+    parts = text.split("/")
+    month = re.fullmatch(r"(\d{4})-(\d{2})", parts[-1])
+    if len(parts) != 5 or month is None:
+        return None
+    source, subject, kind, variant = parts[:4]
+    made = SeriesKey.try_create(
+        source,
+        subject,
+        kind,
+        int(month.group(1)),
+        int(month.group(2)),
+        "" if variant == "-" else variant,
+    )
+    return None if is_refusal(made) else made.value
 
 
 @dataclass(frozen=True, slots=True)
@@ -888,20 +908,8 @@ class Listed:
             and isinstance(at, str)
         ):
             return None
-        parts = text.split("/")
-        month = re.fullmatch(r"(\d{4})-(\d{2})", parts[-1])
-        if len(parts) != 5 or month is None:
-            return None
-        source, subject, kind, variant = parts[:4]
-        made = SeriesKey.try_create(
-            source,
-            subject,
-            kind,
-            int(month.group(1)),
-            int(month.group(2)),
-            "" if variant == "-" else variant,
-        )
-        return None if is_refusal(made) else cls(made.value, printed, size, frozen, at)
+        made = series_key(text)
+        return None if made is None else cls(made, printed, size, frozen, at)
 
     @property
     def month(self) -> str:
@@ -949,9 +957,10 @@ class _Node:
     """What This PC keeps of one node between rounds, in `records/pull.json`."""
 
     watermark: str = ""
-    """The `committed_at` past which every partition the node listed is home or waiting."""
-    confirm: list[str] = field(default_factory=list[str])
-    """Fingerprints of frozen partitions home here, for the next `data.list` to confirm."""
+    """The `committed_at` past which every partition the node listed is home."""
+    confirm: dict[str, str] = field(default_factory=dict[str, str])
+    """Each frozen partition home here, key text to fingerprint, for the next `data.list` to
+    confirm while this door still holds it frozen with that fingerprint."""
     opened: dict[str, int] = field(default_factory=dict[str, int])
     """Each open month's key and when it was last fetched, in epoch seconds."""
     last: dict[str, object] | None = None
@@ -959,7 +968,7 @@ class _Node:
     def document(self) -> dict[str, object]:
         return {
             "watermark": self.watermark,
-            "confirm": self.confirm,
+            "confirm": dict(sorted(self.confirm.items())),
             "opened": dict(sorted(self.opened.items())),
             "last": self.last,
         }
@@ -970,9 +979,9 @@ class _Node:
         opened, last = value.get("opened"), value.get("last")
         return cls(
             watermark if isinstance(watermark, str) else "",
-            [str(item) for item in cast("list[object]", confirm)]
-            if isinstance(confirm, list)
-            else [],
+            {str(k): str(v) for k, v in cast("dict[object, object]", confirm).items()}
+            if isinstance(confirm, dict)
+            else {},
             {str(k): int(v) for k, v in cast("dict[str, int]", opened).items()}
             if isinstance(opened, dict)
             else {},
@@ -998,14 +1007,11 @@ class _Missed(Exception):
 
 
 def _advanced(mark: str, outcomes: Sequence[tuple[str, Outcome]]) -> str:
-    """The watermark past every partition that came home or waits on its cadence, and never past
-    one that failed: it is listed again next round, with whatever followed it."""
-    failed = [at for at, outcome in outcomes if outcome is Outcome.FAILED]
-    first = min(failed, default=None)
+    """The watermark past every partition that came home, and never past one that failed or
+    waits on its cadence: it is listed again next round, with whatever followed it."""
+    first = min((at for at, outcome in outcomes if outcome is not Outcome.HOME), default=None)
     passed = [
-        at
-        for at, outcome in outcomes
-        if outcome is not Outcome.FAILED and (first is None or at < first)
+        at for at, outcome in outcomes if outcome is Outcome.HOME and (first is None or at < first)
     ]
     return max([mark, *passed])
 
@@ -1046,13 +1052,21 @@ class Pull:
         return self._folder / "pull-staging"
 
     def round(self, now: datetime, cadence: Cadence) -> tuple[NodeRound, ...]:
-        """One pull round at ``now`` over every owned node."""
+        """One pull round at ``now`` over every owned node. A node whose round raises is named
+        in its refusals and the others still run; an unreadable `pull.json` fails the round."""
         at = int(now.timestamp())
-        state = self._read()
+        try:
+            state = self._read()
+        except ValueError as error:
+            raise self._set_aside(error) from error
         rounds: list[NodeRound] = []
         for name, place in sorted(self._places().items()):
             node = state.setdefault(name, _Node())
-            found = self._node(place, node, at, cadence)
+            try:
+                found = self._node(place, node, at, cadence)
+            except Exception as error:  # one node's fault never stops the others
+                reason = f"its round failed: {type(error).__name__}: {error}"
+                found = NodeRound(name, reached=False, refusals=({"node": name, "reason": reason},))
             node.last = {**found.document(), "at": now.isoformat()}
             rounds.append(found)
         self._write(state)
@@ -1060,8 +1074,13 @@ class Pull:
 
     def entry(self, on: bool) -> dict[str, object]:
         """Its row on the maintenance list: each node's last round and what it still pins."""
-        nodes = [node.last for _, node in sorted(self._read().items()) if node.last is not None]
+        try:
+            kept, problem = self._read(), None
+        except (OSError, ValueError) as error:
+            kept, problem = {}, f"records/{PULL_NAME} could not be read: {error}"
+        nodes = [node.last for _, node in sorted(kept.items()) if node.last is not None]
         return {
+            **({"problem": problem} if problem else {}),
             "id": HOME_JOB,
             "kind": "host",
             "name": HOME_NAME,
@@ -1073,7 +1092,13 @@ class Pull:
         }
 
     def _node(self, place: Place, node: _Node, at: int, cadence: Cadence) -> NodeRound:
-        sent = list(node.confirm)
+        held = {
+            text: printed for text, printed in node.confirm.items() if self._holds(text, printed)
+        }
+        if len(held) < len(node.confirm):
+            node.watermark = ""
+        node.confirm = held
+        sent = sorted(held.values())
         after: dict[str, JsonValue] = {"committed_at": node.watermark} if node.watermark else {}
         try:
             value = self._ask(
@@ -1093,7 +1118,7 @@ class Pull:
         listing = cast("Mapping[str, object]", value) if isinstance(value, dict) else {}
         confirmed = 0
         if "unpinned" in listing:
-            node.confirm, confirmed = [], len(sent)
+            node.confirm, confirmed = {}, len(sent)
         pinned = listing.get("pinned")
         rows = listing.get("partitions")
         tally, refusals = _Tally(), list[Mapping[str, object]]()
@@ -1145,7 +1170,7 @@ class Pull:
         ):
             tally.already_home += 1
             if listed.frozen:
-                self._confirm(node, listed.fingerprint)
+                node.confirm[listed.key.text] = listed.fingerprint
             return Outcome.HOME
         if not listed.frozen:
             last = node.opened.get(key.text)
@@ -1171,7 +1196,7 @@ class Pull:
             refusals.append({"node": place.name, "key": key.text, "reason": reason})
             tally.unshipped(listed)
             return Outcome.FAILED
-        self._confirm(node, listed.fingerprint)
+        node.confirm[listed.key.text] = listed.fingerprint
         return Outcome.HOME
 
     def _bring(self, place: Place, listed: Listed) -> CommitReceipt | str:
@@ -1250,9 +1275,12 @@ class Pull:
         _write_json(tail, {"node": place.name, "rows": rows})
         return len(cast("list[object]", rows))
 
-    def _confirm(self, node: _Node, printed: str) -> None:
-        if printed not in node.confirm:
-            node.confirm.append(printed)
+    def _holds(self, text: str, printed: str) -> bool:
+        """Whether this door still holds that partition frozen with that fingerprint, so a
+        node may unpin it."""
+        made = series_key(text)
+        held = None if made is None else self._door.series_store().state(made)
+        return held is not None and held.frozen and held.fingerprint == printed
 
     def _pass(self, place: Place) -> dict[str, str]:
         key = self._key()
@@ -1276,16 +1304,34 @@ class Pull:
         return found.get("value")
 
     def _read(self) -> dict[str, _Node]:
+        """What `pull.json` keeps, empty when it is not there yet; a `ValueError` naming why
+        when it is there and cannot be read."""
         try:
             raw = json.loads((self._folder / PULL_NAME).read_text(encoding="utf-8"))
-        except OSError, ValueError:
+        except FileNotFoundError:
             return {}
-        nodes = raw.get("nodes", {}) if isinstance(raw, dict) else {}
-        return {
-            str(name): _Node.parse(cast("Mapping[str, object]", value))
-            for name, value in cast("dict[str, object]", nodes).items()
-            if isinstance(value, dict)
-        }
+        nodes = raw.get("nodes") if isinstance(raw, dict) else None
+        if not isinstance(nodes, dict):
+            raise ValueError("it holds no nodes table")
+        try:
+            return {
+                str(name): _Node.parse(cast("Mapping[str, object]", value))
+                for name, value in cast("dict[str, object]", nodes).items()
+                if isinstance(value, dict)
+            }
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"a node's state is not readable: {error}") from error
+
+    def _set_aside(self, error: ValueError) -> ValueError:
+        """Move an unreadable `pull.json` aside, kept for a look, so the next round lists
+        every node from the start; a resend of what is home lands nothing."""
+        path = self._folder / PULL_NAME
+        aside = path.with_name(f"{PULL_NAME}.corrupt")
+        os.replace(path, aside)
+        return ValueError(
+            f"records/{PULL_NAME} could not be read ({error}); it was set aside as {aside.name},"
+            " so the next round lists every node from the start"
+        )
 
     def _write(self, state: Mapping[str, _Node]) -> None:
         nodes = {name: node.document() for name, node in sorted(state.items())}
@@ -1341,11 +1387,19 @@ class Records:
             )
         self._since.append(counts)
         if self._reported is None or (now - self._reported).total_seconds() >= cadence.interval_s:
-            nodes = () if self.pull is None else self.pull.round(now, cadence)
-            self._report(now, nodes)
+            nodes: tuple[NodeRound, ...] = ()
+            failed = None
+            if self.pull is not None:
+                try:
+                    nodes = self.pull.round(now, cadence)
+                except Exception as error:  # the result names it; the harvest counts still land
+                    failed = f"the pull round failed: {type(error).__name__}: {error}"
+            self._report(now, nodes, failed)
         return counts
 
-    def _report(self, now: datetime, nodes: Sequence[NodeRound] = ()) -> None:
+    def _report(
+        self, now: datetime, nodes: Sequence[NodeRound] = (), failed: str | None = None
+    ) -> None:
         rounds, self._since, self._reported = self._since, [], now
         total = {
             "rounds": len(rounds),
@@ -1363,10 +1417,11 @@ class Records:
             or total["trades"]
             or total["paper_runs"]
             or nodes
+            or failed
         )
         if self.store is None or not worth:
             return
-        refused = total["refusals"] or any(node.refusals for node in nodes)
+        refused = total["refusals"] or any(node.refusals for node in nodes) or failed
         line = (
             f"{total['partitions']} partitions filed from {total['streams']} streams, "
             f"{total['trades']} trades projected, {len(cast('list[object]', total['refusals']))} "
@@ -1380,6 +1435,8 @@ class Records:
             )
             if skipped:
                 line += f", {', '.join(skipped)} skipped"
+        if failed:
+            line += f"; {failed}"
         landed(
             self.store,
             JOB,
@@ -1388,6 +1445,7 @@ class Records:
             extra={
                 "harvest": total,
                 "nodes": [node.document() for node in nodes],
+                "pull_failed": failed,
                 "at": now.isoformat(),
             },
         )
