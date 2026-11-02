@@ -1547,7 +1547,8 @@ class Runtime:
 
     def tick(self) -> None:
         standing = self.context.standing()
-        target = Target.fold(self.context.store.accepted())
+        accepted = self.context.store.accepted()
+        target = Target.fold(accepted)
         self._target = target
         if standing.mismatch:
             for hosted in self.hosted.values():
@@ -1556,7 +1557,7 @@ class Runtime:
             return
         self._protect(self._kill(target))
         self._deployments(target)
-        self.stand_downs.resumes(self.context.store.accepted())
+        self.stand_downs.resumes(accepted)
         self.stand_downs.watch_node()
         for account, venue in self.venues.items():
             bars = venue.feed.pump()
