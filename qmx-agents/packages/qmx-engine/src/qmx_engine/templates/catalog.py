@@ -247,9 +247,14 @@ CATALOG: Final[tuple[Template, ...]] = (
         "strategy-idea-to-paper-tested",
         "Turn a strategy idea into a tested strategy, ending on paper",
         card("17", "D2", "D3"),
-        "TP4",
-        QMB,
+        "B19",
         folder="b-build-and-prove",
+        test_inputs={
+            "idea": "buy pullbacks to the 50 EMA when the trend is up",
+            "window": {"start": "2025-01-01", "end": "2025-03-31"},
+            "study": {"min_in_sample_days": 60},
+            "fixture": "fail",
+        },
     ),
     Template(
         "source-to-a-lab-test",

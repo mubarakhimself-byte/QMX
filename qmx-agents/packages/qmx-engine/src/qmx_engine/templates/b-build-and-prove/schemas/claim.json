@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "required": ["claim", "markets", "rules"],
+  "properties": {
+    "claim": {
+      "type": "object",
+      "required": ["edge", "horizon"],
+      "properties": {
+        "edge": {"type": "string", "description": "what he believes pays, in one line"},
+        "horizon": {"type": "string", "description": "how long a trade lives"}
+      }
+    },
+    "markets": {"type": "array", "items": {"type": "string"}, "description": "market ids his words name, such as fx.eurusd"},
+    "rules": {"type": "array", "items": {"type": "string"}, "description": "each entry, exit, filter and size rule his words state, one per line"},
+    "open_questions": {"type": "array", "items": {"type": "string"}, "description": "what his words leave open, each answered by a stated default in the rules"}
+  }
+}

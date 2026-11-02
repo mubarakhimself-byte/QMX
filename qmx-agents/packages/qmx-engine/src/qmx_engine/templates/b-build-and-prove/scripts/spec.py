@@ -1,18 +1,19 @@
-"""Seals the experiment spec before any result is seen (card D2, steps 1 to 4 and 7; funnel stage
-9). Zero tokens.
+"""Seals the experiment spec before any unit is built or any result is seen (card D2, steps 1 to
+4 and 7; funnel stage 9). Zero tokens.
 
 The holdout and the split are study settings, his choice per study, and both are off by default:
-the whole data range is then one in-sample window. Each setting the run's `study` input leaves out
+the whole `window` is then one in-sample window. Each setting the run's `study` input leaves out
 takes its card default, the `default` of `inputs.study` in `definition.json`. With `split` on, the
 first `in_sample_share` of the range is in-sample and the rest, up to the holdout, is cut into
 `folds` walk-forward validation folds. With `holdout` on, the family's sealed holdout is reused, or
 else the last `holdout_share` of the range becomes it; it is later than every other window, and
-no window the family already used may overlap it.
+no window the family already used may overlap it. The shortest in-sample window, fold and holdout
+are study settings too.
 
-Refuses a spec without the four costs, a field that is not point-in-time, a strategy with no
-session timezone, a window shorter than its minimum, and a window that overlaps the holdout. The
-memo key is the hash of the sealed spec, settings included, so a finished backtest never reruns on
-resume.
+Costs, point-in-time fields and the session zone are no longer the spec's to check: QMB charges
+each market's own costs, its bars are point in time, and the unit names its own zone. Refuses a
+window shorter than its minimum and a window that overlaps the holdout. The memo key is the hash
+of the sealed spec, settings included, so a finished run never reruns on resume.
 """
 
 import hashlib
@@ -22,9 +23,6 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-COSTS = ("spread", "commission", "slippage", "swap")
-MIN_DAYS = {"in_sample": 180, "fold": 30, "holdout": 60}
-
 card = json.loads((Path(os.environ["QMX_CODE"]) / "definition.json").read_text("utf-8"))
 defaults = {
     name: field["default"]
@@ -32,18 +30,11 @@ defaults = {
 }
 given = json.load(sys.stdin)["in"]
 study = defaults | (given.get("study") or {})
-strategy, data, costs = given["strategy"], given["data"], given.get("costs") or {}
+window = given["window"]
 family = given.get("family") or {}
-start, end = date.fromisoformat(data["start"]), date.fromisoformat(data["end"])
+start, end = date.fromisoformat(window["start"]), date.fromisoformat(window["end"])
 span = (end - start).days
 problems = []
-
-missing = [name for name in COSTS if name not in costs]
-if missing:
-    problems.append(f"no spec without costs: {', '.join(missing)} missing")
-problems += [f"field {f['name']} is not point-in-time" for f in data["fields"] if not f.get("pit")]
-if not strategy.get("session_timezone"):
-    problems.append("the strategy names no session timezone")
 
 holdout = None
 if study["holdout"]:
@@ -64,20 +55,20 @@ if study["split"]:
         }
         for k in range(study["folds"])
     ]
-    if fold_days < MIN_DAYS["fold"]:
-        problems.append(f"a validation fold is shorter than {MIN_DAYS['fold']} days")
+    if fold_days < study["min_fold_days"]:
+        problems.append(f"a validation fold is shorter than {study['min_fold_days']} days")
 windows = {
     "in_sample": {"start": str(start), "end": str(in_sample_end)},
     "folds": folds,
     "holdout": holdout,
 }
 
-if (in_sample_end - start).days < MIN_DAYS["in_sample"]:
-    problems.append(f"in-sample is shorter than {MIN_DAYS['in_sample']} days")
+if (in_sample_end - start).days < study["min_in_sample_days"]:
+    problems.append(f"in-sample is shorter than {study['min_in_sample_days']} days")
 if holdout:
     holdout_start, holdout_end = (date.fromisoformat(holdout[k]) for k in ("start", "end"))
-    if (holdout_end - holdout_start).days < MIN_DAYS["holdout"]:
-        problems.append(f"the holdout is shorter than {MIN_DAYS['holdout']} days")
+    if (holdout_end - holdout_start).days < study["min_holdout_days"]:
+        problems.append(f"the holdout is shorter than {study['min_holdout_days']} days")
     if in_sample_end > holdout_start:
         problems.append("the holdout is not later than every other window")
     for used in family.get("used_windows", []):
@@ -88,10 +79,8 @@ if holdout:
             problems.append(f"the window {used['start']} to {used['end']} overlaps the holdout")
 
 spec = {
-    "strategy": strategy["id"],
-    "code_hash": strategy["code_hash"],
-    "data_snapshot": data.get("snapshot"),
-    "costs": costs,
+    "idea": given["idea"],
+    "window": {"start": str(start), "end": str(end)},
     "seed": given.get("seed", 7),
     "study": study,
     "windows": windows,

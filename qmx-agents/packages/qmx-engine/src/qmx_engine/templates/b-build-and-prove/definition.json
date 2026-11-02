@@ -5,22 +5,22 @@
   "inputs": {
     "type": "object",
     "required": [
-      "strategy",
-      "data",
-      "costs"
+      "idea",
+      "window"
     ],
     "properties": {
-      "strategy": {
-        "type": "object",
-        "description": "id, code_hash, family, session timezone"
+      "idea": {
+        "type": "string",
+        "description": "his idea in one sentence, for example buy pullbacks to the 50 EMA when the trend is up"
       },
-      "data": {
+      "window": {
         "type": "object",
-        "description": "start and end dates, fields with pit flags"
-      },
-      "costs": {
-        "type": "object",
-        "description": "spread, commission, slippage, swap"
+        "required": ["start", "end"],
+        "description": "the data range to test on, start and end dates; QMB must hold its bars",
+        "properties": {
+          "start": {"type": "string"},
+          "end": {"type": "string"}
+        }
       },
       "family": {
         "type": "object",
@@ -34,37 +34,73 @@
           "holdout_share": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1, "default": 0.2, "description": "the share of the range a new holdout takes"},
           "split": {"type": "boolean", "default": false, "description": "split the range into in-sample and walk-forward validation folds"},
           "in_sample_share": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1, "default": 0.6, "description": "the share of the range that is in-sample when split"},
-          "folds": {"type": "integer", "minimum": 1, "default": 3, "description": "the validation folds after in-sample when split"}
+          "folds": {"type": "integer", "minimum": 1, "default": 3, "description": "the validation folds after in-sample when split"},
+          "min_in_sample_days": {"type": "integer", "minimum": 1, "default": 180, "description": "the shortest in-sample window the study accepts, in days"},
+          "min_fold_days": {"type": "integer", "minimum": 1, "default": 30, "description": "the shortest validation fold the study accepts, in days"},
+          "min_holdout_days": {"type": "integer", "minimum": 1, "default": 60, "description": "the shortest holdout the study accepts, in days"}
         }
+      },
+      "fixture": {
+        "enum": ["pass", "fail"],
+        "description": "test runs only: replay a recorded QMB run instead of asking QMB"
       }
     }
   },
-  "outputs": {"type": "object", "description": "the funnel scorecard: the sealed spec, the judge's verdict and the paper card"},
+  "outputs": {"type": "object", "description": "the scorecard: the sealed spec, the unit, the core's verdict, and the proposal card or the death certificate"},
   "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
   "nodes": [
     {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
     {"id": "spec", "name": "Seal the experiment spec", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/spec.py"}, "effect": "none"},
     {"id": "sealed", "name": "Spec checks pass?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.ok"}, "effect": "none"},
-    {"id": "qmb", "name": "Register and backtest on QMB", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/qmb.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "effect": "none"},
-    {"id": "judge", "name": "Judge the results", "type": "subworkflow", "typeVersion": 1, "position": [880, 0], "parameters": {"workflow": "judge"}},
-    {"id": "card", "name": "Paper card or dead end", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/card.py"}, "effect": "none"},
-    {"id": "write", "name": "Write the scorecard", "type": "llm", "typeVersion": 1, "position": [1540, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},
-    {"id": "assemble", "name": "Assemble the scorecard", "type": "script", "typeVersion": 1, "position": [1760, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
-    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [1980, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
-    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [2200, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
-    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [2420, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"},
-    {"id": "lineage", "name": "Write the lineage edges", "type": "script", "typeVersion": 1, "position": [2640, 120], "parameters": {"script": "scripts/lineage.py"}, "effect": "none"}
+    {"id": "claim", "name": "Write the claim card", "type": "llm", "typeVersion": 1, "position": [660, 0], "role": "planner", "parameters": {"prompt_ref": "prompts/claim.md", "schema_ref": "schemas/claim.json"}, "effect": "none"},
+    {"id": "build", "name": "Write, check and save the unit", "type": "agent", "typeVersion": 1, "toolsets": ["unit", "blocks"], "position": [880, 0], "role": "builder", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/build.md", "output_schema_ref": "schemas/build.json", "tools": []}, "effect": "none"},
+    {"id": "check", "name": "Check the unit", "type": "subworkflow", "typeVersion": 1, "position": [1100, 0], "parameters": {"workflow": "unit-check"}},
+    {"id": "ready", "name": "Ready to test?", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/ready.py"}, "effect": "none"},
+    {"id": "ok", "name": "Unit ready?", "type": "rule", "typeVersion": 1, "position": [1540, 0], "parameters": {"expr": "items.ok"}, "effect": "none"},
+    {"id": "replay", "name": "Recorded runs?", "type": "rule", "typeVersion": 1, "position": [1760, 0], "parameters": {"expr": "items.recorded is not None"}, "effect": "none"},
+    {"id": "recorded", "name": "Replay the recorded runs", "type": "script", "typeVersion": 1, "position": [1980, 120], "parameters": {"script": "scripts/recorded.py", "fixture_ref": "fixtures/qmb.json"}, "effect": "none"},
+    {"id": "ask", "name": "The ask QMB runs", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/ask.py"}, "effect": "none"},
+    {"id": "backtest", "name": "Backtest on QMB", "type": "app_op", "typeVersion": 1, "position": [2200, 0], "parameters": {"app": "qmb", "job": "jobs/backtest.py", "inputs": {}}},
+    {"id": "robustness", "name": "Robustness runs on QMB", "type": "app_op", "typeVersion": 1, "position": [2200, -120], "parameters": {"app": "qmb", "job": "jobs/robustness.py", "inputs": {}}},
+    {"id": "referee", "name": "Ask the referee", "type": "agent", "typeVersion": 1, "toolsets": ["backtest"], "position": [2420, 0], "role": "judge", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/referee.md", "output_schema_ref": "schemas/referee.json", "tools": []}, "effect": "none"},
+    {"id": "card", "name": "Paper card or dead end", "type": "script", "typeVersion": 1, "position": [2640, 0], "parameters": {"script": "scripts/card.py"}, "effect": "none"},
+    {"id": "next", "name": "What follows the verdict", "type": "script", "typeVersion": 1, "position": [2640, 120], "parameters": {"script": "scripts/next.py"}, "effect": "none"},
+    {"id": "paper", "name": "Passed?", "type": "rule", "typeVersion": 1, "position": [2860, -120], "parameters": {"expr": "items.card is not None"}, "effect": "none"},
+    {"id": "dead", "name": "Dead?", "type": "rule", "typeVersion": 1, "position": [2860, 0], "parameters": {"expr": "items.dead_end is not None"}, "effect": "none"},
+    {"id": "propose", "name": "Propose a paper trial", "type": "subworkflow", "typeVersion": 1, "position": [3080, -120], "parameters": {"workflow": "proposal-card"}},
+    {"id": "certify", "name": "Write the death certificate", "type": "subworkflow", "typeVersion": 1, "position": [3080, 0], "parameters": {"workflow": "death-certificate"}},
+    {"id": "lineage", "name": "Write the lineage", "type": "subworkflow", "typeVersion": 1, "position": [3080, 120], "parameters": {"workflow": "lineage"}},
+    {"id": "write", "name": "Write the scorecard", "type": "llm", "typeVersion": 1, "position": [3300, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},
+    {"id": "assemble", "name": "Assemble the scorecard", "type": "script", "typeVersion": 1, "position": [3520, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [3740, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [3960, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [3960, 120], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
   ],
   "connections": {
-    "On request": {"main": [[{"node": "Seal the experiment spec", "port": "in", "map": "one"}, {"node": "Write the lineage edges", "port": "in", "map": "one"}]]},
-    "Seal the experiment spec": {"main": [[{"node": "Spec checks pass?", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Spec checks pass?": {"true": [[{"node": "Register and backtest on QMB", "port": "in", "map": "one"}]]},
-    "Register and backtest on QMB": {"main": [[{"node": "Judge the results", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Judge the results": {"main": [[{"node": "Paper card or dead end", "port": "in", "map": "one"}, {"node": "Write the scorecard", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Paper card or dead end": {"main": [[{"node": "Write the scorecard", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
+    "On request": {"main": [[{"node": "Seal the experiment spec", "port": "in", "map": "one"}, {"node": "Ready to test?", "port": "in", "map": "one"}]]},
+    "Seal the experiment spec": {"main": [[{"node": "Spec checks pass?", "port": "in", "map": "one"}, {"node": "Ready to test?", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
+    "Spec checks pass?": {"true": [[{"node": "Write the claim card", "port": "in", "map": "one"}]]},
+    "Write the claim card": {"main": [[{"node": "Write, check and save the unit", "port": "in", "map": "one"}]]},
+    "Write, check and save the unit": {"main": [[{"node": "Check the unit", "port": "in", "map": "one"}, {"node": "Ready to test?", "port": "in", "map": "one", "required": true}]]},
+    "Check the unit": {"main": [[{"node": "Ready to test?", "port": "in", "map": "one"}]]},
+    "Ready to test?": {"main": [[{"node": "Unit ready?", "port": "in", "map": "one"}, {"node": "What follows the verdict", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
+    "Unit ready?": {"true": [[{"node": "Recorded runs?", "port": "in", "map": "one"}]]},
+    "Recorded runs?": {"true": [[{"node": "Replay the recorded runs", "port": "in", "map": "one"}]], "false": [[{"node": "The ask QMB runs", "port": "in", "map": "one"}]]},
+    "The ask QMB runs": {"main": [[{"node": "Backtest on QMB", "port": "in", "map": "one"}, {"node": "Robustness runs on QMB", "port": "in", "map": "one"}]]},
+    "Backtest on QMB": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
+    "Robustness runs on QMB": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
+    "Replay the recorded runs": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
+    "Ask the referee": {"main": [[{"node": "Paper card or dead end", "port": "in", "map": "one"}, {"node": "What follows the verdict", "port": "in", "map": "one", "required": true}, {"node": "Write the scorecard", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
+    "Paper card or dead end": {"main": [[{"node": "Passed?", "port": "in", "map": "one"}, {"node": "Dead?", "port": "in", "map": "one"}, {"node": "Write the scorecard", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
+    "What follows the verdict": {"main": [[{"node": "Propose a paper trial", "port": "in", "map": "one"}, {"node": "Write the death certificate", "port": "in", "map": "one"}, {"node": "Write the lineage", "port": "in", "map": "one"}]]},
+    "Passed?": {"true": [[{"node": "Propose a paper trial", "port": "in", "map": "one", "required": true}]]},
+    "Dead?": {"true": [[{"node": "Write the death certificate", "port": "in", "map": "one", "required": true}]]},
+    "Propose a paper trial": {"main": [[{"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
+    "Write the death certificate": {"main": [[{"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
+    "Write the lineage": {"main": [[{"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
     "Write the scorecard": {"main": [[{"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
     "Assemble the scorecard": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}, {"node": "Write the lineage edges", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "strategy-idea-to-paper-tested", "needs": ["qmb-door"]}
+  "meta": {"template": "strategy-idea-to-paper-tested"}
 }

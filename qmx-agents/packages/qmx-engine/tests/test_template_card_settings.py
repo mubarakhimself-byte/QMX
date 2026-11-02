@@ -1,18 +1,16 @@
 """B18c's surgical template fixes, run the way the engine runs them.
 
 `b` seals no holdout and no split unless the study asks for them. `d3` and `l4` loop exactly as
-many times as the counts on their card say, and `d4` keeps the card's count of variants. A
-template's verdict comes from its `judge` child, the shared block, never from a copied gate
-script. The loops run on the real engine with the template's own loop node and scripts; only the
-QMB steps, which wait for QMB's door, are stood in for by fixed scripts.
+many times as the counts on their card say, and `d4` keeps the card's count of variants. `b` files
+a dead end only for an outcome the judge certifies dead. The loops run on the real engine with the
+template's own loop node and scripts; only the QMB steps, which wait for the Library reads, are
+stood in for by fixed scripts.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import random
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -29,10 +27,6 @@ B = PACK / "b-build-and-prove"
 D3 = PACK / "d3-iterate-against-qmb"
 L4 = PACK / "l4-overnight-lab-loop"
 D4 = PACK / "d4-variant-comparison"
-DAY = 86_400 * 10**9
-START = 1_735_689_600 * 10**9
-"""2025-01-01 00:00 UTC."""
-COSTS = {"spread": 1, "commission": 1, "slippage": 1, "swap": 1}
 
 
 @pytest.fixture
@@ -57,13 +51,8 @@ def script(folder: Path, name: str, given: Any) -> Any:
 
 def sealed(study: dict[str, JsonValue] | None = None) -> Any:
     given: dict[str, Any] = {
-        "strategy": {"id": "unit-v1", "code_hash": "h1", "session_timezone": "Europe/London"},
-        "data": {
-            "start": "2020-01-01",
-            "end": "2025-01-01",
-            "fields": [{"name": "close", "pit": True}],
-        },
-        "costs": COSTS,
+        "idea": "buy pullbacks in an uptrend",
+        "window": {"start": "2020-01-01", "end": "2025-01-01"},
     }
     if study is not None:
         given["study"] = study
@@ -80,6 +69,9 @@ def test_b_seals_no_holdout_and_no_split_by_default() -> None:
         "split": False,
         "in_sample_share": 0.6,
         "folds": 3,
+        "min_in_sample_days": 180,
+        "min_fold_days": 30,
+        "min_holdout_days": 60,
     }
     assert out["spec"]["windows"] == {
         "in_sample": {"start": "2020-01-01", "end": "2025-01-01"},
@@ -342,86 +334,6 @@ def test_d4_keeps_the_variants_its_card_says_and_names_the_rest() -> None:
     assert chosen["refused"] == [{"variant": "v3", "why": "over the 2 variants of a run"}]
     assert len(default["config"]) == 12
     assert default["refused"] == [{"variant": "v13", "why": "over the 12 variants of a run"}]
-
-
-def judge_request() -> dict[str, Any]:
-    """Research 24's trap, as qmx-judge's own test sets it: 20 markets of 100 trades with a true
-    edge of +0.06R, judged on the shipped preset with every cheaper step's evidence passing."""
-    draw = random.Random(24)  # noqa: S311 - a seeded fixture, not a secret
-    found = {f"fx.m{i:02d}": [f"{draw.gauss(0.06, 1):.4f}" for _ in range(100)] for i in range(20)}
-    run_id = f"qmbr-pc-{1:026d}"
-    evidence = {
-        "random_entries": {"edge_ratio": "1.4", "p": "0.01"},
-        "cost_stress": {"multiplier": "1.5", "expectancy_r": "0.2"},
-        "walk_forward": {"efficiency": "0.7"},
-    }
-    return {
-        "spec": {
-            "origin": "written",
-            "claim": {"edge": "buys pullbacks in an uptrend", "horizon": "a day"},
-            "markets": "admitted",
-            "preset": "shipped",
-        },
-        "study": "study-v1",
-        "results": [
-            {
-                "result_id": "result-1",
-                "fields": {
-                    "run_id": run_id,
-                    "status": "finished",
-                    "unit": "unit-v1",
-                    "tester": {"app": "qmb", "version": "0.1.0"},
-                    "measures": evidence,
-                },
-                "trades": [
-                    {"market_id": market, "closed_at": START + day * DAY, "r": r}
-                    for market, rs in sorted(found.items())
-                    for day, r in enumerate(rs)
-                ],
-            }
-        ],
-        "tries": [
-            {"kind": "run", "state": state, "run_id": run_id, "family": "unit-v1"}
-            for state in ("opened", "landed")
-        ],
-        "principal": "agent:chat",
-        "checker": "qml 0.1.0",
-    }
-
-
-def test_b_lands_a_dead_end_from_the_verdict_of_its_judge_child(tmp_path: Path, home: Path) -> None:
-    root = tmp_path / "judged"
-    root.mkdir()
-    shutil.copytree(B / "judge", root / "judge")
-    nodes = [
-        {
-            "id": "start",
-            "name": "start",
-            "type": "trigger",
-            "typeVersion": 1,
-            "parameters": {"kinds": ["manual"]},
-        },
-        node_of(B, "judge"),
-        script_node("card", write(root, "card.py", (B / "scripts" / "card.py").read_text())),
-    ]
-    folder = flow_folder(root, B, nodes, {"start": to("Judge the results"),
-                                          "Judge the results": to("card")})  # fmt: skip
-    outcome, events = run_folder(folder, home, cast(JsonValue, judge_request()))
-    card = next(
-        cast(dict[str, Any], e.data["outputs"])["main"]
-        for e in events
-        if e.kind == "node_finished" and e.data.get("node_id") == "card"
-    )
-
-    assert outcome.status == "passed", outcome.reason
-    assert card["card"] is None
-    assert {k: v for k, v in card["dead_end"].items() if k != "says"} == {
-        "tag": "negative_result",
-        "verdict": "fail",
-        "tries": 20,
-        "effective_tries": 20,
-    }
-    assert card["dead_end"]["says"].endswith("Behind it: 20 tries, 20 effective.")
 
 
 @pytest.mark.parametrize(

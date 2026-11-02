@@ -50,15 +50,16 @@ PANEL = PACK / "ask-the-panel"
 CLIPPINGS = PACK / "clippings-into-research"
 DIGEST = PACK / "morning-digest"
 CRYSTALLISE = PACK / "crystallise-a-workflow"
+B = PACK / "b-build-and-prove"
 DRAFTS = [PACK / t.folder for t in CATALOG if t.needs]
 CALIBRATED = ("rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library")
 JUDGED = (
-    "b-build-and-prove",
     "d3-iterate-against-qmb",
     "l4-overnight-lab-loop",
     "d4-variant-comparison",
 )
-"""The templates that call the `judge` block as their child in place of a copied gate script."""
+"""The templates that call the `judge` block as their child in place of a copied gate script. `b`
+asks the core's referee, `backtest_judge_run`, instead, because no workflow reads a family's tries."""
 
 NO_RENDER = frozenset(
     {
@@ -198,6 +199,11 @@ def answers(
         "Summarise every new clipping into a research note line": recorded(CLIPPINGS, "notes.json"),
         "Write the morning digest from what ran": recorded(DIGEST, "digest.json"),
         "Label the sampled items the way you would label": recorded(CRYSTALLISE, "sample.json"),
+        "You turn his one-line trading idea": recorded(B, "claim.json"),
+        "You build one QMX trading unit": recorded(B, "build.json"),
+        "You ask QMX's referee": recorded(B, "referee-fail.json"),
+        "You explain why a trading unit died": recorded(B, "explanation.json"),
+        "You are the writer of QMX's build-and-prove scorecard": recorded(B, "summary.json"),
     } | (planted or {})
     chunked: dict[str, Callable[[str], str]] = {
         "You are the paper reader": lambda c: mine([RS1], "cards.json", "cards", "paper_id", c),
@@ -288,6 +294,7 @@ def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_fo
         "morning-market-brief",
         "research-desk-overnight",
         "copilot-eval-battery",
+        "strategy-idea-to-paper-tested",
         "revolution-loop",
         "ask-the-panel",
         "clippings-into-research",
@@ -306,7 +313,7 @@ def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_fo
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
         f.name for f in FOLDERS if f.parent == PACK
     )
-    assert sum(1 for t in CATALOG if t.needs) == 23
+    assert sum(1 for t in CATALOG if t.needs) == 22
 
 
 def test_every_id_is_a_plain_phrase_and_every_title_says_what_the_template_does() -> None:
@@ -596,7 +603,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
 
 
-def test_install_publishes_23_disabled_saves_23_drafts_and_a_second_install_changes_nothing(
+def test_install_publishes_24_disabled_saves_22_drafts_and_a_second_install_changes_nothing(
     home: Path,
 ) -> None:
     with fake_service(home, harness=answers()) as svc:
@@ -614,7 +621,7 @@ def test_install_publishes_23_disabled_saves_23_drafts_and_a_second_install_chan
     ]
     assert [i.action for i in second] == ["unchanged"] * 46
     assert library_after == seen
-    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 23
+    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 24
     assert status["trading-guards-alive"] == ("validated draft, needs: trading-node", None)
     assert status["daily-book-report"] == ("validated draft, needs: broker-read-token", None)
     assert status["change-bundle-for-approval"] == (
@@ -653,10 +660,10 @@ def test_installing_by_an_old_id_installs_the_renamed_template(home: Path) -> No
         (
             "strategy-idea-to-paper-tested",
             "Turn a strategy idea into a tested strategy, ending on paper",
-            "saved draft",
+            "published",
         )
     ]
-    assert [row.status for row in found] == ["validated draft, needs: qmb-door"]
+    assert [row.status for row in found] == ["published, disabled"]
     assert drafted.item == "b-build-and-prove"
 
 
@@ -847,3 +854,97 @@ def test_the_cli_installs_one_template_into_the_homes_real_store(
     assert "connections-health published: 0.1.0" in capsys.readouterr().out
     assert on_main == ["connections-health"]
     assert not (home / "engine" / "library-fake.sqlite").exists()
+
+
+IDEA = {
+    "idea": "buy pullbacks to the 50 EMA when the trend is up",
+    "window": {"start": "2025-01-01", "end": "2025-03-31"},
+    "study": {"min_in_sample_days": 60},
+}
+
+
+def scorecard(
+    home: Path, fixture: str, planted: dict[str, str] | None = None
+) -> tuple[Any, Any, list[str]]:
+    """b test-run from a sentence on a recorded QMB run: its report, the delivered scorecard and
+    the nodes that finished."""
+    port = answers(planted=planted)
+    report, delivered = try_template(home, B, {**IDEA, "fixture": fixture}, port)
+    with Reader.open(home) as reader:
+        ran = [
+            str(e.data["node_id"]) for e in reader.events(report.run_id) if e.kind == "node_finished"
+        ]
+    return report, delivered, ran
+
+
+def test_b_turns_a_sentence_into_a_verdict_and_a_death_certificate(home: Path) -> None:
+    report, card, ran = scorecard(home, "fail")
+
+    assert report.status == "passed", report.reason
+    assert card["stage_reached"] == "verdict"
+    assert card["unit"] == {"item": "unit-item-fixture", "pin": "unit-object-fixture"}
+    assert card["check"] == {
+        "verdict": "pass",
+        "rounds": 0,
+        "stopped": "passed",
+        "problem_set": card["check"]["problem_set"],
+    }
+    assert card["judge"]["overall"] == "fail"
+    assert card["certificate"] == {
+        "unit": "unit-object-fixture",
+        "verdict": "verdict-fixture-fail",
+        "cause": "behaviour",
+        "classifier_version": "1",
+    }
+    assert card["explanation"].startswith("The unit's edge did not survive its costs")
+    assert card["proposal"] is None
+    assert [s["stage"] for s in card["lineage"]] == ["unit", "result"]
+    assert "propose" not in ran
+    assert {"backtest", "robustness"}.isdisjoint(ran)
+
+
+def test_b_turns_a_passing_verdict_into_a_paper_proposal_and_no_certificate(home: Path) -> None:
+    report, card, ran = scorecard(
+        home, "pass", {"You ask QMX's referee": recorded(B, "referee-pass.json")}
+    )
+
+    assert report.status == "passed", report.reason
+    assert card["proposal"] == {
+        "subject": "unit-object-fixture",
+        "ask": "paper",
+        "evidence": [
+            "verdict-fixture-pass",
+            "result-fixture-backtest",
+            "result-fixture-robustness",
+        ],
+        "verdict": "verdict-fixture-pass",
+        "tries": {"raw": 2, "effective": 2},
+        "why": "Holds. fx.eurusd and metal.xauusd pass every step. Behind it: 2 tries, 2 effective.",
+        "cost": {"qmb_runs": 2},
+        "made_by": card["proposal"]["made_by"],
+    }
+    assert card["certificate"] is None
+    assert "certify" not in ran
+
+
+def test_b_tests_nothing_when_the_check_step_had_to_fix_the_saved_unit(home: Path) -> None:
+    built = json.loads(recorded(B, "build.json"))
+    built["unit"]["numbers"]["time_out_bars"]["default"] = "47.5"
+    fixed = {"unit": json.loads(recorded(B, "build.json"))["unit"]}
+    report, card, ran = scorecard(
+        home,
+        "fail",
+        {
+            "You build one QMX trading unit": json.dumps(built),
+            "You fix a QMX unit document": json.dumps(fixed),
+        },
+    )
+
+    assert report.status == "passed", report.reason
+    assert card["stage_reached"] == "unit"
+    assert card["verdict"] == (
+        "could not test: the unit-check step fixed the builder's unit in 1 round(s), so the saved "
+        "draft unit-item-fixture is not the checked document; it is not tested"
+    )
+    assert card["judge"] is None
+    assert "referee" not in ran

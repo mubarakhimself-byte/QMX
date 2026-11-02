@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["item", "object_id", "unit"],
+  "properties": {
+    "item": {"type": "string", "description": "the unit draft's item, as unit_new answered"},
+    "object_id": {"type": "string", "description": "the saved draft's object id, as the last unit_check with item answered under saved.object_id"},
+    "unit": {"type": "object", "description": "the unit document exactly as last saved"}
+  }
+}

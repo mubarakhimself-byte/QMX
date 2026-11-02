@@ -1,16 +1,22 @@
 {
   "type": "object",
-  "required": ["stage_reached", "verdict", "spec", "memo_key", "judge", "card", "dead_end",
-               "summary"],
+  "required": ["stage_reached", "verdict", "spec", "memo_key", "unit", "check", "judge", "card",
+               "dead_end", "proposal", "certificate", "explanation", "lineage", "summary"],
   "x-prose": ["summary"],
   "properties": {
-    "stage_reached": {"enum": [9, 10, 12]},
+    "stage_reached": {"enum": ["spec", "unit", "verdict"]},
     "verdict": {"type": "string"},
-    "spec": {"type": "object", "required": ["strategy", "code_hash", "costs", "study", "windows"]},
+    "spec": {"type": "object", "required": ["idea", "window", "study", "windows"]},
     "memo_key": {"type": "string"},
+    "unit": {"type": ["object", "null"]},
+    "check": {"type": ["object", "null"]},
     "judge": {"type": ["object", "null"]},
     "card": {"type": ["object", "null"]},
     "dead_end": {"type": ["object", "null"]},
+    "proposal": {"type": ["object", "null"]},
+    "certificate": {"type": ["object", "null"]},
+    "explanation": {"type": ["string", "null"]},
+    "lineage": {"type": ["array", "null"]},
     "summary": {"type": "string"}
   }
 }
