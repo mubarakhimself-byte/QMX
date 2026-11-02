@@ -21,8 +21,12 @@
     },
     {
       "tool": "journal_tail",
-      "arguments": {"after_sequence": 1000000},
-      "expected": {"ok": true, "value": {"rows": [], "next_sequence": 1000000}}
+      "arguments": {"streams": ["nope"]},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "journal_tail: streams is a list of node, unit"
+      }
     }
   ]
 }

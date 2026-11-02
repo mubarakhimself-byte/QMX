@@ -21,20 +21,24 @@
     },
     {
       "tool": "journal_tail",
-      "arguments": {"after_sequence": 1000000},
-      "expected": {"ok": true, "value": {"rows": [], "next_sequence": 1000000}}
+      "arguments": {"streams": ["nope"]},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "journal_tail: streams is a list of node, unit"
+      }
     },
     {
-      "tool": "resume",
+      "tool": "pause",
       "arguments": {
-        "op_id": "proof-resume",
+        "op_id": "proof-pause-new",
         "issued_at": "2026-10-01T10:00:02+00:00",
         "scope": {"instrument": "ROAD.PROOF"}
       },
       "expected": {
         "ok": true,
-        "value": {"state": "accepted", "open_causes": []},
-        "op_id": "proof-resume"
+        "value": {"state": "accepted"},
+        "op_id": "proof-pause-new"
       }
     },
     {
@@ -47,8 +51,8 @@
       "expected": {
         "ok": false,
         "code": "superseded",
-        "message": "pause was issued before resume proof-resume, which is already applied",
-        "value": {"newer_op_id": "proof-resume"},
+        "message": "pause was issued before pause proof-pause-new, which is already applied",
+        "value": {"newer_op_id": "proof-pause-new"},
         "op_id": "proof-pause"
       }
     }
