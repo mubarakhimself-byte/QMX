@@ -5,7 +5,7 @@
   "zone": "America/Chicago",
   "issued": "2026-11-02",
   "max_age_days": 31,
-  "source": "CME Group Globex hours: Sunday to Friday 17:00 to 16:00 Central Time with a daily break from 16:00 to 17:00; Globex is shut on Christmas Day and New Year's Day; early closes before holidays are not modelled in version 1",
+  "source": "CME Group Globex hours: Sunday to Friday 17:00 to 16:00 Central Time with a daily break from 16:00 to 17:00; Globex is shut on Christmas Day and New Year's Day; on Martin Luther King Jr. Day and Presidents' Day equity futures halt at 12:00 and reopen at 17:00 Central Time; other early closes are not modelled in version 1",
   "sessions": [
     {
       "open": "sun 17:00",
@@ -29,6 +29,26 @@
     }
   ],
   "closures": [
+    {
+      "from": "2025-01-20T12:00",
+      "to": "2025-01-20T17:00",
+      "why": "Martin Luther King Jr. Day early close"
+    },
+    {
+      "from": "2025-02-17T12:00",
+      "to": "2025-02-17T17:00",
+      "why": "Presidents' Day early close"
+    },
+    {
+      "from": "2026-01-19T12:00",
+      "to": "2026-01-19T17:00",
+      "why": "Martin Luther King Jr. Day early close"
+    },
+    {
+      "from": "2026-02-16T12:00",
+      "to": "2026-02-16T17:00",
+      "why": "Presidents' Day early close"
+    },
     {
       "from": "2026-12-24T16:00",
       "to": "2026-12-27T17:00",

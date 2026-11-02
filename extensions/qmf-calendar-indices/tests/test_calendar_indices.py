@@ -71,3 +71,17 @@ def test_each_index_keeps_its_own_hours_and_osaka_keeps_its_night_session() -> N
         {"open": "fri 08:45", "close": "fri 15:45"},
         {"open": "fri 17:00", "close": "sat 06:00"},
     ]
+
+
+def test_us_index_cfds_halt_at_noon_chicago_on_the_us_monday_holidays() -> None:
+    def early(day: str, why: str) -> dict[str, str]:
+        return {"from": f"{day}T12:00", "to": f"{day}T17:00", "why": f"{why} early close"}
+
+    assert cast(list[object], load("us-index-cfd@1")["closures"]) == [
+        early("2025-01-20", "Martin Luther King Jr. Day"),
+        early("2025-02-17", "Presidents' Day"),
+        early("2026-01-19", "Martin Luther King Jr. Day"),
+        early("2026-02-16", "Presidents' Day"),
+        {"from": "2026-12-24T16:00", "to": "2026-12-27T17:00", "why": "Christmas Day"},
+        {"from": "2026-12-31T16:00", "to": "2027-01-03T17:00", "why": "New Year's Day"},
+    ]

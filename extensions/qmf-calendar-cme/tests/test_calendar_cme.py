@@ -63,6 +63,20 @@ def test_grains_keep_their_morning_pause_and_gold_cfds_keep_comex_hours_in_new_y
     )
 
 
+def test_gold_cfds_halt_at_14_30_new_york_on_the_us_monday_holidays() -> None:
+    def early(day: str, why: str) -> dict[str, str]:
+        return {"from": f"{day}T14:30", "to": f"{day}T18:00", "why": f"{why} early close"}
+
+    assert load("metals-24x5@1")["closures"] == [
+        early("2025-01-20", "Martin Luther King Jr. Day"),
+        early("2025-02-17", "Presidents' Day"),
+        early("2026-01-19", "Martin Luther King Jr. Day"),
+        early("2026-02-16", "Presidents' Day"),
+        {"from": "2026-12-24T17:00", "to": "2026-12-27T18:00", "why": "Christmas Day"},
+        {"from": "2026-12-31T17:00", "to": "2027-01-03T18:00", "why": "New Year's Day"},
+    ]
+
+
 def test_globex_is_shut_from_the_break_before_christmas_and_new_year_to_the_sunday_open() -> None:
     assert load("cme-metals@1")["closures"] == [
         {"from": "2026-12-24T16:00", "to": "2026-12-27T17:00", "why": "Christmas Day"},
