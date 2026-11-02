@@ -1,4 +1,13 @@
-"""Read qmx-data, summarise with an agent, and persist the panel's state in app.db."""
+"""Read bars from a QMX data server, ask one model for the day's bias, and keep it in app.db.
+
+Live, the daily job calls `read_bars` on the MCP server at `data_url` with the control token, then
+sends that snapshot and `agents/analyst.md` to the OpenAI-compatible chat endpoint at `model_url`
+with `QMX_MODEL_KEY`, asking for one JSON answer. Under the road's `tests` and `sandbox` stages it
+reads a recorded snapshot and a recorded answer and makes no network call.
+
+Settings are the image's `config.json`, overlaid by the instance's own `data/config.json`. The
+image is immutable once installed, so an instance is pointed at its services from its volume.
+"""
 
 from __future__ import annotations
 
@@ -6,23 +15,32 @@ import html
 import json
 import os
 import sqlite3
+from collections.abc import Awaitable, Callable
 from contextlib import closing
 from pathlib import Path
-from typing import Any, Literal, Self, cast
+from typing import Any, Literal, cast
 
+import httpx
 from fastmcp import Client, FastMCP
 from fastmcp.apps import AppConfig
-from langchain.chat_models import init_chat_model
-from langchain_core.language_models import BaseChatModel
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.runnables import Runnable
-from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel, ConfigDict, Field
-from qmx_agents.router import ModelRouter, RouterConfig
-from qmx_agents.spec import BuildContext, build_agent, load_spec
 
 ROOT = Path(__file__).parent
 VIEW = "ui://macro-daily-bias/view.html"
+RECORDED_STAGES = frozenset({"tests", "sandbox"})
+RECORDED_SNAPSHOT: dict[str, Any] = {
+    "as_of": "2026-10-07",
+    "bars": [{"close": "1.10"}],
+    "source": "recorded",
+}
+RECORDED_ANSWER = json.dumps(
+    {"bias": "neutral", "rationale": "Recorded fixture has no macro driver coverage."}
+)
+MODEL_TIMEOUT_SECONDS = 120.0
+"""How long the daily job waits for the model's one answer."""
+
+type Model = Callable[[str, str], Awaitable[str]]
+"""One model answer: the system prompt and the user message in, the answer's text out."""
 
 
 class Bias(BaseModel):
@@ -31,9 +49,13 @@ class Bias(BaseModel):
     rationale: str = Field(min_length=1, max_length=4000)
 
 
-class RecordedModel(GenericFakeChatModel):
-    def bind_tools(self, *args: Any, **kwargs: Any) -> Self:
-        return self
+def settings(volume: Path) -> dict[str, Any]:
+    """The image's settings, with the instance's own `data/config.json` over them."""
+    found = cast(dict[str, Any], json.loads((ROOT / "config.json").read_text(encoding="utf-8")))
+    own = volume / "data" / "config.json"
+    if own.is_file():
+        found.update(cast(dict[str, Any], json.loads(own.read_text(encoding="utf-8"))))
+    return found
 
 
 def latest(volume: Path) -> dict[str, Any] | None:
@@ -46,27 +68,37 @@ def latest(volume: Path) -> dict[str, Any] | None:
     return json.loads(row[0]) if row else None
 
 
-async def refresh(
-    volume: Path,
-    data_target: Any = None,
-    model: BaseChatModel | None = None,
-) -> dict[str, Any]:
-    config = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
-    recorded = os.environ.get("QMX_STAGE") in {"tests", "sandbox"}
-    if data_target is None:
-        if recorded:
-            data_target = FastMCP("Recorded qmx-data fixture")
+def chat_model(config: dict[str, Any]) -> Model:
+    """The configured model behind an OpenAI-compatible `chat/completions` endpoint."""
+    if not config["model"] or not config["model_url"]:
+        raise ValueError("Configure the app's model and model_url before live execution.")
+    url = str(config["model_url"]).rstrip("/") + "/chat/completions"
 
-            @data_target.tool
-            def read_bars(symbol: str, timeframe: str, limit: int) -> dict[str, Any]:
-                """Return the explicitly recorded test fixture."""
-                return {"as_of": "2026-10-07", "bars": [{"close": "1.10"}], "source": "recorded"}
+    async def ask(system: str, user: str) -> str:
+        async with httpx.AsyncClient(timeout=MODEL_TIMEOUT_SECONDS) as http:
+            response = await http.post(
+                url,
+                headers={"Authorization": f"Bearer {os.environ['QMX_MODEL_KEY']}"},
+                json={
+                    "model": str(config["model"]),
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    "response_format": {"type": "json_object"},
+                },
+            )
+        response.raise_for_status()
+        return str(response.json()["choices"][0]["message"]["content"])
 
-            _ = read_bars
-        else:
-            if not config["data_url"]:
-                raise ValueError("Configure data_url before the live daily job.")
-            data_target = Client(config["data_url"], auth=os.environ["QMX_DATA_TOKEN"])
+    return ask
+
+
+async def recorded_model(system: str, user: str) -> str:
+    return RECORDED_ANSWER
+
+
+async def read_snapshot(config: dict[str, Any], data_target: Any) -> dict[str, Any]:
     client = (
         cast("Client[Any]", data_target) if isinstance(data_target, Client) else Client(data_target)
     )
@@ -74,61 +106,37 @@ async def refresh(
         response = await client.call_tool(
             "read_bars", {"symbol": config["symbol"], "timeframe": config["timeframe"], "limit": 50}
         )
-        if response.is_error or not response.structured_content:
-            raise ValueError("qmx-data did not return a valid snapshot.")
-        snapshot = response.structured_content
-    source = "recorded" if recorded else "qmx-data"
+    if response.is_error or not response.structured_content:
+        raise ValueError("The data server did not return a valid snapshot.")
+    return dict(response.structured_content)
+
+
+async def refresh(
+    volume: Path,
+    data_target: Any = None,
+    model: Model | None = None,
+) -> dict[str, Any]:
+    config = settings(volume)
+    recorded = os.environ.get("QMX_STAGE") in RECORDED_STAGES
+    if data_target is not None:
+        snapshot = await read_snapshot(config, data_target)
+    elif recorded:
+        snapshot = dict(RECORDED_SNAPSHOT)
+    else:
+        if not config["data_url"]:
+            raise ValueError("Configure data_url before the live daily job.")
+        snapshot = await read_snapshot(
+            config, Client(config["data_url"], auth=os.environ["QMX_DATA_TOKEN"])
+        )
     if model is None:
-        if recorded:
-            model = RecordedModel(
-                messages=iter(
-                    [
-                        json.dumps(
-                            {
-                                "bias": "neutral",
-                                "rationale": "Recorded fixture has no macro driver coverage.",
-                            }
-                        )
-                    ]
-                )
-            )
-        else:
-            if not config["model"] or not config["model_url"]:
-                raise ValueError("Configure the app's model and model_url before live execution.")
-            model = init_chat_model(
-                str(config["model"]),
-                base_url=str(config["model_url"]),
-                api_key=os.environ["QMX_MODEL_KEY"],
-            )
-    router = ModelRouter(
-        RouterConfig.model_validate(
-            {
-                "profile": "app",
-                "profiles": {
-                    "app": dict.fromkeys(
-                        ("fast", "workhorse", "coding", "reasoning_high"), "local:configured"
-                    )
-                },
-                "providers": {},
-                "max_retries": 0,
-            }
-        ),
-        {"local:configured": model},
-    )
-    graph = await build_agent(
-        load_spec(ROOT / "agents/analyst.yaml"),
-        BuildContext(router, checkpointer=InMemorySaver(), general_purpose_subagent=False),
-    )
-    result = await cast("Runnable[Any, dict[str, Any]]", graph).ainvoke(
-        {"messages": [("user", json.dumps(snapshot))]},
-        config={"configurable": {"thread_id": "daily"}},
-    )
-    answer = Bias.model_validate_json(result["messages"][-1].text)
-    # The source's observation date is preserved; the model cannot invent freshness.
+        model = recorded_model if recorded else chat_model(config)
+    system = (ROOT / "agents/analyst.md").read_text(encoding="utf-8")
+    answer = Bias.model_validate_json(await model(system, json.dumps(snapshot)))
+    # The source's observation date is kept; the model cannot invent freshness.
     payload = {
         **answer.model_dump(),
         "as_of": str(snapshot.get("as_of", "unknown")),
-        "source": source,
+        "source": "recorded" if recorded else "qmx-data",
     }
     latest(volume)
     with closing(sqlite3.connect(volume / "app.db")) as db, db:
