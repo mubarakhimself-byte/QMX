@@ -164,6 +164,30 @@ def test_a_slug_two_families_share_is_scoped_by_family_and_linked() -> None:
     ]
 
 
+def test_a_stop_or_target_that_feeds_sizing_is_an_exit_and_only_a_risk_claim_is_a_sizer() -> None:
+    faces = _by_id()
+    typed = {i: str(f["component_type"]) for i, f in faces.items()}
+
+    assert sorted(i for i, t in typed.items() if t == "sizer") == [
+        "fixed-cash-risk-sizing",
+        "fixed-fractional-risk-sizing",
+        "fixed-notional-sizing",
+        "scale-in",
+        "stop-distance-position-sizing",
+    ]
+    assert {
+        i: (typed[i], faces[i]["eligible_roles"])
+        for i in ("stop-reference", "structural-stop", "spread-cost-aware-exit-reference")
+    } == {
+        "stop-reference": ("exit", ["invalidation", "exit"]),
+        "structural-stop": ("exit", ["invalidation", "exit"]),
+        "spread-cost-aware-exit-reference": ("exit", ["exit"]),
+    }
+    assert [typed[i] for i in ("target-reference", "fixed-price-stop", "volatility-stop")] == [
+        "exit"
+    ] * 3
+
+
 def _crlf_copy(tmp_path: Path) -> Path:
     for name in [SCRIPT.README, *SCRIPT.FAMILIES]:
         target = tmp_path / name

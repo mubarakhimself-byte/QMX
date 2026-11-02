@@ -6067,7 +6067,7 @@
   },
   {
    "fields": {
-    "component_type": "sizer",
+    "component_type": "exit",
     "entry": {
      "aliases": [
       "stop level",
@@ -6078,8 +6078,7 @@
      "definition": "A calculated or identified price reference intended to bound a trade's adverse excursion or express its invalidation point.",
      "eligible_roles": [
       "invalidation",
-      "exit",
-      "sizer"
+      "exit"
      ],
      "entry_id": "stop-reference",
      "family": "Invalidation and reference distinctions",
@@ -6232,7 +6231,7 @@
   },
   {
    "fields": {
-    "component_type": "sizer",
+    "component_type": "exit",
     "entry": {
      "aliases": [
       "take-profit level",
@@ -6243,8 +6242,7 @@
      "boundaries": "A target is not necessarily an exit trigger or resting limit order, and touching a target does not itself establish a fill.",
      "definition": "A price, zone, statistic, or structural reference at which a strategy may assess, reduce, or close a favorable position.",
      "eligible_roles": [
-      "exit",
-      "sizer"
+      "exit"
      ],
      "entry_id": "target-reference",
      "family": "Invalidation and reference distinctions",
@@ -6564,7 +6562,7 @@
   },
   {
    "fields": {
-    "component_type": "sizer",
+    "component_type": "exit",
     "entry": {
      "aliases": [
       "fixed stop",
@@ -6574,8 +6572,7 @@
      "boundaries": "Not a structural or volatility-adaptive stop; not necessarily an actual stop order.",
      "definition": "A protective-stop reference placed at a fixed price distance or fixed percentage distance from an entry or other anchor.",
      "eligible_roles": [
-      "exit",
-      "sizer"
+      "exit"
      ],
      "entry_id": "fixed-price-stop",
      "family": "Exit events, orders, and management",
@@ -6647,7 +6644,7 @@
   },
   {
    "fields": {
-    "component_type": "sizer",
+    "component_type": "exit",
     "entry": {
      "aliases": [
       "beyond-structure stop",
@@ -6657,8 +6654,7 @@
      "definition": "A protective-stop reference placed relative to an identified market structure such as a swing, range boundary, pattern extremum, or level.",
      "eligible_roles": [
       "invalidation",
-      "exit",
-      "sizer"
+      "exit"
      ],
      "entry_id": "structural-stop",
      "family": "Exit events, orders, and management",
@@ -6730,7 +6726,7 @@
   },
   {
    "fields": {
-    "component_type": "sizer",
+    "component_type": "exit",
     "entry": {
      "aliases": [
       "ATR stop",
@@ -6740,8 +6736,7 @@
      "boundaries": "Not a trailing stop unless the reference is recomputed and only ratchets favorably; not a claim that volatility predicts direction.",
      "definition": "A protective-stop reference whose distance is derived from a volatility measure rather than a fixed absolute distance.",
      "eligible_roles": [
-      "exit",
-      "sizer"
+      "exit"
      ],
      "entry_id": "volatility-stop",
      "family": "Exit events, orders, and management",
@@ -10413,7 +10408,7 @@
   },
   {
    "fields": {
-    "component_type": "sizer",
+    "component_type": "exit",
     "entry": {
      "aliases": [
       "net target",
@@ -10423,8 +10418,7 @@
      "boundaries": "Not a universal cost model and not a promise of realized net result; it is a source-native reference construction.",
      "definition": "A target or break-even reference adjusted by stated transaction costs, spread, financing, or expected execution effects to express a net rather than chart-price objective.",
      "eligible_roles": [
-      "exit",
-      "sizer"
+      "exit"
      ],
      "entry_id": "spread-cost-aware-exit-reference",
      "family": "Exit events, orders, and management",
