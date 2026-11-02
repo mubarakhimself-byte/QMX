@@ -19,6 +19,7 @@ from qmf.core import (
     AccountRole,
     Instant,
     Instrument,
+    Ok,
     PriceDelta,
     Quantity,
     Result,
@@ -35,8 +36,10 @@ from qmf.venue.commands import (
 from qmf.venue.encode import encode_place_order, order_tags
 from qmf.venue.proto import SPOTWARE_PROTO_PACKAGE, compile_descriptor_set
 from qmn.app.runtime import Blocked, Placed, Sent, Ticket
+from qmn.app.store import Json
 from qmn.protection.effect_matrix import PLACEHOLDER_KILL_EFFECTS
 from qmn.protection.ksa import KsaLevel
+from qmn.venue import SubmissionOutcome
 from qmn.venue.conformance import InjectedFault
 from qmn.venue.verify import ctrader_static_declaration
 from test_app_runtime import (
@@ -143,6 +146,45 @@ def test_a_stop_the_venue_does_not_hold_after_three_tries_is_closed_and_alarmed(
     assert node.account.positions() == {}
 
 
+def test_an_unprotected_position_whose_close_is_refused_is_alarmed_and_closed_once_it_can_be(
+    tmp_path: Path,
+) -> None:
+    node = trading(tmp_path, holds_stops=False)
+    refusing(node, [3])
+    play(node, FIRST_SEND + 1)
+    held = dict(node.account.positions())
+    node.runtime.tick()
+    node.runtime.tick()
+    node.runtime.tick()
+    position = node.account.received[0].tags
+    assert position is not None
+    name = position.client_order_id
+    closes = [t for t in node.account.received if t.command.kind is CommandKind.CLOSE_POSITION]
+
+    assert held == {name: ("fx.eurusd", "short", Decimal("1.72"), None)}
+    assert node_rows(node, "protection") == [
+        {
+            "alarm": "protection_escalation",
+            "position": name,
+            "market_id": "fx.eurusd",
+            "tries": 3,
+            "action": "close_refused",
+            "origin": "placeholder",
+        },
+        {
+            "alarm": "close_refused",
+            "position": name,
+            "market_id": "fx.eurusd",
+            "why": "protection",
+            "refusals": 3,
+            "origin": "placeholder",
+        },
+    ]
+    assert [t.position for t in closes] == [name] * 4
+    assert node.account.positions() == {}
+    assert unit_rows(node, "trade") == []
+
+
 def test_a_journal_that_cannot_be_written_blocks_the_entry_before_the_venue(
     tmp_path: Path,
 ) -> None:
@@ -153,6 +195,17 @@ def test_a_journal_that_cannot_be_written_blocks_the_entry_before_the_venue(
     assert node.account.received == []
 
 
+KILL_SCOPES = [
+    pytest.param("all", "all", "Paused", True, id="all"),
+    pytest.param(
+        {"instrument": "fx.eurusd"}, "instrument:fx.eurusd", "Trading", False, id="market-id"
+    ),
+]
+"""Each scope a kill is asked at, its key, the status word, and whether status's level for all
+shows the kill."""
+
+
+@pytest.mark.parametrize(("scope", "key", "word", "for_all"), KILL_SCOPES)
 @pytest.mark.parametrize(
     ("level", "sent", "closed"),
     [
@@ -163,12 +216,19 @@ def test_a_journal_that_cannot_be_written_blocks_the_entry_before_the_venue(
     ],
 )
 def test_each_kill_level_applies_its_placeholder_effect_and_only_his_resume_lifts_it(
-    tmp_path: Path, level: str, sent: list[CommandKind], closed: int
+    tmp_path: Path,
+    level: str,
+    sent: list[CommandKind],
+    closed: int,
+    scope: Json,
+    key: str,
+    word: str,
+    for_all: bool,
 ) -> None:
     node = trading(tmp_path)
     play(node, FIRST_SEND + 1)
-    killed = node.node.call("kill", {"op_id": "op-kill", "level": level, "scope": "all"})
-    lower = node.node.call("kill", {"op_id": "op-lower", "level": "YELLOW", "scope": "all"})
+    killed = node.node.call("kill", {"op_id": "op-kill", "level": level, "scope": scope})
+    lower = node.node.call("kill", {"op_id": "op-lower", "level": "YELLOW", "scope": scope})
     node.runtime.tick()
     play(node, LIVE_FROM + 86_400_000_000_000, start=FIRST_SEND + 1)
     during = value(node.node.call("status", {}))
@@ -180,15 +240,69 @@ def test_each_kill_level_applies_its_placeholder_effect_and_only_his_resume_lift
     assert killed == {"ok": True, "value": {"level_in_force": level}, "op_id": "op-kill"}
     assert value(lower) == {"level_in_force": level}
     assert [t.command.kind for t in node.account.received] == sent
-    assert (during["word"], during["kill_level"]) == ("Paused", level)
-    assert during["kill_effects"] == {"all": effect}
+    assert (during["word"], during["kill_level"]) == (word, level if for_all else "GREEN")
+    assert during["kill_effects"] == {key: effect}
     assert effect["origin"] == "placeholder"
     kills = node_rows(node, "kill_level")
     assert [(k["scope"], k["level"], k["origin"], k["positions_closed"]) for k in kills] == [
-        ("all", level, "placeholder", closed)
+        (key, level, "placeholder", closed)
     ]
     assert value(resumed) == {"state": "accepted", "open_causes": []}
     assert (after["kill_level"], after["kill_effects"]) == ("GREEN", {})
+
+
+def test_a_kill_at_an_instrument_no_deployment_trades_is_refused_by_name(
+    tmp_path: Path,
+) -> None:
+    node = trading(tmp_path)
+    killed = node.node.call(
+        "kill", {"op_id": "op-kill", "level": "RED", "scope": {"instrument": "fx.gbpusd"}}
+    )
+    paused = node.node.call("pause", {"op_id": "op-pause", "scope": {"instrument": "XAUUSD"}})
+
+    assert killed == {
+        "ok": False,
+        "code": "unknown_instrument",
+        "message": "kill: no deployment on this node trades instrument fx.gbpusd; name it by a"
+        " market id or symbol a deployment trades",
+    }
+    assert value(paused) == {"state": "accepted"}
+    assert value(node.node.call("status", {}))["kill_effects"] == {}
+
+
+def refusing(node: Rig, refusals: list[int]) -> None:
+    """The venue refuses the next ``refusals[0]`` closes it is sent, then answers again."""
+    sending = node.account.send
+
+    def send(ticket: Ticket) -> Result[Sent]:
+        if ticket.command.kind is CommandKind.CLOSE_POSITION and refusals[0] > 0:
+            refusals[0] -= 1
+            node.account.received.append(ticket)
+            return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, "busy"))
+        return sending(ticket)
+
+    node.account.send = send  # type: ignore[method-assign]
+
+
+def test_a_red_close_the_venue_refuses_is_sent_again_on_the_next_tick(tmp_path: Path) -> None:
+    node = trading(tmp_path)
+    play(node, FIRST_SEND + 1)
+    refusing(node, [1])
+    node.node.call("kill", {"op_id": "op-kill", "level": "RED", "scope": "all"})
+    node.runtime.tick()
+    open_after_first = len(node.account.positions())
+    node.runtime.tick()
+    node.runtime.tick()
+    closes = [t for t in node.account.received if t.command.kind is CommandKind.CLOSE_POSITION]
+
+    assert open_after_first == 1
+    assert node.account.positions() == {}
+    assert len(closes) == 2
+    assert [k["positions_closed"] for k in node_rows(node, "kill_level")] == [0]
+    assert [r["step"] for r in node_rows(node, "order") if r["step"] in {"close", "closed"}] == [
+        "close",
+        "closed",
+    ]
 
 
 def test_the_placeholder_effects_escalate_level_by_level() -> None:

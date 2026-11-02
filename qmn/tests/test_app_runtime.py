@@ -12,6 +12,7 @@ import hashlib
 import json
 import re
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -23,6 +24,7 @@ from itertools import groupby
 from pathlib import Path
 from typing import cast
 
+import pytest
 from qmb.host.unit_runner import load_unit_folder
 from qmb.runloop import SliceObservation, run_slice
 from qmf.core import Account, AccountRole, Instant, TypedRefusal, VenueId
@@ -431,6 +433,43 @@ def test_a_missing_or_changed_staged_file_refuses_deploy_by_name_and_32_mb_deplo
             "55614bc43730e2812bbdd5996d0e9ee99f85256d56e9ffa418936b0ac7664157",
         ),
     ]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/x",
+        pytest.param(
+            "C:x",
+            marks=pytest.mark.skipif(
+                sys.platform != "win32", reason="a drive-relative path is a Windows path"
+            ),
+        ),
+    ],
+)
+def test_a_staged_path_that_leaves_the_staging_folder_refuses_deploy(
+    tmp_path: Path, path: str
+) -> None:
+    node = rig(tmp_path)
+    document = deployment(node.data)
+    cast("list[Json]", document["files"]).append(
+        {
+            "entry_id": "weights-1",
+            "version": 1,
+            "fingerprint": fingerprint(b"x"),
+            "path": path,
+            "kind": "weights",
+            "bytes": 1,
+        }
+    )
+
+    refused = deploy(node, document)
+
+    assert (refused["code"], refused["message"]) == (
+        "bad_argument",
+        f"deploy: deployment.files path {path} is a relative path inside the folder",
+    )
+    assert listed(node) == []
 
 
 def shown(node: Rig) -> list[dict[str, Json]]:
