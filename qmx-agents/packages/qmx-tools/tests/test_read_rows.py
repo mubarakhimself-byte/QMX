@@ -16,7 +16,14 @@ from pydantic import JsonValue
 from qmf.core import canonical_bytes, fingerprint_bytes, is_refusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts, envelope_json
 from qmf.data.series import OPEN_NAME, SeriesKey, SeriesStore
-from qmf.readings.record import Health, ReadingRecord, ReadingRef, ReadingSource, Tier, TimeBase
+from qmf.readings.record import (  # pyright: ignore[reportMissingTypeStubs]
+    Health,
+    ReadingRecord,
+    ReadingRef,
+    ReadingSource,
+    Tier,
+    TimeBase,
+)
 from qmx_control.library import OPERATOR
 from qmx_library.port import Draft
 from qmx_library.principal import MAIN
@@ -33,7 +40,7 @@ DAYS = [datetime(2024, 12, 28, tzinfo=UTC) + timedelta(days=n) for n in range(7)
 
 
 def door(root: Path, data: dict[str, object]) -> MarketPort:
-    from qmx_host.market_data import MarketDoor
+    from qmx_host.market_data import MarketDoor  # pyright: ignore[reportMissingTypeStubs]
 
     return cast("MarketPort", unwrap(MarketDoor.open(root / "market", data)))
 

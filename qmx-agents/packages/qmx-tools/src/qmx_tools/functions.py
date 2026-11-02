@@ -1178,8 +1178,12 @@ def _months(folder: Path) -> list[SeriesKey]:
 
 def _held_out_from(door: MarketPort, series: str) -> int | None:
     """Where the door's holdout starts for `series`, from its own card, or None when off."""
-    card = unwrap(door.card(series))
-    boundary = card.get("seal_boundary") if isinstance(card, Mapping) else None
+    card: object = unwrap(door.card(series))
+    boundary = (
+        cast("Mapping[str, object]", card).get("seal_boundary")
+        if isinstance(card, Mapping)
+        else None
+    )
     if boundary == "":
         return None
     if isinstance(boundary, str) and boundary.isdigit():
