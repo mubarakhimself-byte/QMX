@@ -16,6 +16,7 @@ import os
 import shutil
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Final, cast
 
@@ -31,7 +32,17 @@ from qmb.host.unit_runner import (
 )
 from qmb.sweep.axes import expand_sweep
 
-__all__ = ["EVERY_MARKET", "Cell", "Ran", "cell_document", "lay_out", "run_cell", "unit_cells"]
+__all__ = [
+    "EVERY_MARKET",
+    "Cell",
+    "Ran",
+    "cell_document",
+    "lay_out",
+    "range_grid",
+    "run_cell",
+    "trade_cell",
+    "unit_cells",
+]
 
 EVERY_MARKET: Final = "*"
 """The markets axis of a sweep that runs every cell on all the unit's markets at once."""
@@ -104,6 +115,37 @@ def unit_cells(grid: object, *, unit: str, bar_seconds: int) -> Result[tuple[Cel
     )
 
 
+def _range_values(name: str, spec: object) -> Result[list[str]]:
+    if isinstance(spec, list):
+        return Ok([str(v) for v in cast("list[object]", spec)])
+    if not isinstance(spec, Mapping):
+        return invalid("ranges", f"{name}: a range is a list of values or {{min, max, step}}")
+    named = cast("Mapping[str, object]", spec)
+    try:
+        low, high, step = (Decimal(str(named[k])) for k in ("min", "max", "step"))
+    except (KeyError, InvalidOperation):
+        return invalid("ranges", f"{name}: a range names min, max and step as decimal text")
+    if step <= 0 or high < low:
+        return invalid(
+            "ranges", f"{name}: a range's step is above zero and its max is not below its min"
+        )
+    return Ok([str(low + i * step) for i in range(int((high - low) / step) + 1)])
+
+
+def range_grid(ranges: object) -> Result[dict[str, list[str]]]:
+    """An optimize or walk-forward run's ``ranges``, each number's values listed or
+    ``{"min", "max", "step"}`` as decimal text, as a sweep grid's numbers."""
+    if not isinstance(ranges, Mapping) or not ranges:
+        return invalid("ranges", "the run names the ranges of one number at least")
+    grid: dict[str, list[str]] = {}
+    for name, spec in cast("Mapping[str, object]", ranges).items():
+        values = _range_values(name, spec)
+        if is_refusal(values):
+            return values
+        grid[name] = values.value
+    return Ok(grid)
+
+
 def cell_document(document: Mapping[str, object], cell: Cell) -> Result[dict[str, object]]:
     """The unit document of one cell: its numbers' defaults set, its markets narrowed."""
     changed = copy.deepcopy(dict(document))
@@ -162,3 +204,14 @@ def run_cell(folder: Path, body: Mapping[str, object]) -> Result[Ran]:
     if is_refusal(ran):
         return ran
     return Ok(Ran(loaded.value, ran.value))
+
+
+def trade_cell(
+    base: Path, target: Path, document: Mapping[str, object], cell: Cell, body: Mapping[str, object]
+) -> Result[Ran]:
+    """One cell traded in its own folder ``target``, laid out from the base run folder."""
+    made = cell_document(document, cell)
+    if is_refusal(made):
+        return made
+    lay_out(base, target, made.value)
+    return run_cell(target, body)

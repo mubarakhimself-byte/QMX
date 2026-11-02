@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from decimal import Decimal
 from typing import cast
 
-from qmb.sweep.cells import cell_document, lay_out, run_cell, unit_cells
+from qmb.sweep.cells import trade_cell, unit_cells
 from qmf.core.refusal import is_refusal
 
 import qmb_tester as tester
@@ -36,13 +36,8 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
     rows: list[dict[str, object]] = []
     for cell in cells.value:
         row = cell.fields()
-        made = cell_document(document, cell)
-        if is_refusal(made):
-            rows.append(row | {"status": "failed", "reason": tester.reason(made)})
-            continue
         root = folder / "cells" / cell.name / "in"
-        lay_out(base, root, made.value)
-        ran = run_cell(root, tester.unit_body(asked, f"{run_id}/{cell.name}"))
+        ran = trade_cell(base, root, document, cell, tester.unit_body(asked, f"{run_id}/{cell.name}"))
         if is_refusal(ran):
             rows.append(row | {"status": "failed", "reason": tester.reason(ran)})
             continue

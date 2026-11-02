@@ -7,7 +7,10 @@ core refuses a result where a scenario declared ``worsen_only`` came out better 
 the label is never trusted on its word.
 
 Every scenario reads the base run's trades and answers the trades left, so its measure, the
-expectancy in R, compares like with like.
+expectancy in R, compares like with like. A scenario that leaves no trades, or reads a run with
+none, answers ``no_trades`` and has no value: no trades is not an expectancy of 0. Each outcome
+is named by its place in the request and its scenario, ``1-skip_weekdays``, so one scenario asked
+twice with other params is two outcomes.
 """
 
 from __future__ import annotations
@@ -25,12 +28,22 @@ from qmf.core.refusal import Ok, Result, is_refusal
 from qmb._refuse import invalid
 from qmb.host.unit_handler import UnitTrade
 
-__all__ = ["MEASURE", "SCENARIOS", "Direction", "Outcome", "Scenario", "expectancy", "what_if"]
+__all__ = [
+    "MEASURE",
+    "NO_TRADES",
+    "SCENARIOS",
+    "Direction",
+    "Outcome",
+    "Scenario",
+    "expectancy",
+    "what_if",
+]
 
 Direction: TypeAlias = Literal["worsen_only", "may_improve"]
 Apply: TypeAlias = Callable[[Sequence[UnitTrade], Mapping[str, object]], Result[list[Decimal]]]
 
 MEASURE: Final = "expectancy_r"
+NO_TRADES: Final = "no_trades"
 _NS: Final = 1_000_000_000
 _DAYS: Final = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
@@ -95,26 +108,31 @@ SCENARIOS: Final[Mapping[str, Scenario]] = MappingProxyType(
 """Every scenario this tester runs and its declared direction, as `capabilities` lists them."""
 
 
-def expectancy(rs: Sequence[Decimal]) -> Decimal:
-    return sum(rs, Decimal(0)) / len(rs) if rs else Decimal(0)
+def expectancy(rs: Sequence[Decimal]) -> Decimal | None:
+    """The mean R per trade, or None when there is no trade to measure."""
+    return sum(rs, Decimal(0)) / len(rs) if rs else None
 
 
 @dataclass(frozen=True, slots=True)
 class Outcome:
     name: str
+    scenario: str
     direction: Direction
-    base: Decimal
-    value: Decimal
+    base: Decimal | None
+    value: Decimal | None
     trades: int
 
     def fields(self) -> dict[str, object]:
+        measured = self.base is not None and self.value is not None
         return {
             "name": self.name,
+            "scenario": self.scenario,
             "direction": self.direction,
             "measure": MEASURE,
-            "base": str(self.base),
-            "value": str(self.value),
+            "base": None if self.base is None else str(self.base),
+            "value": None if self.value is None else str(self.value),
             "trades": self.trades,
+            "answer": "measured" if measured else NO_TRADES,
         }
 
 
@@ -124,7 +142,7 @@ def what_if(trades: Sequence[UnitTrade], asked: object) -> Result[tuple[Outcome,
         return invalid("scenarios", "a what-if run names one scenario at least")
     base = expectancy([t.r for t in trades])
     made: list[Outcome] = []
-    for entry in cast("list[object]", asked):
+    for place, entry in enumerate(cast("list[object]", asked), start=1):
         named: Mapping[str, object] = (
             cast("Mapping[str, object]", entry) if isinstance(entry, Mapping) else {}
         )
@@ -142,5 +160,7 @@ def what_if(trades: Sequence[UnitTrade], asked: object) -> Result[tuple[Outcome,
         if is_refusal(left):
             return left
         rs = left.value
-        made.append(Outcome(name, scenario.direction, base, expectancy(rs), len(rs)))
+        made.append(
+            Outcome(f"{place}-{name}", name, scenario.direction, base, expectancy(rs), len(rs))
+        )
     return Ok(tuple(made))

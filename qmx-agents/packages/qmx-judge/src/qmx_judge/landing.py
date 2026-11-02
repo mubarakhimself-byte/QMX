@@ -199,6 +199,8 @@ measures never carry a check it did not run."""
 
 WORSEN_ONLY: Final = "worsen_only"
 MAY_IMPROVE: Final = "may_improve"
+NO_TRADES: Final = "no_trades"
+"""A scenario's answer when it left no trades: it has no value to compare with its base."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,18 +222,25 @@ def _number(value: object) -> Decimal | None:
 
 def _whatif(measures: Mapping[str, object], problems: list[str]) -> list[Counted]:
     """A what-if run's `may_improve` scenarios, each counted, and a refusal of every
-    `worsen_only` one that came out better than its base (`judge.md` §4)."""
+    `worsen_only` one that came out better than its base (`judge.md` §4). A scenario that left
+    no trades answers `no_trades` with no value: counted when it may improve, never compared."""
     listed = measures.get("scenarios")
     if not isinstance(listed, list) or not listed:
         problems.append("a whatif result lists its scenarios with direction, base and value")
         return []
     counted: list[Counted] = []
+    names: list[str] = []
     for entry in cast(list[object], listed):
         named = cast(Mapping[str, object], entry) if isinstance(entry, Mapping) else {}
         name, direction = named.get("name"), named.get("direction")
         base, value = _number(named.get("base")), _number(named.get("value"))
-        if not isinstance(name, str) or direction not in (WORSEN_ONLY, MAY_IMPROVE):
+        if not isinstance(name, str) or not name or direction not in (WORSEN_ONLY, MAY_IMPROVE):
             problems.append("each scenario names itself and its direction")
+            continue
+        names.append(name)
+        if named.get("answer") == NO_TRADES and named.get("value") is None:
+            if direction == MAY_IMPROVE:
+                counted.append(Counted(name))
         elif base is None or value is None:
             problems.append(f"scenario {name} carries its base and value as decimal text")
         elif direction == MAY_IMPROVE:
@@ -242,6 +251,8 @@ def _whatif(measures: Mapping[str, object], problems: list[str]) -> list[Counted
                 f"{named.get('measure', 'its measure')} from {base} to {value}; a scenario that "
                 "can improve a result is a counted rerun"
             )
+    if len(set(names)) != len(names):
+        problems.append("a whatif result names each thing it tried once")
     return counted
 
 

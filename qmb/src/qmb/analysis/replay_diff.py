@@ -2,9 +2,11 @@
 
 A live unit and its replay through QMB write the same `signal` rows, one per decision, because
 both drive the one unit handler. Row ids carry each run's own scope, so a decision is keyed by
-what it decided about: its instant, market and side. Each key of the day is ``matched`` when both
-sides wrote the same outcome and reason, ``differs`` when they wrote other ones, ``live_only`` or
-``replay_only`` when one side has no row. A day that matches lists no decision.
+what it decided about: its instant, market and side, and its occurrence among that day's rows of
+the same instant, market and side, so two rows of one key pair up in order and never overwrite
+each other. Each key of the day is ``matched`` when both sides wrote the same outcome and
+reason, ``differs`` when they wrote other ones, ``live_only`` or ``replay_only`` when one side
+has no row. A day that matches lists no decision.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ from typing import TypeAlias, cast
 
 __all__ = ["DecisionDiff", "decision_diff"]
 
-Key: TypeAlias = tuple[int, str, str]
+Key: TypeAlias = tuple[int, str, str, int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,11 +38,13 @@ def _keyed(
     rows: Sequence[Mapping[str, object]], start: int, end: int
 ) -> dict[Key, Mapping[str, object]]:
     found: dict[Key, Mapping[str, object]] = {}
+    seen: dict[tuple[int, str, str], int] = {}
     for row in rows:
         instant = row.get("instant")
         if type(instant) is int and start <= instant < end:
-            key = (instant, str(row.get("market_id")), str(row.get("side")))
-            found[key] = row
+            about = (instant, str(row.get("market_id")), str(row.get("side")))
+            seen[about] = seen.get(about, -1) + 1
+            found[(*about, seen[about])] = row
     return found
 
 
@@ -56,12 +60,13 @@ def decision_diff(
     matched = 0
     decisions: list[Mapping[str, object]] = []
     for key in sorted(lived.keys() | replayed.keys()):
-        instant, market, side = key
+        instant, market, side, occurrence = key
         here, there = lived.get(key), replayed.get(key)
         said = {
             "instant": instant,
             "market_id": market,
             "side": side,
+            "occurrence": occurrence,
             "live": None if here is None else _said(here),
             "replay": None if there is None else _said(there),
         }

@@ -6,8 +6,9 @@ and 3, `judge.md` §3):
 - ``entry_edge``: the entry edge ratio, the trades' summed favourable excursion over their summed
   adverse excursion in the ``horizon`` bars after each fill, both in R of the trade's own stop
   distance. The same ratio of ``resamples`` sets of random entries (same markets, sides and stop
-  distances, at seeded random bars) is the null, and the kept
-  :func:`~qmb.robustness.summary.summarize_distribution` gives the one-tailed p.
+  distances, at seeded random bars) is the null. The one-tailed p counts the observed set among
+  the draws, ``(k + 1) / (resamples + 1)`` where ``k`` null ratios reach the observed one
+  (Phipson and Smyth), so a few draws can never give a p near 0.
 - ``cost_stress``: each trade's R with its costs paid ``multiplier`` times: the spread of the bar
   it filled in (the bars carry both sides, so the run paid it once), plus its market's profiled
   slippage and commission when the run had a cost profile.
@@ -25,18 +26,18 @@ from decimal import ROUND_HALF_EVEN, Decimal
 from fractions import Fraction
 from typing import Final
 
-from qmf.core.refusal import Ok, Result, is_refusal
+from qmf.core.refusal import Ok, Result
 from qml.protocol.unit import QuoteBar
 from qml.unit.model import Side
 
 from qmb._refuse import invalid
 from qmb.execution.cost import CostProfile
 from qmb.host.unit_handler import UnitTrade
-from qmb.robustness.summary import DIRECTION_HIGHER_IS_BETTER, summarize_distribution
 
 __all__ = [
     "EDGE_HORIZON_BARS",
     "EDGE_RESAMPLES",
+    "EDGE_RESAMPLES_LEAST",
     "STRESS_MULTIPLIER",
     "CostStress",
     "EntryEdge",
@@ -48,6 +49,9 @@ EDGE_HORIZON_BARS: Final = 20
 """Starting default of a robustness run's ``horizon_bars``: the bars after a fill it measures."""
 EDGE_RESAMPLES: Final = 200
 """Starting default of a robustness run's ``resamples``: random entry sets behind the null."""
+EDGE_RESAMPLES_LEAST: Final = 20
+"""Starting default of the fewest ``resamples`` a robustness run takes: the smallest p 20 draws
+can give, 1/21, lies below the shipped presets' ``signal_p`` of 0.05."""
 STRESS_MULTIPLIER: Final = Decimal("1.5")
 """Starting default of a robustness run's ``cost_multiplier``, the shipped preset's stress."""
 _PLACES: Final = Decimal("0.0001")
@@ -124,8 +128,12 @@ def entry_edge(
     seed: int = 0,
 ) -> Result[EntryEdge]:
     """The run's entry edge ratio and its p against ``resamples`` sets of seeded random entries."""
-    if horizon < 1 or resamples < 1:
-        return invalid("robustness", "horizon_bars and resamples are whole numbers above zero")
+    if horizon < 1 or resamples < EDGE_RESAMPLES_LEAST:
+        return invalid(
+            "robustness",
+            f"horizon_bars is a whole number above zero and resamples one of "
+            f"{EDGE_RESAMPLES_LEAST} or more",
+        )
     measured: list[tuple[UnitTrade, Decimal, tuple[Fraction, Fraction]]] = []
     for trade in trades:
         held = bars.get(trade.market_id, ())
@@ -151,12 +159,9 @@ def entry_edge(
             entry = held[at].ask.open if trade.side is Side.LONG else held[at].bid.open
             pairs.append(_excursions(held, at, trade.side, entry, risk, horizon))
         null.append(_ratio(pairs) or Fraction(0))
-    summary = summarize_distribution(null, observed, DIRECTION_HIGHER_IS_BETTER)
-    if is_refusal(summary):
-        return summary
-    return Ok(
-        EntryEdge(_text(observed), _text(summary.value.p_value), len(measured), horizon, resamples)
-    )
+    reached = sum(1 for ratio in null if ratio >= observed)
+    p = Fraction(reached + 1, resamples + 1)
+    return Ok(EntryEdge(_text(observed), _text(p), len(measured), horizon, resamples))
 
 
 def _trade_cost_r(
