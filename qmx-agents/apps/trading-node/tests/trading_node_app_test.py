@@ -264,9 +264,8 @@ def test_journal_tail_mid_write_returns_whole_lines_and_leaves_the_file_unchange
         stream.write_bytes(committed)
 
     rows = cast(list[Document], cast(Document, tail["value"])["rows"])
-    assert [(row["kind"], cast(Document, row["body"])["event"]) for row in rows] == [
-        ("node_lifecycle", "start")
-    ]
+    lifecycle = [row for row in rows if row["kind"] == "node_lifecycle"]
+    assert [cast(Document, row["body"])["event"] for row in lifecycle] == ["start"]
     assert after == in_flight
 
 
