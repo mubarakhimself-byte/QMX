@@ -123,6 +123,7 @@ class Seen:
     latest: JsonValue = None
     retry_at: float = 0.0
     delay: float = 0.0
+    read_at: float = float("-inf")
 
 
 @dataclass(frozen=True, slots=True)
@@ -484,23 +485,36 @@ class NodeLink:
             shown["detail"] = f"unreachable since {seen.since}"
         return shown
 
-    def tick(self) -> None:
-        """One round: read each place's heartbeats, then send the changes waiting for it."""
-        for place in sorted({*self.places(), *self.outbox.places()} - {self.here}):
-            try:
-                self.heartbeats(place, principal=f"host:{self.here}")
-            except AppError:
-                continue
-            if self.clock() >= self._seen(place).retry_at:
+    def tick(self) -> float:
+        """One round: read each place's heartbeats when they are due, then send the changes
+        waiting for it once its back-off has passed or it has just answered. Answers how many
+        seconds to wait before the next round."""
+        interval = setting(self.tuning(), "interval_s", INTERVAL_S)
+        waiting = set(self.outbox.places())
+        wake = interval
+        for place in sorted({*self.places(), *waiting} - {self.here}):
+            seen, now = self._seen(place), self.clock()
+            answered = False
+            if now >= seen.read_at + interval:
+                seen.read_at = now
+                try:
+                    self.heartbeats(place, principal=f"host:{self.here}")
+                    answered = True
+                except AppError:
+                    pass
+            if place in waiting and (answered or now >= seen.retry_at):
                 self.flush(place)
-        if self.here in self.outbox.places():
+            wake = min(wake, seen.read_at + interval - now)
+            if self.outbox.waiting(place):
+                wake = min(wake, seen.retry_at - now)
+        if self.here in waiting:
             self.flush(self.here)
+        return max(wake, 1.0)
 
     async def keep(self) -> None:
-        """`tick` every `interval_s` until cancelled."""
+        """`tick` until cancelled, waking for the next heartbeat read or the next retry."""
         while True:
-            await asyncio.to_thread(self.tick)
-            await asyncio.sleep(setting(self.tuning(), "interval_s", INTERVAL_S))
+            await asyncio.sleep(await asyncio.to_thread(self.tick))
 
 
 def _value(answer: Mapping[str, JsonValue]) -> JsonValue:

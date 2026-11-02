@@ -12,7 +12,6 @@ from fastmcp import Client
 from qmf.core import Ok, Result
 from qmf.data.store.refusals import policy_rejection
 from qml.protocol import construct_bot
-from qmn.doors.api import DoorRuntime
 from qmx_control.library import OPERATOR
 from qmx_judge.judge import spec_problems
 from qmx_judge.tries import try_item
@@ -23,7 +22,7 @@ from qmx_library.principal import MAIN
 from qmx_tools import DomainContext
 from qmx_tools.functions import domain_functions
 from qmx_tools.servers import create_server
-from qmx_tools.service import Artifact, OrderProposal, unwrap
+from qmx_tools.service import Artifact, OrderProposal, attach_node, unwrap
 
 ROOT = Path(__file__).resolve().parents[4]
 FIRST = 1_700_000_000_000_000_000
@@ -83,6 +82,13 @@ class FakeDoor:
         )
 
 
+class RecordedNode:
+    """The host's node link, answering each read with what it was asked."""
+
+    def node_read(self, operation: str, arguments: dict[str, Any]) -> Any:
+        return {"operation": operation, "arguments": arguments, "acts": False}
+
+
 class SealedDoor(FakeDoor):
     """The same door, refusing the month the test asks for the way the real one refuses."""
 
@@ -107,17 +113,30 @@ def context(tmp_path: Path) -> DomainContext:
             read_surfaces={},
         )
     )
-    ctx.node = DoorRuntime(
-        boot_epoch="recorded-boot",
-        composition_fp="recorded",
-        knowledge_time_ns=1,
-        watermark_ns=1,
-        source_time_ns=1,
-        receive_time_ns=1,
-        evidence_channel_budget=100,
-        authority_source="replicated-evidence",
-    )
+    attach_node(ctx.control, RecordedNode())
     return ctx
+
+
+def test_the_node_rows_say_no_trading_node_is_set_up_yet(tmp_path: Path) -> None:
+    node = domain_functions(DomainContext(root=tmp_path))["node"]
+    assert node["node_state"]()["result"] == {
+        "set_up": False,
+        "message": "no trading node is set up yet",
+    }
+    assert node["node_positions"](account="demo-1")["result"]["set_up"] is False
+
+
+def test_the_node_rows_read_through_the_node_link(context: DomainContext) -> None:
+    node = domain_functions(context)["node"]
+    assert node["node_journal_tail"](after_sequence=7, streams=["orders"])["result"] == {
+        "operation": "journal_tail",
+        "arguments": {"after_sequence": 7, "streams": ["orders"]},
+        "acts": False,
+    }
+    assert node["node_units"](deployment_id="d-1")["result"]["arguments"] == {
+        "deployment_id": "d-1"
+    }
+    assert node["node_passport"]()["result"]["operation"] == "passport"
 
 
 def test_a_sealed_month_is_refused_with_its_reason(tmp_path: Path) -> None:
@@ -340,7 +359,7 @@ def test_order_proposal_cannot_carry_execution_authority() -> None:
 
 
 @pytest.mark.parametrize(
-    "server_name,count", [("data", 4), ("backtest", 5), ("research", 3), ("node", 2)]
+    "server_name,count", [("data", 4), ("backtest", 5), ("research", 3), ("node", 6)]
 )
 def test_mcp_lists_and_calls_all_tools(
     context: DomainContext, server_name: str, count: int, monkeypatch: pytest.MonkeyPatch
@@ -355,6 +374,10 @@ def test_mcp_lists_and_calls_all_tools(
         "library_search": {},
         "library_save": {"artifact": {"name": "note", "kind": "note", "content": "saved"}},
         "node_state": {},
+        "node_units": {},
+        "node_positions": {},
+        "node_journal_tail": {"after_sequence": 0},
+        "node_passport": {},
         "propose_order": {
             "proposal": {
                 "account": "recorded",
