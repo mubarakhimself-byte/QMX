@@ -33,7 +33,7 @@
       "arguments": {
         "op_id": "proof-pause-new",
         "issued_at": "2026-10-01T10:00:02+00:00",
-        "scope": {"instrument": "ROAD.PROOF"}
+        "scope": {"account": "road-proof"}
       },
       "expected": {
         "ok": true,
@@ -46,7 +46,7 @@
       "arguments": {
         "op_id": "proof-pause",
         "issued_at": "2026-10-01T10:00:01+00:00",
-        "scope": {"instrument": "ROAD.PROOF"}
+        "scope": {"account": "road-proof"}
       },
       "expected": {
         "ok": false,
