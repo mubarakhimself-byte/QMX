@@ -493,8 +493,8 @@ def test_an_entry_whose_answer_was_lost_is_reconciled_and_its_protection_close_g
     assert node.exchange.sent_orders()[1:] == [
         (
             "create_order", ETH, "market", "sell", "0.01", "2490",
-            {"clientOrderId": "0x716d070707070783d2558f065e537e83", "reduceOnly": True, "timeInForce": "Ioc",
-             "slippage": "0.05"},
+            {"clientOrderId": "0x716d070707070783d2558f065e537e83", "reduceOnly": True,
+             "timeInForce": "Ioc", "slippage": "0.05"},
         ),
     ]  # fmt: skip
     assert node.exchange.positions == []
