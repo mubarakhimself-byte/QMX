@@ -21,7 +21,7 @@
      "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
     {"id": "week", "name": "The week's runs and inbox", "type": "script", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
-     "parameters": {"script": "scripts/week.py", "fixture_ref": "fixtures/week.json"}},
+     "parameters": {"script": "scripts/week.py", "fixture_ref": "fixtures/week.json", "door_ref": "scripts/door.py"}},
     {"id": "any", "name": "Any run this week?", "type": "rule", "typeVersion": 1,
      "position": [440, 0], "effect": "none", "parameters": {"expr": "items.runs != []"}},
     {"id": "cluster", "name": "Cluster the failures", "type": "llm", "typeVersion": 1,

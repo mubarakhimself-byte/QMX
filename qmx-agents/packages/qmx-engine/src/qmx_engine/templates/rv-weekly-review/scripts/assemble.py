@@ -1,5 +1,6 @@
 """The change card: the week's runs, parked runs and open inbox items exactly as the engine reported
-them, the analyst's clusters, the linted edits, and a one-line summary counted from those facts.
+them, the analyst's clusters, the linted edits, a one-line summary counted from those facts, and
+the week's market almanac exactly as the week step read it.
 Its inputs are told apart by shape."""
 
 import json
@@ -26,6 +27,7 @@ print(
             "inbox": week["inbox"],
             "clusters": clusters,
             "edits": edits,
+            "almanac": week["almanac"],
         }
     )
 )

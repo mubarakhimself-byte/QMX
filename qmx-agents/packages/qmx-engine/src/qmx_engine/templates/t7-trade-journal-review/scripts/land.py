@@ -2,14 +2,15 @@
 
 Its inputs are the read step's output and, when a model wrote the note, the `receipts-grader`
 child's output, nested as `outputs.deliver.main.note`. The read step's output carries `note` (the
-script's own note when nothing needed a model), `note_kind`, `about`, `window`, `cards` and the
-receipts of the findings it landed.
+script's own note when nothing needed a model), `note_kind`, `about`, `window`, `cards`, the
+receipts of the findings it landed, and optionally `examples`, which the note carries.
 
 It lands one `note` artifact and one `proposal-card` artifact per card, on the run's own ref and
 as the run, each marked `proposal: true`. A note a model wrote lands only after the grader passed
 it, so every number in it is held by a receipt. A card rests on the read step's landed findings,
-asks only `tighten`, `admit_market`, `drop_market` or `bench` and never `paper` or `live`, and
-waits for his click. Nothing here moves a unit, a ref on `main`, a lifecycle row or an order.
+asks only `tighten`, `admit_market`, `drop_market` or `bench` and never `paper` or `live`, names
+what it is about in `placeholders` (such as the market to drop), and waits for his click.
+Nothing here moves a unit, a ref on `main`, a lifecycle row or an order.
 """
 
 import json
@@ -58,6 +59,8 @@ landed = {
     "author": f"agent:{template}" if graded else f"script:{template}",
     "proposal": True,
 }
+if isinstance(read.get("examples"), list):
+    landed["examples"] = read["examples"]
 (bodies / "note.md").write_text(landed["text"], encoding="utf-8")
 writes = [
     {
@@ -83,6 +86,8 @@ for place, proposal in enumerate(read.get("cards", []), start=1):
         "made_by": f"run:{os.environ['QMX_RUN_ID']}",
         "proposal": True,
     }
+    if isinstance(proposal.get("placeholders"), list):
+        card["placeholders"] = [str(p) for p in proposal["placeholders"]]
     (bodies / f"card-{place}.json").write_text(json.dumps(card, sort_keys=True), "utf-8")
     writes.append(
         {

@@ -1,0 +1,30 @@
+{
+  "recorded": {
+    "app_id": "qmb",
+    "job": "jobs/replay_check.py",
+    "version": "1.0.0",
+    "run_id": "qmbr-pc-recorded-replay",
+    "result": {
+      "output": "backtest-result",
+      "data": {
+        "run_id": "qmbr-pc-recorded-replay",
+        "status": "finished",
+        "measures": {"day": "2025-01-02", "matched": 19, "differs": 1}
+      }
+    }
+  },
+  "recorded-drift": {
+    "app_id": "qmb",
+    "job": "jobs/replay_check.py",
+    "version": "1.0.0",
+    "run_id": "qmbr-pc-recorded-replay-drift",
+    "result": {
+      "output": "backtest-result",
+      "data": {
+        "run_id": "qmbr-pc-recorded-replay-drift",
+        "status": "finished",
+        "measures": {"day": "2025-01-02", "matched": 3, "differs": 1}
+      }
+    }
+  }
+}

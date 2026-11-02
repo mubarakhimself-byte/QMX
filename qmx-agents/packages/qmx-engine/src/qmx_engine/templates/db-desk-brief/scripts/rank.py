@@ -1,7 +1,7 @@
 """Ranks what the brief may mention (card T1 step 3): alerts first, then at most three decisions,
 then the watchlist's releases above low impact (high before medium, then by time), then the desk's
 lines (HIGH first), then at most three research items. Each ranked item keeps its source link or
-the run it came from."""
+the run it came from, and a calendar row keeps its `qmx.marked/1` mark as outside text."""
 
 import json
 import re
@@ -27,7 +27,8 @@ events = sorted(
 )
 for event in events:
     text = f"{event['time_utc']} UTC {event['currency']} {event['title']} ({event['impact']})"
-    ranked.append({"kind": "event", "text": text, "link": event["source"]})
+    marked = {"marked": event["marked"]} if "marked" in event else {}
+    ranked.append({"kind": "event", "text": text, "link": event["source"], **marked})
 for line in sorted(day["desk"], key=lambda d: SECTION_ORDER.get(d["section"], 3)):
     ranked.append({"kind": "desk", "text": line["text"], "link": line["links"][0]})
 for paper in day["research"][:MOST_RESEARCH]:

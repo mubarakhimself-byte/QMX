@@ -9,7 +9,8 @@ A read script loads this file by its path, because scripts run as `python -I`. I
   `day` is left out;
 - `journal(...)`: `journal_query`, the one door to the unit, market and node journals;
 - `readings(...)`: `readings_query`, the one door to reading history, through the market-data
-  door's holdout.
+  door's holdout;
+- `market_door(...)`: this machine's market-data door, for a read of its price series.
 
 A script never opens the Library: the host holds its writer lock. So `readings` hands
 `readings_query` this machine's QMX folder and a market-data door built from its `settings.toml`
@@ -26,12 +27,17 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+from qmf.core import is_refusal
+from qmx_host.market_data import MarketDoor, Placement
+from qmx_tools.functions import readings_functions
+from qmx_tools.journals import journal_query
+
+from qmx_engine.workers.zones import home_of
+
 PAGE = 500
 
 
 def home():
-    from qmx_engine.workers.zones import home_of
-
     return home_of(Path(os.environ["QMX_WORK_SHARED"]))
 
 
@@ -59,15 +65,10 @@ def day_window(day=None):
 
 
 def journal(qmx_home, **ask):
-    from qmx_tools.journals import journal_query
-
     return journal_query(qmx_home, **ask)
 
 
-def _door(qmx_home):
-    from qmf.core import is_refusal
-    from qmx_host.market_data import MarketDoor, Placement
-
+def market_door(qmx_home):
     found = qmx_home / "settings.toml"
     stored = tomllib.loads(found.read_text("utf-8")) if found.is_file() else {}
     data = stored.get("data") if isinstance(stored.get("data"), dict) else {}
@@ -80,13 +81,12 @@ def _door(qmx_home):
 
 def readings(qmx_home, reading, window, markets=None, source=None):
     """Every row of one reading over `window`, page by page, or `{"refused": why}`."""
-    from qmx_tools.functions import readings_functions
 
     def inline(value, name, response_format):
         return {"name": name, "result": value, "response_format": response_format}
 
     try:
-        door = _door(qmx_home)
+        door = market_door(qmx_home)
         context = SimpleNamespace(root=qmx_home, market=door, output=inline)
         query = readings_functions(context)
         rows, cursor, answer = [], None, {}

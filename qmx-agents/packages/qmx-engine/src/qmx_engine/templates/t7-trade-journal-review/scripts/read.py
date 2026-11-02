@@ -33,9 +33,7 @@ asked = door.settings(json.load(sys.stdin).get("in"))
 day, window = door.day_window(asked.get("day"))
 filters = {"world": asked["world"]} if asked.get("world") else {}
 try:
-    answer = door.journal(
-        door.home(), stream="unit", window=window, filters=filters, view="digest"
-    )
+    answer = door.journal(door.home(), stream="unit", window=window, filters=filters, view="digest")
 except ValueError as refused:
     print(f"[QMX_FAILURE] {refused}")
     raise SystemExit(0) from None

@@ -1,0 +1,178 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "s4-daily-data-review",
+  "name": "Review the day's data: gaps, clock flags and offsets",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "day": {
+        "type": "string",
+        "description": "the UTC day of journal rows to review, YYYY-MM-DD; the day before the run by default"
+      }
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the price series with their months, gaps and card links, the clock-flagged journal rows and the offset rows of the day, and one data note, every number held by the read step's receipt, landed as a proposal"
+  },
+  "settings": {
+    "timezone": "Europe/London",
+    "on_error": "park",
+    "caller_policy": "any"
+  },
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Each day at 07:00 in his zone",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "kinds": [
+          "cron",
+          "manual"
+        ]
+      }
+    },
+    {
+      "id": "read",
+      "name": "Count the day's gaps, clock flags and offsets",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "script": "scripts/read.py",
+        "door_ref": "scripts/door.py"
+      }
+    },
+    {
+      "id": "quiet",
+      "name": "Nothing held?",
+      "type": "rule",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "expr": "items.quiet"
+      }
+    },
+    {
+      "id": "write",
+      "name": "Write the data note",
+      "type": "llm",
+      "typeVersion": 1,
+      "position": [
+        660,
+        120
+      ],
+      "role": "writer",
+      "effect": "none",
+      "parameters": {
+        "prompt_ref": "prompts/write.md",
+        "schema_ref": "schemas/note.json"
+      }
+    },
+    {
+      "id": "check",
+      "name": "Check every number's receipt",
+      "type": "subworkflow",
+      "typeVersion": 1,
+      "position": [
+        880,
+        120
+      ],
+      "parameters": {
+        "workflow": "receipts-grader"
+      }
+    },
+    {
+      "id": "land",
+      "name": "Land the data note as a proposal",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "script": "scripts/land.py"
+      }
+    }
+  ],
+  "connections": {
+    "Each day at 07:00 in his zone": {
+      "main": [
+        [
+          {
+            "node": "Count the day's gaps, clock flags and offsets",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Count the day's gaps, clock flags and offsets": {
+      "main": [
+        [
+          {
+            "node": "Nothing held?",
+            "port": "in",
+            "map": "one"
+          },
+          {
+            "node": "Land the data note as a proposal",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Nothing held?": {
+      "false": [
+        [
+          {
+            "node": "Write the data note",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Write the data note": {
+      "main": [
+        [
+          {
+            "node": "Check every number's receipt",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Check every number's receipt": {
+      "main": [
+        [
+          {
+            "node": "Land the data note as a proposal",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "template": "review-the-days-data"
+  }
+}

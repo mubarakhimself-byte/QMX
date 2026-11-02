@@ -1,6 +1,6 @@
 # Morning market brief before each session
 
-Built from cards T1 (morning brief), T2 (pre-session read) and T10 (end-of-day wrap) in `research/methodology/16-templates-trader-risk.md`. One screen before a session: what is on today for the watchlist, what the research desk, the calendar watch and the paper scout found, and what needs him. It runs at 06:00 London (morning), 07:30 New York (pre-session) and 17:05 New York (end of day), weekdays, and on request. Until the trading node exists, every node fact (account, cushion, open risk, overnight result, positions, unit states, session conditions) reads `could not check: trading node`.
+Built from cards T1 (morning brief), T2 (pre-session read) and T10 (end-of-day wrap) in `research/methodology/16-templates-trader-risk.md`. One screen before a session: what is on today for the watchlist, what the research desk, the calendar watch and the paper scout found, and what needs him. It runs at 06:00 London (morning), 07:30 New York (pre-session) and 17:05 New York (end of day), weekdays, and on request. The units' result over the last day is read from the unit journal through `journal_query`, and the session conditions are the MIS's last words for each watchlist market from its reading history through `readings_query`. The account facts (account, cushion, open risk, positions, unit states) read `could not check: trading node` until the node's read operations reach This PC. Every calendar row is outside text and carries the `qmx.marked/1` mark, so the writer reads it as data, never as an instruction.
 
 ## Steps
 
@@ -21,7 +21,7 @@ A run started with `{"fixture": "busy"}` or `{"fixture": "quiet"}` replays the m
 
 ## Left out, and why
 
-- The node facts (equity and kill-line cushion in R, open risk, overnight result, positions, unit states) and T2's per-unit MIS conditions grid and its mirror check: they need the trading node's read model and the unit adapter.
+- The account facts (equity and kill-line cushion in R, open risk, positions, unit states) and T2's per-unit MIS conditions grid and its mirror check: they need the node's read operations (B21, Part C). The pre-session shortlist is `s1-pre-session-shortlist`.
 - T10's day result in R and dollars per unit, the closest approach to the kill line (R1), the day cost ratio (T9) and Friday's weekend gap and swap checks: they need the node's journal and the risk watchdogs.
 - "What changed since yesterday" from yesterday's brief, and demoting sections he never opens: workflow and operator memory rows are not used yet. The quiet-day test is "nothing above low impact and nothing new in the last 36 hours" instead.
 - Delivery to the inbox and the digest: the brief is the run's result; notifications are UI-side (ruling 77).

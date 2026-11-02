@@ -2,58 +2,184 @@
   "schema": "qmx.workflow/1",
   "id": "dm-demo-monitor",
   "name": "Watch demo trades and check fill quality",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "day": {
+        "type": "string",
+        "description": "the UTC day to check, YYYY-MM-DD; the day before the run by default"
+      },
+      "units": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "the unit ids to check; every demo unit with rows that day by default"
+      }
+    }
+  },
   "outputs": {
     "type": "object",
-    "description": "one tile per demo unit: stats in R, band verdict, faults, costs, bench proposal"
+    "description": "one note on each demo unit's fills and trades, every number held by the read step's receipt, landed as a proposal; nothing acts on a unit"
   },
   "settings": {
     "timezone": "UTC",
     "on_error": "park",
-    "caller_policy": "any",
-    "memory": {"scopes": ["run", "workflow"]}
+    "caller_policy": "any"
   },
   "nodes": [
-    {"id": "start", "name": "Every 15 minutes in session", "type": "trigger", "typeVersion": 1,
-     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
-    {"id": "deals", "name": "New deals?", "type": "monitor", "typeVersion": 1,
-     "position": [220, 0], "effect": "none",
-     "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]},
-     "parameters": {"source": "scripts/deals.py", "wake_when": "changed"}},
-    {"id": "stats", "name": "Stats and costs", "type": "script", "typeVersion": 1,
-     "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/stats.py"}},
-    {"id": "checks", "name": "Faults, band and cost rules", "type": "script", "typeVersion": 1,
-     "position": [660, 0], "effect": "none", "parameters": {"script": "scripts/checks.py"}},
-    {"id": "out", "name": "Out of band?", "type": "rule", "typeVersion": 1,
-     "position": [880, 0], "effect": "none", "parameters": {"expr": "items.out_of_band != []"}},
-    {"id": "causes", "name": "Candidate causes", "type": "llm", "typeVersion": 1,
-     "position": [1100, -120], "role": "synthesiser", "effect": "none",
-     "parameters": {"prompt_ref": "prompts/causes.md", "schema_ref": "schemas/causes.json"}},
-    {"id": "assemble", "name": "Unit tiles", "type": "script", "typeVersion": 1,
-     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
-    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
-     "position": [1540, 0], "effect": "none",
-     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
-                    "schema_ref": "schemas/output.json"}},
-    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
-     "position": [1760, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
-    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
-     "position": [1760, 120], "effect": "none", "retry": {"max_tries": 1},
-     "parameters": {"script": "scripts/stop.py"}}
+    {
+      "id": "start",
+      "name": "Each day at 00:20 UTC",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "kinds": [
+          "cron",
+          "manual"
+        ]
+      }
+    },
+    {
+      "id": "read",
+      "name": "Count each demo unit's fills and trades",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "script": "scripts/read.py",
+        "door_ref": "scripts/door.py"
+      }
+    },
+    {
+      "id": "quiet",
+      "name": "No demo rows?",
+      "type": "rule",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "expr": "items.quiet"
+      }
+    },
+    {
+      "id": "write",
+      "name": "Write the fill-quality note",
+      "type": "llm",
+      "typeVersion": 1,
+      "position": [
+        660,
+        120
+      ],
+      "role": "writer",
+      "effect": "none",
+      "parameters": {
+        "prompt_ref": "prompts/write.md",
+        "schema_ref": "schemas/note.json"
+      }
+    },
+    {
+      "id": "check",
+      "name": "Check every number's receipt",
+      "type": "subworkflow",
+      "typeVersion": 1,
+      "position": [
+        880,
+        120
+      ],
+      "parameters": {
+        "workflow": "receipts-grader"
+      }
+    },
+    {
+      "id": "land",
+      "name": "Land the note as a proposal",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "effect": "none",
+      "parameters": {
+        "script": "scripts/land.py"
+      }
+    }
   ],
   "connections": {
-    "Every 15 minutes in session": {"main": [[{"node": "New deals?", "port": "in", "map": "one"}]]},
-    "New deals?": {"changed": [[{"node": "Stats and costs", "port": "in", "map": "one"},
-                                {"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Stats and costs": {"main": [[{"node": "Faults, band and cost rules", "port": "in",
-                                   "map": "one"}]]},
-    "Faults, band and cost rules": {"main": [[{"node": "Out of band?", "port": "in", "map": "one"},
-                                              {"node": "Unit tiles", "port": "in", "map": "one"}]]},
-    "Out of band?": {"true": [[{"node": "Candidate causes", "port": "in", "map": "one"}]]},
-    "Candidate causes": {"main": [[{"node": "Unit tiles", "port": "in", "map": "one"}]]},
-    "Unit tiles": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
-                         "fail": [[{"node": "Stop on a failed check", "port": "in",
-                                    "map": "one"}]]}
+    "Each day at 00:20 UTC": {
+      "main": [
+        [
+          {
+            "node": "Count each demo unit's fills and trades",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Count each demo unit's fills and trades": {
+      "main": [
+        [
+          {
+            "node": "No demo rows?",
+            "port": "in",
+            "map": "one"
+          },
+          {
+            "node": "Land the note as a proposal",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "No demo rows?": {
+      "false": [
+        [
+          {
+            "node": "Write the fill-quality note",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Write the fill-quality note": {
+      "main": [
+        [
+          {
+            "node": "Check every number's receipt",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Check every number's receipt": {
+      "main": [
+        [
+          {
+            "node": "Land the note as a proposal",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
   },
-  "meta": {"template": "demo-trades-fill-quality", "needs": ["trading-node"]}
+  "meta": {
+    "template": "demo-trades-fill-quality"
+  }
 }

@@ -1,0 +1,55 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "s1-pre-session-shortlist",
+  "name": "Shortlist the markets before each session opens",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "lead_minutes": {"type": "integer", "minimum": 1, "default": 30, "description": "read a market whose session starts within this many minutes"},
+      "calendars": {"type": "object", "default": {"fx": "fx-24x5@1", "metal": "fx-24x5@1", "crypto": "crypto-24x7@1"}, "description": "a market id's class, its first part, to the shipped calendar it trades on"},
+      "day_start_utc": {"type": "string", "default": "00:00", "description": "where a session starts for a market whose calendar is open, HH:MM UTC (WF-04)"},
+      "session_hours": {"type": "integer", "minimum": 1, "default": 8, "description": "a dated call's horizon, this many hours after its session starts"},
+      "record_days": {"type": "integer", "minimum": 1, "default": 28, "description": "the days of each unit's trades and of reading history read for its record under today's words"},
+      "readings": {"type": "array", "items": {"type": "string"}, "default": ["efficiency-ratio", "variance-ratio", "hurst-exponent", "cusum-change-point", "spread_state"], "description": "the MIS readings read, by reading id; the MIS's default packs by default"},
+      "markets": {"type": "array", "items": {"type": "string"}, "description": "market ids to consider beside every market a unit traded over the record"}
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the opening markets where a unit's record fits today's reading words, a note explaining the shortlist, and one dated call per shortlisted market landed in the forecast ledger, all proposals; units trade their admitted markets whatever it says"
+  },
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any"},
+  "nodes": [
+    {"id": "start", "name": "Every half hour", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "read", "name": "Read the markets that open soon", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/read.py", "door_ref": "scripts/door.py"}},
+    {"id": "quiet", "name": "Nothing to shortlist?", "type": "rule", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"expr": "items.quiet"}},
+    {"id": "write", "name": "Explain the shortlist and make the calls", "type": "llm",
+     "typeVersion": 1, "position": [660, 120], "role": "writer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/shortlist.json"}},
+    {"id": "check", "name": "Check every number's receipt", "type": "subworkflow",
+     "typeVersion": 1, "position": [880, 120], "parameters": {"workflow": "receipts-grader"}},
+    {"id": "calls", "name": "Hand on the dated calls", "type": "script", "typeVersion": 1,
+     "position": [1100, 120], "effect": "none", "parameters": {"script": "scripts/calls.py"}},
+    {"id": "forecast", "name": "Land the calls in the forecast ledger", "type": "subworkflow",
+     "typeVersion": 1, "position": [1320, 120], "parameters": {"workflow": "forecast"}},
+    {"id": "land", "name": "Land the shortlist as a proposal", "type": "script", "typeVersion": 1,
+     "position": [1540, 0], "effect": "none", "parameters": {"script": "scripts/land.py"}}
+  ],
+  "connections": {
+    "Every half hour": {"main": [[{"node": "Read the markets that open soon", "port": "in", "map": "one"}]]},
+    "Read the markets that open soon": {"main": [[{"node": "Nothing to shortlist?", "port": "in", "map": "one"},
+                                                  {"node": "Hand on the dated calls", "port": "in", "map": "one"},
+                                                  {"node": "Land the shortlist as a proposal", "port": "in", "map": "one"}]]},
+    "Nothing to shortlist?": {"false": [[{"node": "Explain the shortlist and make the calls", "port": "in", "map": "one"}]]},
+    "Explain the shortlist and make the calls": {"main": [[{"node": "Check every number's receipt", "port": "in", "map": "one"}]]},
+    "Check every number's receipt": {"main": [[{"node": "Hand on the dated calls", "port": "in", "map": "one", "required": true},
+                                               {"node": "Land the shortlist as a proposal", "port": "in", "map": "one"}]]},
+    "Hand on the dated calls": {"main": [[{"node": "Land the calls in the forecast ledger", "port": "in", "map": "one"}]]},
+    "Land the calls in the forecast ledger": {"main": [[{"node": "Land the shortlist as a proposal", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "shortlist-markets-before-each-session"}
+}
