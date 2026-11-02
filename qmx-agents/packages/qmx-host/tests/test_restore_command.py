@@ -21,6 +21,7 @@ from qmx_home.backup.round import quick
 from test_card_restore import AFTER, folder, home_id, notes, runs, sent
 
 import qmx_host.__main__
+import qmx_host.first_start
 import qmx_host.host
 from qmx_host.__main__ import main
 from qmx_host.first_start import AGAIN_UPGRADES
@@ -49,6 +50,7 @@ def pc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     monkeypatch.setenv("HOME", str(profile))
     monkeypatch.setenv("QMX_HOME", "")
     monkeypatch.setattr("qmx_home._fixed_drives", list)
+    monkeypatch.setattr(qmx_host.first_start, "program_folders", tuple)
     monkeypatch.setattr(qmx_host.__main__, "scrub_process_env", unscrubbed)
     yield tmp_path
 
