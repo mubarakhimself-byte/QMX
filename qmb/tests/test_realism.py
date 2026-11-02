@@ -505,18 +505,17 @@ def test_a_perp_past_its_maintenance_margin_is_liquidated_at_the_records_level()
 
 
 def _write_247(folder: Path, hole: tuple[str, str]) -> None:
-    """Both markets' bars every 15 minutes through March 2025, 24/7, EURUSD missing ``hole``."""
+    """Both markets' bars every 15 minutes through March 2025, 24/7, EURUSD missing ``hole``.
+
+    Each record keeps its own calendar (``fx-24x5@1``, ``metals-24x5@1``), so bars in closed
+    time are extra, never a hole.
+    """
     skip = (_ns(hole[0]), _ns(hole[1]))
     # market: start price in points, decimals, one bar's move in points, spread in points
     for market, (start, decimals, move, spread) in {
         _FX: (108_000, 5, 10, 2),
         _GOLD: (2_900_000, 3, 500, 250),
     }.items():
-        record = folder / "records" / f"{market}.json"
-        record.write_text(
-            json.dumps(json.loads(record.read_text("utf-8")) | {"calendar_ref": "crypto-24x7@1"}),
-            "utf-8",
-        )
         rows: dict[str, list[str]] = {"bid": [], "ask": []}
         for n, at in enumerate(range(_ns("2025-03-01T00:00"), _ns("2025-04-01T00:00"), _M15)):
             if market == _FX and skip[0] <= at < skip[1]:
@@ -572,7 +571,8 @@ def test_a_three_day_hole_lands_failed_unless_the_study_allows_gaps(hole_job: Pa
             "bars_missing": 288,
         }
     ]
-    assert cast("dict[str, object]", allowed["labels"])["costs_uncalibrated"] is True
+    labels = cast("dict[str, object]", allowed["labels"])
+    assert (labels["costs_uncalibrated"], labels["holes_unchecked"]) == (True, False)
 
 
 def test_a_crypto_request_gets_the_crypto_generator_on_always_open_hours() -> None:

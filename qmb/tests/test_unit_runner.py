@@ -82,6 +82,11 @@ def make_run_folder(
 
 
 def request(folder: Path, **overrides: object) -> UnitRunRequest:
+    """A run request that allows gaps unless told otherwise.
+
+    The synthetic month keeps the forex weekend at 22:00 UTC, so after the 9 March clock change
+    its Sunday open is an hour late on ``fx-24x5@1``: a 4-bar hole each week.
+    """
     loaded = load_unit_folder(folder)
     assert not isinstance(loaded, TypedRefusal), loaded
     body: dict[str, object] = {
@@ -89,14 +94,15 @@ def request(folder: Path, **overrides: object) -> UnitRunRequest:
         "compiled_fingerprint": loaded.value.compiled.compiled_fingerprint.value,
         "equity": "10000.00",
         "execution_target": {"role": "demo", "venue_id": "icmarkets-ctrader", "account_id": "a"},
+        "allow_gaps": True,
     } | overrides
     parsed = parse_unit_run_request(body)
     assert not isinstance(parsed, TypedRefusal), parsed
     return parsed.value
 
 
-def _run(folder: Path) -> UnitRunResult:
-    result = run_unit(folder, request(folder))
+def _run(folder: Path, **overrides: object) -> UnitRunResult:
+    result = run_unit(folder, request(folder, **overrides))
     assert not isinstance(result, TypedRefusal), result
     return result.value
 
@@ -139,7 +145,7 @@ def test_the_dummy_trades_the_month_and_every_fill_is_its_receipt_after_lot_roun
     )
     assert result.net_money == Decimal("-114.97")
     assert result.total_r == Decimal("-2.2597")
-    assert result.labels == ("costs_uncalibrated", "holes_unchecked")
+    assert result.labels == ("costs_uncalibrated",)
 
 
 def test_no_entry_fills_before_the_derived_warm_up(tmp_path: Path) -> None:
@@ -177,7 +183,7 @@ def test_a_unit_that_never_trades_is_labelled_zero_trades(tmp_path: Path) -> Non
     result = _run(make_run_folder(tmp_path, document))
 
     assert result.trades == ()
-    assert result.labels == (ZERO_TRADES, "costs_uncalibrated", "holes_unchecked")
+    assert result.labels == (ZERO_TRADES, "costs_uncalibrated")
 
 
 def test_a_request_with_a_float_equity_is_refused() -> None:
@@ -196,8 +202,9 @@ def test_a_request_with_a_float_equity_is_refused() -> None:
 
 @pytest.mark.skipif(not _REAL.is_dir(), reason="the real Dukascopy month is not on this machine")
 def test_the_real_dukascopy_month_trades(tmp_path: Path) -> None:
-    result = _run(make_run_folder(tmp_path, bars=_REAL, prefix=""))
+    result = _run(make_run_folder(tmp_path, bars=_REAL, prefix=""), allow_gaps=False)
 
+    assert (result.holes, result.unchecked) == ((), ())
     entries = [f for f in result.fills if f.kind is FillKind.ENTRY]
     assert entries
     assert all(f.quantity == f.receipt_quantity for f in entries)

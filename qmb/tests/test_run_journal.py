@@ -109,11 +109,14 @@ def loaded(run_folder: Path) -> LoadedUnit:
 
 
 def _body(loaded: LoadedUnit, **overrides: object) -> dict[str, object]:
+    """The window keeps the forex weekend at 22:00 UTC (``_open``), an hour late on Sundays in
+    New York summer time, so its runs allow those 4-bar holes."""
     return {
         "run_id": "run-b9",
         "compiled_fingerprint": loaded.compiled.compiled_fingerprint.value,
         "equity": "10000.00",
         "execution_target": {"role": "demo", "venue_id": "icmarkets-ctrader", "account_id": "a"},
+        "allow_gaps": True,
     } | overrides
 
 
