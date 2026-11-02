@@ -84,7 +84,7 @@
     "rule": "2 x period + 1",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:14d939d3ebc8a773212ba8d7b8e4d2afa568871c72da9a0c1b60d5336426b531",
+  "fingerprint": "fp1:sha256:b2d777dc82d7024d0d9ef817a8b96327280baebd86d00da5409168d615aa9d01",
   "golden": {
     "reference": "talib.MFI 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

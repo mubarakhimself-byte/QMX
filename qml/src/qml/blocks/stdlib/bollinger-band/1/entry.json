@@ -83,7 +83,7 @@
     "rule": "period",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:048272152b02e1fdb20fe34fb0d48e76a6bd39a96cd040c35e56ac7092d0dc01",
+  "fingerprint": "fp1:sha256:63cc8c8cff46448f4e6f336534bcf62be78fb9eb588fe73a1365be92e92c89be",
   "golden": {
     "reference": "talib.BBANDS 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

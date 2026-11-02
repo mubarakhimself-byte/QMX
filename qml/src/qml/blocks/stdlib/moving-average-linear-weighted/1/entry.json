@@ -74,7 +74,7 @@
     "rule": "period",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:9db15e44579a38adc6593a53845aed392866eb63f3af99ee1856731451d605d4",
+  "fingerprint": "fp1:sha256:39e49c42cda4d1079fc0b38aef1c27a7ed5db776d82ea665d4c4cb0e5fc7264d",
   "golden": {
     "reference": "talib.WMA 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

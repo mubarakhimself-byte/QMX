@@ -4,12 +4,12 @@ Matches TA-Lib's PLUS_DI: a bar's upward move is its high's rise when that is ab
 its low's fall, and +DI is 100 times the Wilder-smoothed upward moves over the smoothed true
 ranges, 0 while the true ranges are 0. The first value comes at update ``period + 1``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -17,7 +17,7 @@ from qml.blocks.api import Side, quantise
 def _floats(raw: object, what: str) -> list[float]:
     if not isinstance(raw, list):
         raise ValueError(f"{what} is a list of hex floats")
-    return [float.fromhex(str(v)) for v in cast("list[object]", raw)]
+    return [float.fromhex(str(v)) for v in raw]
 
 
 def _bar(evidence: Mapping[str, object], *names: str) -> tuple[float, ...] | None:
@@ -25,11 +25,9 @@ def _bar(evidence: Mapping[str, object], *names: str) -> tuple[float, ...] | Non
     bar = evidence.get("series")
     if not isinstance(bar, Mapping):
         return None
-    fields = cast("Mapping[str, object]", bar)
-    found = [fields.get(name) for name in names]
-    if not all(isinstance(v, Decimal) for v in found):
-        return None
-    return tuple(float(cast("Decimal", v)) for v in found)
+    fields = bar
+    found = [v for v in (fields.get(name) for name in names) if isinstance(v, Decimal)]
+    return tuple(float(v) for v in found) if len(found) == len(names) else None
 
 
 class _Directional:
@@ -83,7 +81,7 @@ class _Directional:
     def restore(self, raw: object) -> None:
         if not isinstance(raw, Mapping):
             raise ValueError("directional movement's state is an object")
-        given = cast("Mapping[str, object]", raw)
+        given = raw
         moves, last = given["moves"], given.get("last")
         if not isinstance(moves, int):
             raise ValueError("directional movement's state needs moves")

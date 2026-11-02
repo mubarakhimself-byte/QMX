@@ -4,13 +4,13 @@ bars is, from 100 (this bar) to 0 (``period`` bars ago).
 Matches TA-Lib's AROON, which counts the newest of tied lows. The first value comes at update
 ``period + 1``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -18,7 +18,7 @@ from qml.blocks.api import Side, quantise
 def _floats(raw: object, what: str) -> list[float]:
     if not isinstance(raw, list):
         raise ValueError(f"{what} is a list of hex floats")
-    return [float.fromhex(str(v)) for v in cast("list[object]", raw)]
+    return [float.fromhex(str(v)) for v in raw]
 
 
 def _bar(evidence: Mapping[str, object], *names: str) -> tuple[float, ...] | None:
@@ -26,11 +26,9 @@ def _bar(evidence: Mapping[str, object], *names: str) -> tuple[float, ...] | Non
     bar = evidence.get("series")
     if not isinstance(bar, Mapping):
         return None
-    fields = cast("Mapping[str, object]", bar)
-    found = [fields.get(name) for name in names]
-    if not all(isinstance(v, Decimal) for v in found):
-        return None
-    return tuple(float(cast("Decimal", v)) for v in found)
+    fields = bar
+    found = [v for v in (fields.get(name) for name in names) if isinstance(v, Decimal)]
+    return tuple(float(v) for v in found) if len(found) == len(names) else None
 
 
 def _latest_extreme(values: Sequence[float], higher: bool) -> int:
@@ -62,9 +60,9 @@ class _Aroon:
         return [[v.hex() for v in self.highs], [v.hex() for v in self.lows]]
 
     def restore(self, raw: object) -> None:
-        if not isinstance(raw, list) or len(cast("list[object]", raw)) != 2:
+        if not isinstance(raw, list) or len(raw) != 2:
             raise ValueError("aroon's state is [highs, lows]")
-        highs, lows = cast("Sequence[object]", raw)
+        highs, lows = raw
         self.highs = deque(_floats(highs, "its highs"), maxlen=self.period + 1)
         self.lows = deque(_floats(lows, "its lows"), maxlen=self.period + 1)
 

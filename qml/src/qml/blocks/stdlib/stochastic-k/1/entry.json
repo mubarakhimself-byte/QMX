@@ -85,7 +85,7 @@
     "rule": "2 x k_period + slowing",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:b69b9daf10587160edfa37aba39705b36c14c295ecc113604b2ef7e5c348bcb7",
+  "fingerprint": "fp1:sha256:86246dfef51a5098877550f0016fef79447ab4e150d9006d4442ea62a2d76d34",
   "golden": {
     "reference": "talib.SMA over talib.STOCHF 0.7.1 composite",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

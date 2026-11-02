@@ -1,0 +1,92 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "moving-average-variable-index",
+  "version": 1,
+  "family": "moving-average",
+  "aliases": [
+    "VIDYA",
+    "variable index dynamic average"
+  ],
+  "same_word_as": [
+    "context.moving-average@1",
+    "locations.moving-average@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Chande's EMA over ema_period whose factor is scaled by the absolute CMO of the last cmo_period changes.",
+  "boundaries": "Written from MetaTrader's help formula, starting at the close of the first bar with a CMO; MetaQuotes' own code may seed it differently.",
+  "recognition": "Nearly flat when the CMO is near zero, close to price when it is large.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/vida (read 2026-11-02)",
+      "quote": "calculating the Exponential Moving Average (EMA) with the dynamically changing period of averaging",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "cmo_period": {
+      "measure": "bars",
+      "default": "9",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "ema_period": {
+      "measure": "bars",
+      "default": "12",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "cmo_period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "cmo_period + 2",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:9152f130433dbbc66d4513fbc9485965063390a165c1ee939cb6d2f1b7c996bf",
+  "golden": {
+    "reference": "MetaTrader help's VIDYA formula, in tools/dictionary/golden_talib.py",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

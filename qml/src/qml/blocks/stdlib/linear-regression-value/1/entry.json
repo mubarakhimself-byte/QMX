@@ -67,7 +67,7 @@
     "rule": "period",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:963dd5073cade3c22b45f40a01ffbdbd3bd15f169f2a7f56182b1c08a65b4ba2",
+  "fingerprint": "fp1:sha256:608bbbfc2cbeea9fbe644ab994743536822da2edb352337ce4a8883b3c8a2bcc",
   "golden": {
     "reference": "talib.LINEARREG 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

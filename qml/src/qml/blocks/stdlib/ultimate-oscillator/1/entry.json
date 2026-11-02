@@ -92,7 +92,7 @@
     "rule": "2 x long + 1",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:8a2506d9f6c2d0616d81c130eafc97acd5a5d0ea44ad38d319b59f28f5be2c65",
+  "fingerprint": "fp1:sha256:c83260c44d3ab9388b395ea4a2c3b39447c1ca27b3e81cf91ae4996cf56e70a8",
   "golden": {
     "reference": "talib.ULTOSC 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

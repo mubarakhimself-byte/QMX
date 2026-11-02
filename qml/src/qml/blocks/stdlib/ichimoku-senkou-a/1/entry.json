@@ -92,7 +92,7 @@
     "rule": "2 x (tenkan + kijun) + shift + 1",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:3970d8d9765d3c10fa412b65932e3dda2ada6b3b3ee390eca7e6cd4b845fd78f",
+  "fingerprint": "fp1:sha256:445a24625aea3d6aeb47fd51b8230e882191b280d3de898ca7c7c2d7d317f231",
   "golden": {
     "reference": "talib.MIDPRICE 0.7.1 composite",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

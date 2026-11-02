@@ -71,7 +71,7 @@
     "rule": "2 x period + 12",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:b501205a6a4b17cc7f6fbe9c5e983821927ed873cf01b08b43395c117f010c7c",
+  "fingerprint": "fp1:sha256:f9a72bc020f3ff4f6f4e6a47f5b7ff6c1ab3e655114e9ee486088f303187ae0a",
   "golden": {
     "reference": "talib.SUM 0.7.1 composite of the MetaQuotes weights",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

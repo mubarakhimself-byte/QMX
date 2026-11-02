@@ -6,13 +6,13 @@ constant is ``(ratio * (2 / (fast + 1) - 2 / (slow + 1)) + 2 / (slow + 1)) ** 2`
 starts at the value before the first full window and the first value comes at update
 ``period + 1``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -66,7 +66,7 @@ class _Kama:
         window, kama = state["window"], state.get("kama")
         if not isinstance(window, list):
             raise ValueError("moving-average-kaufman-adaptive@1 state needs window")
-        values = (float.fromhex(str(v)) for v in cast("list[object]", window))
+        values = (float.fromhex(str(v)) for v in window)
         self._window = deque(values, maxlen=self._period + 1)
         self._kama = float.fromhex(kama) if isinstance(kama, str) else None
 

@@ -75,7 +75,7 @@
     "rule": "period + 1",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:2bb5d5ed763cc5421036e362bb4ec39c9725b987bcbf83901644ae88dd18e88f",
+  "fingerprint": "fp1:sha256:4f18ecb6508a6077ea5668be02c23ce6f7ed225fade3239ff519565f71220a41",
   "golden": {
     "reference": "talib.ROCR100 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

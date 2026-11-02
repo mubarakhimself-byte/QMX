@@ -1,0 +1,67 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "fractal-low-level",
+  "version": 1,
+  "family": "bill-williams",
+  "aliases": [],
+  "same_word_as": [
+    "fractal-pivot@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The low of the last confirmed Williams down fractal: a bar whose low is below the two lows before and the two after.",
+  "boundaries": "Known two bars after the fractal bar, never earlier; equal neighbours do not make a fractal.",
+  "recognition": "A break of the last fractal is Williams' entry; it also marks stops.",
+  "eligible_roles": [
+    "location",
+    "trigger",
+    "invalidation",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/bw_indicators/fractals (read 2026-11-02)",
+      "quote": "with the lowest LOW in the middle, and two higher LOWs on both sides",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": "price"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "5 bars, then the first confirmed fractal",
+    "bars": null
+  },
+  "confirmation_lag_bars": 2,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:3c578b347c9a5183736dc10d98c4fbb1443ec77e5b2c5e7149bc3b494d86bffd",
+  "golden": {
+    "reference": "Williams' five-bar rule, in tools/dictionary/golden_talib.py",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

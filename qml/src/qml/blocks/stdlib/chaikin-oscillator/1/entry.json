@@ -94,7 +94,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:4b4024a2da3807e96a876498fed36427c15b992029f21ef9596fced846d0f81b",
+  "fingerprint": "fp1:sha256:9727a81e8cb19cbc6c21aff5f0d05494454b12bd6d76c4aa8680881b699aad68",
   "golden": {
     "reference": "talib.ADOSC 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

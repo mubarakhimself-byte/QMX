@@ -13,6 +13,7 @@ the same on every run; the script refuses any other TA-Lib version.
 from __future__ import annotations
 
 import json
+import math
 import random
 import sys
 from pathlib import Path
@@ -155,6 +156,72 @@ def _heikin_ashi(bars: list[dict[str, Any]]) -> tuple[Values, Values]:
     return opens, closes
 
 
+def _frama(h: list[float], lo: list[float], c: list[float], length: int) -> Values:
+    """MetaTrader's FrAMA: ``A = exp(-4.6 * (D - 1))`` from the fractal dimension of the last
+    two ``length`` windows of highs and lows, starting at the close of the first full window."""
+    out: Values = [None] * len(c)
+    level = 0.0
+    for i in range(2 * length - 1, len(c)):
+
+        def spread(first: int, last: int) -> float:
+            return max(h[first : last + 1]) - min(lo[first : last + 1])
+
+        n1 = spread(i - length + 1, i) / length
+        n2 = spread(i - 2 * length + 1, i - length) / length
+        n3 = spread(i - 2 * length + 1, i) / (2 * length)
+        if n1 + n2 > 0 and n3 > 0:
+            dimension = (math.log(n1 + n2) - math.log(n3)) / math.log(2)
+            factor = math.exp(-4.6 * (dimension - 1))
+        else:
+            factor = 1.0
+        level = c[i] if i == 2 * length - 1 else factor * c[i] + (1 - factor) * level
+        out[i] = level
+    return out
+
+
+def _cmo(c: list[float], period: int) -> list[float | None]:
+    out: list[float | None] = [None] * len(c)
+    for i in range(period, len(c)):
+        changes = [c[k] - c[k - 1] for k in range(i - period + 1, i + 1)]
+        up = sum(x for x in changes if x > 0)
+        down = sum(-x for x in changes if x < 0)
+        out[i] = 0.0 if up + down == 0 else (up - down) / (up + down)
+    return out
+
+
+def _vidya(c: list[float], cmo_period: int, ema_period: int) -> Values:
+    """MetaTrader's VIDYA: an EMA whose factor is scaled by the absolute CMO, starting at the
+    close of the first bar with a CMO."""
+    factor = 2 / (ema_period + 1)
+    out: Values = [None] * len(c)
+    level = 0.0
+    for i, cmo in enumerate(_cmo(c, cmo_period)):
+        if cmo is None:
+            continue
+        step = factor * abs(cmo)
+        level = c[i] if i == cmo_period else c[i] * step + level * (1 - step)
+        out[i] = level
+    return out
+
+
+def _fractals(values: list[float], higher: bool) -> Values:
+    """The value of the last confirmed Williams fractal: a middle bar beyond the two bars on
+    each side, known two bars after it."""
+    out: Values = [None] * len(values)
+    last: float | None = None
+    for i in range(len(values)):
+        j = i - 2
+        if j >= 2:
+            sides = values[j - 2 : j] + values[j + 1 : j + 3]
+            beyond = (
+                all(values[j] > s for s in sides) if higher else all(values[j] < s for s in sides)
+            )
+            if beyond:
+                last = values[j]
+        out[i] = last
+    return out
+
+
 def _rvi(o: Values, h: Values, lo: Values, c: Values, period: int) -> tuple[Values, Values]:
     def weighted(values: list[float], i: int) -> float:
         return (values[i] + 2 * values[i - 1] + 2 * values[i - 2] + values[i - 3]) / 6
@@ -263,8 +330,21 @@ def _indicators(version: str) -> dict[str, Any]:
         "ichimoku-senkou-a@1 tenkan=9 kijun=26 shift=26": NP.concatenate(
             ([NP.nan] * 26, ((mid9 + mid26) / 2)[:-26])
         ),
+        "atr-simple@1 period=14": TA.SMA(TA.TRANGE(h, lo, c), timeperiod=14),
     }
+    highs, lows, closes = _list(h), _list(lo), _list(c)
     plain_cases: dict[str, Values] = {
+        "moving-average-fractal-adaptive@1 period=14": _frama(
+            cast(list[float], highs), cast(list[float], lows), cast(list[float], closes), 14
+        ),
+        "moving-average-variable-index@1 cmo_period=9 ema_period=12": _vidya(
+            cast(list[float], closes), 9, 12
+        ),
+        "chande-momentum-oscillator@1 period=9": [
+            None if x is None else 100 * x for x in _cmo(cast(list[float], closes), 9)
+        ],
+        "fractal-high-level@1": _fractals(cast(list[float], highs), True),
+        "fractal-low-level@1": _fractals(cast(list[float], lows), False),
         "moving-average-smoothed@1 period=14": _smma(_list(c), 14),
         "alligator-line@1 period=13 shift=8": jaw,
         "alligator-line@1 period=8 shift=5": teeth,

@@ -3,13 +3,13 @@
 The simple mean of the bar's median price ``(high + low) / 2`` over ``fast`` bars less its
 simple mean over ``slow`` bars. The first value comes at update ``max(fast, slow)``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -19,11 +19,9 @@ def _bar(evidence: Mapping[str, object], *names: str) -> tuple[float, ...] | Non
     bar = evidence.get("series")
     if not isinstance(bar, Mapping):
         return None
-    fields = cast("Mapping[str, object]", bar)
-    found = [fields.get(name) for name in names]
-    if not all(isinstance(v, Decimal) for v in found):
-        return None
-    return tuple(float(cast("Decimal", v)) for v in found)
+    fields = bar
+    found = [v for v in (fields.get(name) for name in names) if isinstance(v, Decimal)]
+    return tuple(float(v) for v in found) if len(found) == len(names) else None
 
 
 class _Sma:
@@ -45,7 +43,7 @@ class _Sma:
     def restore(self, raw: object) -> None:
         if not isinstance(raw, list):
             raise ValueError("an SMA's state is its window")
-        values = (float.fromhex(str(v)) for v in cast("list[object]", raw))
+        values = (float.fromhex(str(v)) for v in raw)
         self.window = deque(values, maxlen=self.period)
 
 

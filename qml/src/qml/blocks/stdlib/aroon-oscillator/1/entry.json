@@ -71,7 +71,7 @@
     "rule": "2 x period + 2",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:ad29f48a1cdad46dda6b6c523fb11522a9ff09dbccdc0ee6bfbc76039624b6f1",
+  "fingerprint": "fp1:sha256:e67386561813bb5d5e15f61e98e7a09d318a7c7ebe20d53875e3cb88b34bd575",
   "golden": {
     "reference": "talib.AROONOSC 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

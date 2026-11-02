@@ -71,7 +71,7 @@
     "rule": "period",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:ea9335110a7270b994e1ed0ea3966dc4425ee8baecd369b72edea7626368848f",
+  "fingerprint": "fp1:sha256:09e81bed10599a20238fe6d40c5a5222562d573d4e1bc659039048795e71dcd5",
   "golden": {
     "reference": "talib.CCI 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

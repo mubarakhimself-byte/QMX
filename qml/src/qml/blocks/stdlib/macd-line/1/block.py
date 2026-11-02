@@ -5,12 +5,12 @@ Each EMA is TA-Lib's: seeded with the simple mean of its first ``period`` inputs
 comes at update ``max(fast, slow)``. TA-Lib's own MACD starts its fast EMA later and differs
 from this line until the seeds wash out.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -39,9 +39,9 @@ class _Ema:
         return [self.count, self.acc.hex()]
 
     def restore(self, raw: object) -> None:
-        if not isinstance(raw, list) or len(cast("list[object]", raw)) != 2:
+        if not isinstance(raw, list) or len(raw) != 2:
             raise ValueError("an EMA's state is [count, acc]")
-        count, acc = cast("Sequence[object]", raw)
+        count, acc = raw
         if not isinstance(count, int) or not isinstance(acc, str):
             raise ValueError("an EMA's state is [count, acc]")
         self.count, self.acc = count, float.fromhex(acc)

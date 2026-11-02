@@ -90,7 +90,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:4c3e1ed28189f2c6eac8a51987b71e16e73a37b0df4b32d4d3150371ac487ddf",
+  "fingerprint": "fp1:sha256:a729847b6547f821fede85c834669fe2a0b754eba58a8860db417c1e6e3cece6",
   "golden": {
     "reference": "session sums in numpy, in tools/dictionary/golden_talib.py",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

@@ -6,6 +6,7 @@ give the mean of the squares less the square of the mean, and its square root is
 when the variance is not above 0. TA-Lib also gives 0 for any variance below 1e-8; this block
 does not. The first value comes at update ``period``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
@@ -13,7 +14,6 @@ import math
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -21,7 +21,7 @@ from qml.blocks.api import Side, quantise
 def _floats(raw: object, what: str) -> list[float]:
     if not isinstance(raw, list):
         raise ValueError(f"{what} is a list of hex floats")
-    return [float.fromhex(str(v)) for v in cast("list[object]", raw)]
+    return [float.fromhex(str(v)) for v in raw]
 
 
 class _StdDev:

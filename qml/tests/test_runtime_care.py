@@ -94,7 +94,9 @@ def _without_cold_start(steps: list[UnitStep]) -> list[UnitStep]:
 @pytest.mark.parametrize(
     ("edit", "reason"),
     [
-        pytest.param(None, "the snapshot belongs to another compiled fingerprint", id="fingerprint"),
+        pytest.param(
+            None, "the snapshot belongs to another compiled fingerprint", id="fingerprint"
+        ),
         pytest.param(
             _put(1, "state_schema_version"), "state schema 1, this door reads 2", id="schema"
         ),
@@ -279,7 +281,7 @@ def test_every_committed_version_1_document_loads_through_the_upgrader() -> None
     committed = _committed()
     loaded = [(name, upgrade(document)) for name, document in committed]
 
-    assert len(committed) == 15
+    assert len(committed) == 77
     assert [(name, _ok(result)) for name, result in loaded] == committed
 
 

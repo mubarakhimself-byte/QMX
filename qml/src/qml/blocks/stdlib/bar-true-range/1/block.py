@@ -4,12 +4,12 @@ Matches TA-Lib's TRANGE: the larger of the bar's high and the previous close les
 of its low and the previous close. The first bar has no previous close, so the first value
 comes at update 2.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -19,11 +19,9 @@ def _bar(evidence: Mapping[str, object], *names: str) -> tuple[float, ...] | Non
     bar = evidence.get("series")
     if not isinstance(bar, Mapping):
         return None
-    fields = cast("Mapping[str, object]", bar)
-    found = [fields.get(name) for name in names]
-    if not all(isinstance(v, Decimal) for v in found):
-        return None
-    return tuple(float(cast("Decimal", v)) for v in found)
+    fields = bar
+    found = [v for v in (fields.get(name) for name in names) if isinstance(v, Decimal)]
+    return tuple(float(v) for v in found) if len(found) == len(names) else None
 
 
 class _TrueRange:

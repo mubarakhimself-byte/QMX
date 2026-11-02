@@ -72,7 +72,7 @@
     "rule": "2 x period",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:e7e25d6138ef785eb9df4c7a9b50a9802f5ecf9b1d3af627e34c1a86b36c3244",
+  "fingerprint": "fp1:sha256:f680e0533949ce524c73d1105ed168b47cb029b3b42750dfa2f25e257509a57b",
   "golden": {
     "reference": "talib.WILLR 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

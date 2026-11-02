@@ -70,7 +70,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:d4059fce17e8e7834909d20d688d22797e11cd646d9d5a2a6e618a0df5aa543f",
+  "fingerprint": "fp1:sha256:7980f1ca347631756d35848cb668542d0ef7c606cb4a871c91bacb9e74a86636",
   "golden": {
     "reference": "session extremes in numpy, in tools/dictionary/golden_talib.py",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

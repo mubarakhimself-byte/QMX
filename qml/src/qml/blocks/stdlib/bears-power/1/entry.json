@@ -72,7 +72,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:f0a9865682b80355e1928257164296b6ab4eff4bf1877592653297edf4215091",
+  "fingerprint": "fp1:sha256:ebfbdb916cab333740c5bd73301cd4518727b5b8bf83e8aa272aab785fe51e0c",
   "golden": {
     "reference": "talib.EMA 0.7.1 composite",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

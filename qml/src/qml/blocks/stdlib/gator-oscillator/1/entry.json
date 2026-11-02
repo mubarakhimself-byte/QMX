@@ -102,7 +102,7 @@
     "rule": "slow_shift + fast_shift + 4",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:51dc037d313b6ef779b1cbb2cd471cd1ab56295eea38905225c9beecfbbcab80",
+  "fingerprint": "fp1:sha256:f010d6fba3a931e0f38e00d09ca8786ab8b682ea390c4c3a98aaa2548d489a43",
   "golden": {
     "reference": "MetaQuotes SMMA formula over talib.MEDPRICE 0.7.1, in tools/dictionary/golden_talib.py",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

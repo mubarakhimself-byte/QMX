@@ -4,13 +4,13 @@ moved by the fraction ``deviation``.
 ``deviation`` 0.001 gives the upper band 0.1% above the mean and -0.001 the lower band. The
 first value comes at update ``period``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -18,7 +18,7 @@ from qml.blocks.api import Side, quantise
 def _floats(raw: object, what: str) -> list[float]:
     if not isinstance(raw, list):
         raise ValueError(f"{what} is a list of hex floats")
-    return [float.fromhex(str(v)) for v in cast("list[object]", raw)]
+    return [float.fromhex(str(v)) for v in raw]
 
 
 class _Envelope:

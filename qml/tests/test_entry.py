@@ -87,7 +87,11 @@ def test_an_entry_the_compiler_cannot_read_stays_specified_with_the_compiler_pro
 
     assert (computed.status, computed.problems) == (
         Status.SPECIFIED,
-        (EntryProblem("/settle_bars/params", "expected an object", "the compiler reads this face"),),
+        (
+            EntryProblem(
+                "/settle_bars/params", "expected an object", "the compiler reads this face"
+            ),
+        ),
     )
 
 
@@ -129,10 +133,25 @@ def test_a_name_another_entry_holds_is_a_corpus_problem() -> None:
     ]
 
 
+_DUMMY_BLOCKS = (
+    "ema",
+    "fixed-fraction-at-stop",
+    "market-next-open",
+    "percentile-of-own-history",
+    "roc-of-series",
+    "rsi-cross-back",
+    "swing-stop-buffer",
+    "target-r-multiple",
+    "time-exit-bars",
+    "trend-floor-from-record",
+)
+
+
 def test_find_and_match_read_the_one_line_index() -> None:
     rows = [row(_entry(i), "implemented") for i in _ids()]
 
-    found = [r.pin for r in find(rows, "trend filter", role="filter")]
+    dummy = [row(_entry(i), "implemented") for i in _DUMMY_BLOCKS]
+    found = [r.pin for r in find(dummy, "trend filter", role="filter")]
     report = match(
         "RSI crosses back above 30. Price sweeps the Asian high and closes back in.", rows
     )

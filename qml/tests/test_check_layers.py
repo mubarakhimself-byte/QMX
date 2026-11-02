@@ -261,7 +261,8 @@ def test_a_pin_whose_block_source_is_missing_is_named_not_raised() -> None:
 
     result = check(_document(), CompileContext(sources, context.entries, context.records))
 
-    assert _errors(result) == {("block_source_missing", "B", ("/pins/0",))}
+    ema = [p["entry_id"] for p in cast("list[Document]", _document()["pins"])].index("ema")
+    assert _errors(result) == {("block_source_missing", "B", (f"/pins/{ema}",))}
 
 
 # --- layer F --------------------------------------------------------------------------------
@@ -312,7 +313,8 @@ def test_an_agent_block_that_loads_or_evaluates_code_fails_layer_f() -> None:
         "agent-written@1 line 7: uses exec",
         "agent-written@1 line 8: uses __import__",
     ]
-    assert {p.where for p in result.errors} == {("/pins/10",)}
+    last = len(cast("list[object]", document["pins"])) - 1
+    assert {p.where for p in result.errors} == {(f"/pins/{last}",)}
 
 
 def test_the_same_code_written_by_a_human_only_warns() -> None:

@@ -72,7 +72,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:56352afe9cd37f4dad9489203731edabd0a413bb0550a5bcf7c96c172d64ce7c",
+  "fingerprint": "fp1:sha256:ccbdcf3c544be330e031335ec928bc3f50f9ff1dbddcb514d4fd8808bbf89d85",
   "golden": {
     "reference": "talib.TRIX 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

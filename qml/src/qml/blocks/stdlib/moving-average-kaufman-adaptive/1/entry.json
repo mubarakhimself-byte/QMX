@@ -95,7 +95,7 @@
     "rule": "period + 2",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:b4186b2c1e895838f2e940c556a432ecac1ae1138c478a4cbb87aafb97764914",
+  "fingerprint": "fp1:sha256:240969e56bc190d3a376f33fc37b5cbc5efba689e68922101ece2f2d2feea4c1",
   "golden": {
     "reference": "talib.KAMA 0.7.1 (its fast 2 and slow 30)",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

@@ -85,7 +85,7 @@
     "rule": "2 x period + shift + 1",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:80bdbd7afcfd832bbbb89c13afba02f1a84c3a2aca0471d0cd944981c93b9266",
+  "fingerprint": "fp1:sha256:0be1a0f4e9a80564028eca845b30ef6789a56d8b72602c123634b1bb5692097c",
   "golden": {
     "reference": "talib.MIDPRICE 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

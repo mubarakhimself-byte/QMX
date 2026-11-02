@@ -56,7 +56,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:ec96adee3c7fc734d95fa10125ab9c7321eaa1c812b4ab35358805d7268f92f8",
+  "fingerprint": "fp1:sha256:bea2b6a16705030ca80e7594682ed0971e094f29f3288cb68d7794fa29e0b8a0",
   "golden": {
     "reference": "Heikin-Ashi recursion in numpy, in tools/dictionary/golden_talib.py",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

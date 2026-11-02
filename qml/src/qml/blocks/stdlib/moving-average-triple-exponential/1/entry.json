@@ -74,7 +74,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:4c2b725b0f4592018b1c41eb2a97ff1adb4aa494a3ca02668173943095e17efc",
+  "fingerprint": "fp1:sha256:b852c637cd08ac98672df60400e52fe7f899033b2b812705e223555b44f1f75b",
   "golden": {
     "reference": "talib.TEMA 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

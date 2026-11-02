@@ -4,13 +4,13 @@ Matches TA-Lib's CCI: the typical price ``(high + low + close) / 3`` against its
 over ``period`` bars, divided by 0.015 times the mean absolute deviation; 0 when the deviation
 is 0. The first value comes at update ``period``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -39,7 +39,7 @@ class _Cci:
         bar = evidence.get("series")
         if not isinstance(bar, Mapping):
             return None
-        fields = cast("Mapping[str, object]", bar)
+        fields = bar
         high, low, close = fields.get("high"), fields.get("low"), fields.get("close")
         if not (
             isinstance(high, Decimal) and isinstance(low, Decimal) and isinstance(close, Decimal)
@@ -62,9 +62,7 @@ class _Cci:
         window = state["window"]
         if not isinstance(window, list):
             raise ValueError("cci@1 state needs window")
-        self._window = deque(
-            (float.fromhex(str(v)) for v in cast("list[object]", window)), maxlen=self._period
-        )
+        self._window = deque((float.fromhex(str(v)) for v in window), maxlen=self._period)
 
 
 class _Block:

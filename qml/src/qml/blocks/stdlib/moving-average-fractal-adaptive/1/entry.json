@@ -1,0 +1,82 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "moving-average-fractal-adaptive",
+  "version": 1,
+  "family": "moving-average",
+  "aliases": [
+    "FrAMA",
+    "fractal adaptive moving average"
+  ],
+  "same_word_as": [
+    "context.moving-average@1",
+    "locations.moving-average@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Ehlers' average whose factor exp(-4.6 x (D - 1)) follows the fractal dimension D of the high-low ranges of the last two period windows.",
+  "boundaries": "Written from MetaTrader's help formula, starting at the close of the first full window; MetaQuotes' own code may seed it differently.",
+  "recognition": "Price above a rising FrAMA reads as up, below a falling one as down.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/fama (read 2026-11-02)",
+      "quote": "smoothing factor is calculated based on the current fractal dimension",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "2 x period",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "4 x period + 1",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:e7fe1c709acab0b56dded1666d81c6f3194ca079de9acb8f85730c71dfd179eb",
+  "golden": {
+    "reference": "MetaTrader help's FrAMA formula, in tools/dictionary/golden_talib.py",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

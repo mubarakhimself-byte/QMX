@@ -71,7 +71,7 @@
     "rule": "period",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:c16b38808b7b291562992de0b473cfda70fc78e520f0552d64d496bf61fc3ba6",
+  "fingerprint": "fp1:sha256:8dda5c0437c38c6e26cf21503ae6c43db31759d4f44c0322a36c12f9ed315d1e",
   "golden": {
     "reference": "talib.STDDEV 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

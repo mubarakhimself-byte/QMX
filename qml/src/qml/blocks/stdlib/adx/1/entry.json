@@ -73,7 +73,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:f1f639489e0952f3755961877790fd842b0fc2bb5f51fe754418bf04fe7e93a6",
+  "fingerprint": "fp1:sha256:16994a17700aaf21823d97fd89c25508e898c57452afead44e0ed62866e50b72",
   "golden": {
     "reference": "talib.ADX 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

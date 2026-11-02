@@ -84,7 +84,7 @@
     "rule": "period",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:68690c3095f3cace0f998ac804270fb7113d5547b01a288ef218e9e95c8deb9a",
+  "fingerprint": "fp1:sha256:2016dec884c05c9ead1719e59c6ac2ed40dd669f2e36c0dfa84bd42bd2586fc6",
   "golden": {
     "reference": "talib.SMA 0.7.1 composite",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

@@ -72,7 +72,7 @@
     "rule": "2 x period + 2",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:4524b992ee3d5e6de9e6f0cf5fcb0329a58ce5d5828d4bee1656b5c6433ab31f",
+  "fingerprint": "fp1:sha256:68a3b58182f88fc74c3b113d0ea4ecbb3feeb17c8a732c598f4db9e119abd4e9",
   "golden": {
     "reference": "talib.SMA 0.7.1 composite",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

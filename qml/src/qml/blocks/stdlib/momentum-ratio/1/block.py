@@ -4,13 +4,13 @@ updates ago.
 Matches TA-Lib's ROCR100: ``100 * value / value period updates ago``, 100 meaning no change.
 The first value comes at update ``period + 1``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -18,7 +18,7 @@ from qml.blocks.api import Side, quantise
 def _floats(raw: object, what: str) -> list[float]:
     if not isinstance(raw, list):
         raise ValueError(f"{what} is a list of hex floats")
-    return [float.fromhex(str(v)) for v in cast("list[object]", raw)]
+    return [float.fromhex(str(v)) for v in raw]
 
 
 class _Momentum:

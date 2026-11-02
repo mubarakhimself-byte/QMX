@@ -82,7 +82,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:2d417be7085f48d5f105ef2199147c2de6bff2d68f6bf2bc46f497344bd7105e",
+  "fingerprint": "fp1:sha256:43bf8f84d81bdc722ccab04fdd2afc43eaa0a4769bde45696bb16a190a2accf7",
   "golden": {
     "reference": "talib.SAR 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

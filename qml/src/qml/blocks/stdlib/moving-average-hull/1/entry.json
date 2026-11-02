@@ -73,7 +73,7 @@
     "rule": "period + isqrt(period)",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:3c7642c5d33c5e1d6701c26188975d5dcfb696562f3ea0d4d5fe21bc00ea9448",
+  "fingerprint": "fp1:sha256:d585bd8328192987ce2e2c6e30523a1cc9142c47cb4c8cd939eeb05d144573fa",
   "golden": {
     "reference": "talib.WMA 0.7.1 composite",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

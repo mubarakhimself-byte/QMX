@@ -4,6 +4,7 @@
 value most, as TA-Lib's WMA does. The first value comes at update
 ``period + isqrt(period) - 1``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
@@ -11,7 +12,6 @@ import math
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -24,7 +24,7 @@ def _lwma(window: deque[float]) -> float:
 def _floats(raw: object, what: str) -> list[float]:
     if not isinstance(raw, list):
         raise ValueError(f"{what} is a list of hex floats")
-    return [float.fromhex(str(v)) for v in cast("list[object]", raw)]
+    return [float.fromhex(str(v)) for v in raw]
 
 
 class _Hull:

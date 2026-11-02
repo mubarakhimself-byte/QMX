@@ -3,12 +3,12 @@
 Matches TA-Lib's DEMA: each EMA is seeded with the simple mean of its first ``period`` inputs
 and then moves by ``2 / (period + 1)``, so the first value comes at update ``2 * period - 1``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -37,9 +37,9 @@ class _Ema:
         return [self.count, self.acc.hex()]
 
     def restore(self, raw: object) -> None:
-        if not isinstance(raw, list) or len(cast("list[object]", raw)) != 2:
+        if not isinstance(raw, list) or len(raw) != 2:
             raise ValueError("an EMA's state is [count, acc]")
-        count, acc = cast("Sequence[object]", raw)
+        count, acc = raw
         if not isinstance(count, int) or not isinstance(acc, str):
             raise ValueError("an EMA's state is [count, acc]")
         self.count, self.acc = count, float.fromhex(acc)

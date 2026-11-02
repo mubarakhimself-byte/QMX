@@ -4,13 +4,13 @@ Matches TA-Lib's WILLR: ``-100 * (highest high - close) / (highest high - lowest
 at the top of the range to -100 at the bottom, and 0 when the range is empty. The first value
 comes at update ``period``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -38,7 +38,7 @@ class _Wpr:
         bar = evidence.get("series")
         if not isinstance(bar, Mapping):
             return None
-        fields = cast("Mapping[str, object]", bar)
+        fields = bar
         high, low, close = fields.get("high"), fields.get("low"), fields.get("close")
         if not (
             isinstance(high, Decimal) and isinstance(low, Decimal) and isinstance(close, Decimal)
@@ -60,12 +60,8 @@ class _Wpr:
         highs, lows = state["highs"], state["lows"]
         if not isinstance(highs, list) or not isinstance(lows, list):
             raise ValueError("williams-percent-r@1 state needs highs and lows")
-        self._highs = deque(
-            (float.fromhex(str(v)) for v in cast("list[object]", highs)), maxlen=self._period
-        )
-        self._lows = deque(
-            (float.fromhex(str(v)) for v in cast("list[object]", lows)), maxlen=self._period
-        )
+        self._highs = deque((float.fromhex(str(v)) for v in highs), maxlen=self._period)
+        self._lows = deque((float.fromhex(str(v)) for v in lows), maxlen=self._period)
 
 
 class _Block:

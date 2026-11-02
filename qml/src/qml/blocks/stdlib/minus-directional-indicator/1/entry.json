@@ -72,7 +72,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:e687d33121e4596cc29412611d4db80a9b6a875447dbcce6ab9c24ef0ba09798",
+  "fingerprint": "fp1:sha256:c16a48b1a1861c425a662c62a3544f885d5f2f2fbaf8d44348e2ad3c8b79629a",
   "golden": {
     "reference": "talib.MINUS_DI 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

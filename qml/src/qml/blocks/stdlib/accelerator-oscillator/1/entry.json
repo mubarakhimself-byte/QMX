@@ -93,7 +93,7 @@
     "rule": "fast + slow + signal",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:a2e37e97bf0f6a1060f0f1e5b603e1fe60c6a32d17124a933af6bae5de0c0cf1",
+  "fingerprint": "fp1:sha256:d2abd3b5e3589519aef1e43adde6187624154c9617d98ceaafc7b13be97bea11",
   "golden": {
     "reference": "talib.SMA over talib.MEDPRICE 0.7.1 composite",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

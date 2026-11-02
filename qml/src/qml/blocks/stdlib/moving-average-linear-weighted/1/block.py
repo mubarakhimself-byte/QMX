@@ -3,13 +3,13 @@
 Matches TA-Lib's WMA: the newest value weighs ``period``, the oldest 1, and the sum is divided
 by ``period * (period + 1) / 2``. The first value comes at update ``period``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -49,9 +49,7 @@ class _Lwma:
         window = state["window"]
         if not isinstance(window, list):
             raise ValueError("moving-average-linear-weighted@1 state needs window")
-        self._window = deque(
-            (float.fromhex(str(v)) for v in cast("list[object]", window)), maxlen=self._period
-        )
+        self._window = deque((float.fromhex(str(v)) for v in window), maxlen=self._period)
 
 
 class _Block:

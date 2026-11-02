@@ -74,7 +74,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:0b8067223b0b14f27b3a4119a61eebcd5473b1f8a47b035e3bd61e1f8aaf54eb",
+  "fingerprint": "fp1:sha256:2b12b72b5d4653249f9baed98617786e95c6921b487c5d4135e04ea0bc1c813a",
   "golden": {
     "reference": "talib.ATR 0.7.1",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

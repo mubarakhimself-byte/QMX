@@ -70,7 +70,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:60a4c05e4c4bdea22e69fe2edd71818d3f4fbb45b8d92845578203bc0b713b8a",
+  "fingerprint": "fp1:sha256:968d7c584961a498007a85771005617e82d058b199da7a6f12276ac29dec5ac9",
   "golden": {
     "reference": "(high - low) / volume in numpy, in tools/dictionary/golden_talib.py",
     "cases": "qml/tests/golden/indicators/talib-0.7.1.json"

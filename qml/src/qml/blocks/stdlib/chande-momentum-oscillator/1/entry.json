@@ -1,0 +1,80 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "chande-momentum-oscillator",
+  "version": 1,
+  "family": "oscillator",
+  "aliases": [
+    "CMO",
+    "Chande Momentum Oscillator"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "100 x (summed rises - summed falls) / (summed rises + summed falls) of the last period changes, from -100 to 100.",
+  "boundaries": "Plain sums, as Chande wrote it; TA-Lib's CMO smooths the sums as Wilder does.",
+  "recognition": "Above +50 reads as strong up momentum, below -50 as strong down.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/vida (read 2026-11-02)",
+      "quote": "measures the ratio between the sum of positive increments and sum of negative increments",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "9",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "period + 1",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:46ac68cad59982907b39f3068ece97d172532789f0e2f26a1c441a6442c53433",
+  "golden": {
+    "reference": "Chande's plain sums, in tools/dictionary/golden_talib.py",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

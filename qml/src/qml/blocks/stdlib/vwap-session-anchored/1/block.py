@@ -9,12 +9,12 @@ session lasts a day. Each bar's ``time`` is its close in nanoseconds UTC; a bar 
 without volume is missing. The value comes from the first bar on. On FX and CFD bars the
 volume is a tick count.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -22,7 +22,7 @@ from qml.blocks.api import Side, quantise
 def _floats(raw: object, what: str) -> list[float]:
     if not isinstance(raw, list):
         raise ValueError(f"{what} is a list of hex floats")
-    return [float.fromhex(str(v)) for v in cast("list[object]", raw)]
+    return [float.fromhex(str(v)) for v in raw]
 
 
 def _bar(evidence: Mapping[str, object], *names: str) -> tuple[float, ...] | None:
@@ -30,11 +30,9 @@ def _bar(evidence: Mapping[str, object], *names: str) -> tuple[float, ...] | Non
     bar = evidence.get("series")
     if not isinstance(bar, Mapping):
         return None
-    fields = cast("Mapping[str, object]", bar)
-    found = [fields.get(name) for name in names]
-    if not all(isinstance(v, Decimal) for v in found):
-        return None
-    return tuple(float(cast("Decimal", v)) for v in found)
+    fields = bar
+    found = [v for v in (fields.get(name) for name in names) if isinstance(v, Decimal)]
+    return tuple(float(v) for v in found) if len(found) == len(names) else None
 
 
 _DAY_NS = 86_400 * 10**9
@@ -46,7 +44,7 @@ def _session(evidence: Mapping[str, object], start_ns: int) -> tuple[int, tuple[
     bar = evidence.get("series")
     if not isinstance(bar, Mapping):
         return None
-    closed = cast("Mapping[str, object]", bar).get("time")
+    closed = bar.get("time")
     found = _bar(evidence, "high", "low", "close")
     if not isinstance(closed, int) or isinstance(closed, bool) or found is None:
         return None

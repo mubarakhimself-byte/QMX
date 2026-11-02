@@ -6,13 +6,13 @@ teeth (13 and 8 against 8 and 5) give the upper histogram, the teeth and the lip
 against 5 and 3) the lower one, which MetaTrader draws below zero. The first value comes at
 update ``max(slow_period + slow_shift, fast_period + fast_shift)``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -20,7 +20,7 @@ from qml.blocks.api import Side, quantise
 def _floats(raw: object, what: str) -> list[float]:
     if not isinstance(raw, list):
         raise ValueError(f"{what} is a list of hex floats")
-    return [float.fromhex(str(v)) for v in cast("list[object]", raw)]
+    return [float.fromhex(str(v)) for v in raw]
 
 
 def _bar(evidence: Mapping[str, object], *names: str) -> tuple[float, ...] | None:
@@ -28,11 +28,9 @@ def _bar(evidence: Mapping[str, object], *names: str) -> tuple[float, ...] | Non
     bar = evidence.get("series")
     if not isinstance(bar, Mapping):
         return None
-    fields = cast("Mapping[str, object]", bar)
-    found = [fields.get(name) for name in names]
-    if not all(isinstance(v, Decimal) for v in found):
-        return None
-    return tuple(float(cast("Decimal", v)) for v in found)
+    fields = bar
+    found = [v for v in (fields.get(name) for name in names) if isinstance(v, Decimal)]
+    return tuple(float(v) for v in found) if len(found) == len(names) else None
 
 
 class _Line:
@@ -64,9 +62,9 @@ class _Line:
         return [self.count, self.level.hex(), [v.hex() for v in self.past]]
 
     def restore(self, raw: object) -> None:
-        if not isinstance(raw, list) or len(cast("list[object]", raw)) != 3:
+        if not isinstance(raw, list) or len(raw) != 3:
             raise ValueError("a line's state is [count, level, past]")
-        count, level, past = cast("Sequence[object]", raw)
+        count, level, past = raw
         if not isinstance(count, int) or not isinstance(level, str):
             raise ValueError("a line's state is [count, level, past]")
         self.count, self.level = count, float.fromhex(level)

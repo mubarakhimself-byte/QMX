@@ -1,0 +1,83 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "atr-simple",
+  "version": 1,
+  "family": "volatility",
+  "aliases": [
+    "MetaTrader ATR",
+    "simple ATR"
+  ],
+  "same_word_as": [
+    "average-true-range@1",
+    "atr@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The simple mean of the last period true ranges, as MetaTrader's ATR draws it.",
+  "boundaries": "Reacts faster than Wilder's ATR of the same period, atr-wilder@1.",
+  "recognition": "Stops and targets are often set in multiples of it.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "exit",
+    "sizing_modifier"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/atr (read 2026-11-02)",
+      "quote": "is a moving average of values of the true range",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "period + 1",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:fbd40260e78bd4d39f3a8a4469503aff023b0e14dfc5ecd15a734f63c88b4a0b",
+  "golden": {
+    "reference": "talib.SMA over talib.TRANGE 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

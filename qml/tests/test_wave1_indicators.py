@@ -15,6 +15,7 @@ from typing import cast
 import pytest
 from qml.blocks.api import Block, EntryFace, Instance, Signal, parse_entry
 from qml.catalogue import Loaded, LockEntry, load
+from qml.catalogue.index import match, row
 
 _QML = Path(__file__).resolve().parents[1]
 _STDLIB = _QML / "src" / "qml" / "blocks" / "stdlib"
@@ -77,6 +78,11 @@ def _feed(case: str) -> list[object]:
     return list(_BARS) if _face(entry_id).inputs[0].stream_kind == "bars" else list(_CLOSES)
 
 
+def _warm_up_rule(case: str) -> str:
+    entry = (_STDLIB / case.split("@", maxsplit=1)[0] / "1" / "entry.json").read_text("utf-8")
+    return str(cast("dict[str, dict[str, object]]", json.loads(entry))["warm_up"]["rule"])
+
+
 def _value(output: object) -> Decimal | None:
     return output.value if isinstance(output, Signal) else cast("Decimal | None", output)
 
@@ -108,7 +114,10 @@ def test_values_match_the_golden_and_warm_up_is_missing_not_zero(case: str) -> N
     assert misses == []
     first = next(i for i, v in enumerate(ours) if v is not None)
     assert ours[:first] == [None] * first
-    assert first == instance.warm_up_bars - 1
+    if "confirmed" in _warm_up_rule(case):
+        assert first >= instance.warm_up_bars - 1
+    else:
+        assert first == instance.warm_up_bars - 1
 
 
 @pytest.mark.parametrize("case", _CASES)
@@ -173,3 +182,31 @@ def test_a_week_of_updates_stays_inside_the_state_bound_without_slowing(
             print(f"\n{case} peak {peak}/{bound} first {first:.2f}us last {last:.2f}us")
     _, _, first, last = runs[-1]
     assert last <= _GROWTH * max(first, 1.0)
+
+
+def test_metatrader_sentences_map_to_wave_entries_and_an_unknown_one_is_an_append_request() -> None:
+    rows = [
+        row(json.loads((_STDLIB / i / "1" / "entry.json").read_text("utf-8")), None)
+        for i in _wave_ids()
+    ]
+
+    report = match(
+        "Parabolic SAR flips below price. Williams %R rises above -20. "
+        "The Awesome Oscillator crosses zero. Price sweeps the Asian high.",
+        rows,
+    )
+
+    assert report.as_json() == {
+        "sentences": [
+            {"sentence": "Parabolic SAR flips below price", "entry": "parabolic-sar@1"},
+            {"sentence": "Williams %R rises above -20", "entry": "williams-percent-r@1"},
+            {"sentence": "The Awesome Oscillator crosses zero", "entry": "awesome-oscillator@1"},
+            {"sentence": "Price sweeps the Asian high", "entry": "unmatched"},
+        ],
+        "append_requests": [
+            {
+                "sentence": "Price sweeps the Asian high",
+                "words": ["price", "sweep", "asian", "high"],
+            }
+        ],
+    }

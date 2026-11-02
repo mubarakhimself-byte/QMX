@@ -5,12 +5,12 @@ with the simple mean of its first ``period`` inputs, and the value is
 ``100 * (e3 - previous e3) / previous e3``, so the first value comes at update
 ``3 * period - 1``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -39,9 +39,9 @@ class _Ema:
         return [self.count, self.acc.hex()]
 
     def restore(self, raw: object) -> None:
-        if not isinstance(raw, list) or len(cast("list[object]", raw)) != 2:
+        if not isinstance(raw, list) or len(raw) != 2:
             raise ValueError("an EMA's state is [count, acc]")
-        count, acc = cast("Sequence[object]", raw)
+        count, acc = raw
         if not isinstance(count, int) or not isinstance(acc, str):
             raise ValueError("an EMA's state is [count, acc]")
         self.count, self.acc = count, float.fromhex(acc)
@@ -88,9 +88,9 @@ class _Trix:
 
     def import_state(self, state: Mapping[str, object]) -> None:
         emas, last = state["emas"], state.get("last")
-        if not isinstance(emas, list) or len(cast("list[object]", emas)) != 3:
+        if not isinstance(emas, list) or len(emas) != 3:
             raise ValueError("trix@1 state needs three emas")
-        for ema, raw in zip(self._emas, cast("list[object]", emas), strict=True):
+        for ema, raw in zip(self._emas, emas, strict=True):
             ema.restore(raw)
         self._last = float.fromhex(last) if isinstance(last, str) else None
 

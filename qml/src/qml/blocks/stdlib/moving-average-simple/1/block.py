@@ -3,13 +3,13 @@
 Matches TA-Lib's SMA: the first value comes at update ``period``, then the running total gains
 the new value and loses the one that left the window.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -53,9 +53,7 @@ class _Sma:
         window, total = state["window"], state["total"]
         if not isinstance(window, list) or not isinstance(total, str):
             raise ValueError("moving-average-simple@1 state needs window and total")
-        self._window = deque(
-            (float.fromhex(str(v)) for v in cast("list[object]", window)), maxlen=self._period
-        )
+        self._window = deque((float.fromhex(str(v)) for v in window), maxlen=self._period)
         self._total = float.fromhex(total)
 
 
