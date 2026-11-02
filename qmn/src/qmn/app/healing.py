@@ -298,7 +298,7 @@ class Healer:
             "at": _iso(now),
             "at_ns": now,
             "restart": verdict.counted_boots,
-            "backoff_s": wait,
+            "backoff_ms": round(wait * 1000),
         }
         self._began(heal)
         return Fault(wait, verdict.counted_boots, verdict.threshold_breached)
@@ -306,7 +306,9 @@ class Healer:
     def restarted(self) -> None:
         """The runtime starts again after its wait."""
         heal = self.healing or {}
-        body = {"event": "start", "what": "runtime", "restart": heal.get("restart")}
+        body: dict[str, object] = {"event": "start", "what": "runtime"}
+        if heal.get("restart") is not None:
+            body["restart"] = heal["restart"]
         self._row(body)
 
     def healed(self) -> None:
@@ -316,7 +318,7 @@ class Healer:
             return
         now = self.clock_ns()
         heal["back_at"] = _iso(now)
-        heal["back_after_s"] = (now - cast("int", heal["at_ns"])) / 1e9
+        heal["back_after_ms"] = (now - cast("int", heal["at_ns"])) // 1_000_000
         self.healing = None
         self._publish()
 

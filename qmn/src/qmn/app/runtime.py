@@ -1814,6 +1814,7 @@ class Runtime:
         self.watch.began = None
         if self.healer.healing is not None and self._back():
             self.healer.healed()
+            self._observe()
 
     def _heal(self, why: str) -> None:
         print(json.dumps({"event": "runtime_error", "error": why}), file=sys.stderr)
@@ -1829,7 +1830,10 @@ class Runtime:
                     "why": f"{cause}, the last: {why}",
                 }
             )
-        self._observe()
+        try:
+            self._observe()
+        except Exception as error:  # the store may be what failed; the heal goes on
+            print(json.dumps({"event": "observe_failed", "error": repr(error)}), file=sys.stderr)
         self.sleep(fault.wait_s)
         self._recovering = True
 
@@ -1883,9 +1887,7 @@ class Runtime:
                 if client.stop_of(name) is None
             )
         for account, venue in self.venues.items():
-            path = self._paths.get(account)
-            unknown = {} if path is None else path.unknown
-            if venue.feed.ready and self.reconciler.due(account, venue.feed.reconnects, unknown):
+            if venue.feed.ready and self.reconciler.due(account, venue.feed.reconnects, {}):
                 reasons.append(f"account {account} is not reconciled")
         reasons.extend(
             f"{held.row.word.value} at {held.scope} is held in memory only: no journal took it"
