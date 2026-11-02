@@ -12,7 +12,6 @@ trained artifact or the sealed holdout (FR-079; NFR-03/19; GAP-0051).
 from __future__ import annotations
 
 import argparse
-import hashlib
 import importlib.util
 import json
 import os
@@ -23,7 +22,15 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final, cast
 
-from qmf.core import Fingerprint, Ok, Result, TypedRefusal, fingerprint, is_refusal
+from qmf.core import (
+    Fingerprint,
+    Ok,
+    Result,
+    TypedRefusal,
+    fingerprint,
+    fingerprint_bytes,
+    is_refusal,
+)
 from qmf.data import SegmentRole
 from qmf.readings._files import write_bytes_exclusive_no_follow
 from qmf.readings._refuse import clean_token, invalid, policy
@@ -1192,8 +1199,7 @@ def _matrix_payload_fp(
         for row_id, features, label, session in rows:
             quantized = ",".join(f"{value:.12g}" for value in features)
             parts.append(f"{role}:{row_id}:{label}:{session}:{quantized}")
-    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
-    return f"fp1:sha256:{digest}"
+    return fingerprint_bytes("\n".join(parts).encode("utf-8")).value
 
 
 def _output_dir_refusal(
@@ -1488,10 +1494,9 @@ def _predictions_agree(
 
 def _predictions_fp(rows: Sequence[PredictionRow]) -> str:
     payload = [row.fp1_identity() for row in rows]
-    digest = hashlib.sha256(
+    return fingerprint_bytes(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    return f"fp1:sha256:{digest}"
+    ).value
 
 
 def _score_split(

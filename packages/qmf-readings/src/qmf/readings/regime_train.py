@@ -15,7 +15,6 @@ acceptance and never grants money-path authority.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import platform
@@ -28,7 +27,15 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final, cast
 
-from qmf.core import Fingerprint, Ok, Result, TypedRefusal, fingerprint, is_refusal
+from qmf.core import (
+    Fingerprint,
+    Ok,
+    Result,
+    TypedRefusal,
+    fingerprint,
+    fingerprint_bytes,
+    is_refusal,
+)
 from qmf.data import SegmentRole
 from qmf.readings._files import (
     MAX_JSONL_BYTES,
@@ -515,7 +522,7 @@ def capture_machine_environment() -> MachineEnvironment:
     """Capture OS/CPU/memory facts without opening network or credentials."""
     memory_total = _probe_memory_total_bytes()
     host = platform.node() or "unknown"
-    redacted = f"host-{hashlib.sha256(host.encode('utf-8')).hexdigest()[:12]}"
+    redacted = f"host-{fingerprint_bytes(host.encode('utf-8')).digest[:12]}"
     return MachineEnvironment(
         os_name=platform.system(),
         os_release=platform.release(),
@@ -555,11 +562,11 @@ def resolve_dependency_lock(*, lock_path: object | None = None) -> Result[Depend
             OSError(str(loaded.context.get("reason", "unreadable"))),
         )
     payload = loaded.value
-    digest = hashlib.sha256(payload).hexdigest()
+    lock_fp = fingerprint_bytes(payload).value
     return Ok(
         DependencyLockRecord(
             lock_path=_posix_rel(path),
-            lock_fp=f"fp1:sha256:{digest}",
+            lock_fp=lock_fp,
             present=True,
         )
     )
@@ -1202,8 +1209,7 @@ def run_offline_training(
             )
             break
 
-        model_digest = hashlib.sha256(model_text.encode("utf-8")).hexdigest()
-        model_fp_value = f"fp1:sha256:{model_digest}"
+        model_fp_value = fingerprint_bytes(model_text.encode("utf-8")).value
         elapsed_ms = _elapsed_ms(trial_started_ns, mono)
         trial = TrialRecord(
             trial_index=trial_index,
@@ -1309,8 +1315,7 @@ def run_offline_training(
     )
     if is_refusal(written_best):
         return written_best
-    model_digest = hashlib.sha256(best_model_text.encode("utf-8")).hexdigest()
-    model_fp = f"fp1:sha256:{model_digest}"
+    model_fp = fingerprint_bytes(best_model_text.encode("utf-8")).value
     record = _terminal_record(
         status=TrainingTerminalStatus.COMPLETED,
         cause="search-complete",
@@ -1820,9 +1825,9 @@ def _deterministic_surrogate_fit(
         "train_labels": [row[2] for row in train_rows],
         "train_features": [list(row[1]) for row in train_rows],
     }
-    digest = hashlib.sha256(
+    digest = fingerprint_bytes(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    ).digest
     lines = [
         "qmx_deterministic_surrogate_lightgbm_text_v1",
         f"seed={seed}",
@@ -1852,7 +1857,7 @@ def _surrogate_validation_score(
     """Deterministic ppb score in ``[0, 1_000_000_000]`` for trial ranking."""
     if not validation_rows:
         material = f"{seed}:{len(train_rows)}:{sorted(hyper.items())}"
-        digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
+        digest = fingerprint_bytes(material.encode("utf-8")).digest
         return int(digest[:8], 16) % 1_000_000_000
     # Majority label from train; reward validation agreement plus hyper hash.
     counts: dict[str, int] = {}
@@ -1866,7 +1871,7 @@ def _surrogate_validation_score(
         if row[2] == majority:
             agree += 1
     base = (agree * 1_000_000_000 // total) if total else 0
-    twist = int(hashlib.sha256(f"{seed}:{hyper}".encode()).hexdigest()[:4], 16)
+    twist = int(fingerprint_bytes(f"{seed}:{hyper}".encode()).digest[:4], 16)
     return min(1_000_000_000, base + twist)
 
 
@@ -1971,8 +1976,7 @@ def _matrix_payload_fp(
         for row_id, features, label in rows:
             quantized = ",".join(f"{value:.12g}" for value in features)
             parts.append(f"{role}:{row_id}:{label}:{quantized}")
-    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
-    return f"fp1:sha256:{digest}"
+    return fingerprint_bytes("\n".join(parts).encode("utf-8")).value
 
 
 def _training_code_fp() -> Result[Fingerprint]:
