@@ -49,12 +49,12 @@ from qmn.venue.ccxt_client import (
     CcxtClient,
     Exchange,
     agent_wallets,
+    api_urls,
     cloid,
-    hyperliquid_config,
+    make_testnet_exchange,
 )
 
 NODE_KEYS = "qmx/trading-node-keys"
-TESTNET_HOST = "api.hyperliquid-testnet.xyz"
 TAG = "probe7zz"
 """The probe's own node tag, so its orders never read as the practice node's."""
 COIN = "ETH"
@@ -110,14 +110,13 @@ def chosen_wallet(address: str | None) -> AgentWallet:
 
 
 def testnet_exchange(wallet: AgentWallet, *, streaming: bool = False) -> Any:
-    """``ccxt.hyperliquid`` on testnet. Refuses to go on unless every endpoint is testnet's."""
+    """``ccxt.hyperliquid``, or ``ccxt.pro``'s for the stream, on testnet with no referrer and
+    no builder fee. Refuses to go on unless every endpoint is testnet's."""
     ccxt = importlib.import_module("ccxt.pro" if streaming else "ccxt")
-    exchange = ccxt.hyperliquid(hyperliquid_config(wallet))
-    exchange.set_sandbox_mode(True)
-    endpoints = cast("dict[str, str]", exchange.urls["api"])
-    if not all(TESTNET_HOST in url for url in endpoints.values()):
-        raise SystemExit(f"FAIL setup: an endpoint is not testnet's: {sorted(endpoints.values())}")
-    return exchange
+    made = make_testnet_exchange(ccxt.hyperliquid, wallet)
+    if isinstance(made, TypedRefusal):
+        raise SystemExit(f"FAIL setup: an endpoint is not testnet's: {made.context['endpoints']}")
+    return made.value
 
 
 def record(precision: Decimal) -> InstrumentRecord:
@@ -392,9 +391,7 @@ def main(argv: list[str]) -> int:
     wallet = chosen_wallet(given.address)
     if given.plan:
         exchange = testnet_exchange(wallet)
-        print(
-            f"PLAN endpoints {sorted(set(cast('dict[str, str]', exchange.urls['api']).values()))}"
-        )
+        print(f"PLAN endpoints {sorted(set(api_urls(exchange)))}")
         print(f"PLAN account {wallet.address}, agent wallet expires at {wallet.expires_at_ms} ms")
         for mark in MARKS:
             print(f"PLAN {mark}")

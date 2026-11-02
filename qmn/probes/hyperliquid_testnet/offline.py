@@ -14,6 +14,7 @@ call, which has no fail rule.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hashlib
 import importlib
@@ -38,16 +39,19 @@ from qmn.app.attribution import Claim, attribute
 from qmn.app.feed_keeper import FeedKeeper, Quote, RecordedSource, Recording
 from qmn.app.runtime import OrderPath, Placed, Unknown, Venue, ulid
 from qmn.venue.ccxt_client import (
+    ERRORS,
     AgentKey,
     AgentWallet,
     CcxtClient,
     Exchange,
+    api_urls,
     cloid,
     cloid_tag,
-    hyperliquid_config,
+    make_testnet_exchange,
 )
 
 TESTNET = "https://api.hyperliquid-testnet.xyz"
+TESTNET_WS = "wss://api.hyperliquid-testnet.xyz/ws"
 TAG = "a4dqobyh"
 ETH = "ETH/USDC:USDC"
 ACCOUNT_ADDRESS = "0x" + "ab" * 20
@@ -250,8 +254,10 @@ class Rig:
 def stand_in(wallet: AgentWallet, venue: Testnet) -> Any:
     """A real ``ccxt.hyperliquid`` on testnet whose HTTP call ``venue`` answers."""
     ccxt = importlib.import_module("ccxt")
-    exchange = ccxt.hyperliquid(hyperliquid_config(wallet))
-    exchange.set_sandbox_mode(True)
+    made = make_testnet_exchange(ccxt.hyperliquid, wallet)
+    if isinstance(made, TypedRefusal):
+        raise SystemExit(f"FAIL setup: the testnet exchange is refused: {dict(made.context)}")
+    exchange = made.value
     exchange.options["fetchMarkets"] = {"types": ["swap"]}
 
     def fetch(url: str, method: str = "GET", headers: Any = None, body: Any = None) -> Any:
@@ -379,6 +385,14 @@ def lane_mapping(folder: Path) -> list[Check]:
 
 def lane_unknown(folder: Path) -> list[Check]:
     ccxt = importlib.import_module("ccxt")
+    errors = importlib.import_module("ccxt.base.errors")
+    defined = {
+        name
+        for name, value in vars(errors).items()
+        if isinstance(value, type)
+        and issubclass(value, Exception)
+        and value.__module__ == errors.__name__
+    }
     unmapped = rig(folder / "unmapped")
     unmapped.venue.next_answer.append(LookupError("an error no CCXT class names"))
     first = name("unmapped")
@@ -400,6 +414,9 @@ def lane_unknown(folder: Path) -> list[Check]:
     )  # fmt: skip
     refused = enter(margin, name("funds"))
     return [
+        ("the table reads every error class this CCXT defines, and no other",
+         set(ERRORS) == defined, f"missing {sorted(defined - set(ERRORS))}, extra "
+         f"{sorted(set(ERRORS) - defined)}"),
         ("an unmapped error reads UNKNOWN", lost == Unknown("venue answer unknown for this order",
          first), repr(lost)),
         ("the stream goes UNKNOWN: no entry on the market until it resolves",
@@ -499,6 +516,7 @@ def lane_probe(folder: Path) -> list[Check]:
         del streaming
         return stand_in(wallet, venue)
 
+    real = probe.testnet_exchange
     probe.testnet_exchange = testnet_exchange
     printed = io.StringIO()
 
@@ -507,11 +525,14 @@ def lane_probe(folder: Path) -> list[Check]:
 
     (folder / "probe-child").mkdir()
     (folder / "probe-fresh").mkdir()
-    with contextlib.redirect_stdout(printed):
-        probe.child(wallet, folder / "probe-child", hold_s=0)
-        lines = printed.getvalue().splitlines()
-        sent = [line.removeprefix("SENT ") for line in lines if line.startswith("SENT ")]
-        later = probe.after_kill(wallet, sent, folder / "probe-fresh", watch=no_stream)
+    try:
+        with contextlib.redirect_stdout(printed):
+            probe.child(wallet, folder / "probe-child", hold_s=0)
+            lines = printed.getvalue().splitlines()
+            sent = [line.removeprefix("SENT ") for line in lines if line.startswith("SENT ")]
+            later = probe.after_kill(wallet, sent, folder / "probe-fresh", watch=no_stream)
+    finally:
+        probe.testnet_exchange = real
     marks = [line for line in printed.getvalue().splitlines() if line[:4] in {"PASS", "FAIL"}]
     checked = [m for i, m in enumerate(marks) if i != 6]
     return [
@@ -520,6 +541,88 @@ def lane_probe(folder: Path) -> list[Check]:
          and Decimal(venue.position) == 0 and venue.open_orders == [], " | ".join(marks)),
         ("the probe never trades past testnet", all(u.startswith(TESTNET) for u in venue.urls),
          f"{len(venue.urls)} requests"),
+    ]  # fmt: skip
+
+
+def lane_stream(folder: Path) -> list[Check]:
+    """Mark 7 as the probe runs it: ``watch_fill`` builds its ``ccxt.pro`` exchange through the
+    probe's own ``testnet_exchange``. Only the exchange's HTTP call and its websocket are answered
+    here: the subscription is recorded, and the venue's fill is pushed back as Hyperliquid's
+    ``userFills`` message."""
+    del folder
+    probe: Any = importlib.import_module("run")
+    pro = importlib.import_module("ccxt.pro")
+    venue = Testnet()
+    wallet = AgentWallet(ACCOUNT_ADDRESS, AgentKey(SIGNER), 1_809_000_000_000)
+    real = probe.testnet_exchange
+    built: list[Any] = []
+    subscribed: list[tuple[str, dict[str, Any]]] = []
+
+    def answered_here(given: AgentWallet, *, streaming: bool = False) -> Any:
+        exchange = real(given, streaming=streaming)
+        exchange.options["fetchMarkets"] = {"types": ["swap"]}
+        socket_url = exchange.urls["api"]["ws"]["public"]
+        socket = exchange.client(socket_url)
+
+        def connect(_session: Any, _backoff_delay: float = 0) -> Any:
+            if not socket.connected.done():
+                socket.connected.resolve(socket_url)
+            return socket.connected
+
+        async def send(message: dict[str, Any]) -> None:
+            subscribed.append((socket_url, message))
+
+        async def fetch(
+            url: str, method: str = "GET", headers: Any = None, body: Any = None
+        ) -> Any:
+            del headers
+            sent_body = cast("dict[str, Any]", json.loads(body) if body else {})
+            fills = len(venue.fills)
+            answer = venue.answer(url, sent_body)
+            exchange.handle_errors(200, "OK", url, method, {}, json.dumps(answer), answer, {}, body)
+            if len(venue.fills) > fills and subscribed:
+                fill = {**venue.fills[-1], "hash": "0x" + "00" * 32, "startPosition": "0.0",
+                        "dir": "Close Long", "closedPnl": "0.0", "cloid": None}  # fmt: skip
+                exchange.handle_message(
+                    socket,
+                    {"channel": "userFills",
+                     "data": {"isSnapshot": False, "user": ACCOUNT_ADDRESS, "fills": [fill]}},
+                )  # fmt: skip
+            return answer
+
+        socket.connect = connect
+        socket.send = send
+        exchange.fetch = fetch
+        built.append(exchange)
+        return exchange
+
+    probe.testnet_exchange = answered_here
+    try:
+        ok, detail = asyncio.run(probe.watch_fill(wallet, Decimal("0.0044")))
+    finally:
+        probe.testnet_exchange = real
+    kinds = [a["action"]["type"] for a in venue.actions]
+    stream = built[0] if built else None
+
+    def mainnet_socket(config: dict[str, object]) -> Any:
+        exchange = pro.hyperliquid(config)
+        exchange.urls["test"]["ws"]["public"] = "wss://api.hyperliquid.xyz/ws"
+        return exchange
+
+    refused = make_testnet_exchange(mainnet_socket, wallet)
+    return [
+        ("mark 7 builds a ccxt.pro exchange and reads the fill from its stream",
+         ok and stream is not None and type(stream).__module__.startswith("ccxt.pro"), detail),
+        ("every endpoint of the stream exchange is testnet's, its websocket included",
+         stream is not None and set(api_urls(stream)) == {TESTNET, TESTNET_WS}
+         and all(u.startswith(TESTNET) for u in venue.urls)
+         and [u for u, _ in subscribed] == [TESTNET_WS], f"{venue.urls} {subscribed}"),
+        ("the stream exchange sends its one order with no builder fee and no referrer",
+         kinds == ["order"] and not any("builder" in a["action"] for a in venue.actions),
+         json.dumps(venue.actions)[:400]),
+        ("a stream exchange with a mainnet websocket is refused before it is used",
+         isinstance(refused, TypedRefusal) and refused.context["field"] == "endpoints",
+         repr(refused)[:300]),
     ]  # fmt: skip
 
 
@@ -549,6 +652,7 @@ LANES: Mapping[str, Callable[[Path], list[Check]]] = {
     "margin": lane_margin,
     "reconcile": lane_reconcile,
     "probe": lane_probe,
+    "stream": lane_stream,
 }
 
 
