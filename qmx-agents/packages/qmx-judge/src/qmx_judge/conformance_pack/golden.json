@@ -1,0 +1,620 @@
+{
+ "cases": {
+  "motion-off": {
+   "cash_events": {
+    "fp": "fp1:sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "rows": []
+   },
+   "fills": {
+    "fp": "fp1:sha256:139025313590046ecbce74e67641d876166443f3da7ed55c886bf0565a9a4cc8",
+    "rows": [
+     {
+      "instant": "1742508900000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06858",
+      "quantity": "1.72",
+      "receipt_quantity": "1.72",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742510700000000000",
+      "kind": "stop",
+      "market_id": "fx.eurusd",
+      "price": "1.06887",
+      "quantity": "1.72",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742513400000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06866",
+      "quantity": "1.08",
+      "receipt_quantity": "1.08",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742526900000000000",
+      "kind": "stop",
+      "market_id": "fx.eurusd",
+      "price": "1.06912",
+      "quantity": "1.08",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742532300000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06884",
+      "quantity": "0.75",
+      "receipt_quantity": "0.75",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742575500000000000",
+      "kind": "close",
+      "market_id": "fx.eurusd",
+      "price": "1.06856",
+      "quantity": "0.75",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742769900000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06840",
+      "quantity": "0.91",
+      "receipt_quantity": "0.91",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742813100000000000",
+      "kind": "close",
+      "market_id": "fx.eurusd",
+      "price": "1.06823",
+      "quantity": "0.91",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742834700000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06794",
+      "quantity": "1.60",
+      "receipt_quantity": "1.60",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742838300000000000",
+      "kind": "stop",
+      "market_id": "fx.eurusd",
+      "price": "1.06825",
+      "quantity": "1.60",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742843700000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06796",
+      "quantity": "0.53",
+      "receipt_quantity": "0.53",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742850900000000000",
+      "kind": "stop",
+      "market_id": "fx.eurusd",
+      "price": "1.06889",
+      "quantity": "0.53",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742966100000000000",
+      "kind": "entry",
+      "market_id": "metal.xauusd",
+      "price": "3245.944",
+      "quantity": "0.09",
+      "receipt_quantity": "0.09",
+      "residue_r": "0.0000",
+      "side": "long"
+     },
+     {
+      "instant": "1742983200000000000",
+      "kind": "stop",
+      "market_id": "metal.xauusd",
+      "price": "3240.57",
+      "quantity": "0.09",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "long"
+     },
+     {
+      "instant": "1743092100000000000",
+      "kind": "entry",
+      "market_id": "metal.xauusd",
+      "price": "3234.202",
+      "quantity": "0.12",
+      "receipt_quantity": "0.12",
+      "residue_r": "0.0000",
+      "side": "long"
+     },
+     {
+      "instant": "1743120000000000000",
+      "kind": "target",
+      "market_id": "metal.xauusd",
+      "price": "3242.15",
+      "quantity": "0.12",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "long"
+     }
+    ]
+   },
+   "holes": {
+    "fp": "fp1:sha256:e04177a4a411f4343f161bd4cec1fbec97537e6da6caa1d8430365274f2f5ba1",
+    "rows": [
+     {
+      "after": "1741383900000000000",
+      "bars_missing": "4",
+      "before": "1741557600000000000",
+      "market_id": "fx.eurusd"
+     },
+     {
+      "after": "1741988700000000000",
+      "bars_missing": "4",
+      "before": "1742162400000000000",
+      "market_id": "fx.eurusd"
+     },
+     {
+      "after": "1742593500000000000",
+      "bars_missing": "4",
+      "before": "1742767200000000000",
+      "market_id": "fx.eurusd"
+     }
+    ]
+   },
+   "trades": {
+    "fp": "fp1:sha256:f1f83b30c09bd87ab9ae502b22bb69b3197ab5fd47945bffa8ef481941ebf995",
+    "rows": [
+     {
+      "closed_at": "1742510700000000000",
+      "entry_price": "1.06858",
+      "exit_kind": "stop",
+      "exit_price": "1.06887",
+      "market_id": "fx.eurusd",
+      "money": "-49.88",
+      "opened_at": "1742508900000000000",
+      "quantity": "1.72",
+      "r": "-1.0000",
+      "side": "short",
+      "stop": "1.06887"
+     },
+     {
+      "closed_at": "1742526900000000000",
+      "entry_price": "1.06866",
+      "exit_kind": "stop",
+      "exit_price": "1.06912",
+      "market_id": "fx.eurusd",
+      "money": "-49.68",
+      "opened_at": "1742513400000000000",
+      "quantity": "1.08",
+      "r": "-1.0000",
+      "side": "short",
+      "stop": "1.06912"
+     },
+     {
+      "closed_at": "1742575500000000000",
+      "entry_price": "1.06884",
+      "exit_kind": "close",
+      "exit_price": "1.06856",
+      "market_id": "fx.eurusd",
+      "money": "21.00",
+      "opened_at": "1742532300000000000",
+      "quantity": "0.75",
+      "r": "0.4242",
+      "side": "short",
+      "stop": "1.06950"
+     },
+     {
+      "closed_at": "1742813100000000000",
+      "entry_price": "1.06840",
+      "exit_kind": "close",
+      "exit_price": "1.06823",
+      "market_id": "fx.eurusd",
+      "money": "15.47",
+      "opened_at": "1742769900000000000",
+      "quantity": "0.91",
+      "r": "0.3148",
+      "side": "short",
+      "stop": "1.06894"
+     },
+     {
+      "closed_at": "1742838300000000000",
+      "entry_price": "1.06794",
+      "exit_kind": "stop",
+      "exit_price": "1.06825",
+      "market_id": "fx.eurusd",
+      "money": "-49.60",
+      "opened_at": "1742834700000000000",
+      "quantity": "1.60",
+      "r": "-1.0000",
+      "side": "short",
+      "stop": "1.06825"
+     },
+     {
+      "closed_at": "1742850900000000000",
+      "entry_price": "1.06796",
+      "exit_kind": "stop",
+      "exit_price": "1.06889",
+      "market_id": "fx.eurusd",
+      "money": "-49.29",
+      "opened_at": "1742843700000000000",
+      "quantity": "0.53",
+      "r": "-1.0000",
+      "side": "short",
+      "stop": "1.06889"
+     },
+     {
+      "closed_at": "1742983200000000000",
+      "entry_price": "3245.944",
+      "exit_kind": "stop",
+      "exit_price": "3240.57",
+      "market_id": "metal.xauusd",
+      "money": "-48.37",
+      "opened_at": "1742966100000000000",
+      "quantity": "0.09",
+      "r": "-1.0000",
+      "side": "long",
+      "stop": "3240.57"
+     },
+     {
+      "closed_at": "1743120000000000000",
+      "entry_price": "3234.202",
+      "exit_kind": "target",
+      "exit_price": "3242.15",
+      "market_id": "metal.xauusd",
+      "money": "95.38",
+      "opened_at": "1743092100000000000",
+      "quantity": "0.12",
+      "r": "2.0013",
+      "side": "long",
+      "stop": "3230.23"
+     }
+    ]
+   }
+  },
+  "motion-on": {
+   "cash_events": {
+    "fp": "fp1:sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "rows": []
+   },
+   "fills": {
+    "fp": "fp1:sha256:139025313590046ecbce74e67641d876166443f3da7ed55c886bf0565a9a4cc8",
+    "rows": [
+     {
+      "instant": "1742508900000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06858",
+      "quantity": "1.72",
+      "receipt_quantity": "1.72",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742510700000000000",
+      "kind": "stop",
+      "market_id": "fx.eurusd",
+      "price": "1.06887",
+      "quantity": "1.72",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742513400000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06866",
+      "quantity": "1.08",
+      "receipt_quantity": "1.08",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742526900000000000",
+      "kind": "stop",
+      "market_id": "fx.eurusd",
+      "price": "1.06912",
+      "quantity": "1.08",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742532300000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06884",
+      "quantity": "0.75",
+      "receipt_quantity": "0.75",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742575500000000000",
+      "kind": "close",
+      "market_id": "fx.eurusd",
+      "price": "1.06856",
+      "quantity": "0.75",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742769900000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06840",
+      "quantity": "0.91",
+      "receipt_quantity": "0.91",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742813100000000000",
+      "kind": "close",
+      "market_id": "fx.eurusd",
+      "price": "1.06823",
+      "quantity": "0.91",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742834700000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06794",
+      "quantity": "1.60",
+      "receipt_quantity": "1.60",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742838300000000000",
+      "kind": "stop",
+      "market_id": "fx.eurusd",
+      "price": "1.06825",
+      "quantity": "1.60",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742843700000000000",
+      "kind": "entry",
+      "market_id": "fx.eurusd",
+      "price": "1.06796",
+      "quantity": "0.53",
+      "receipt_quantity": "0.53",
+      "residue_r": "0.0000",
+      "side": "short"
+     },
+     {
+      "instant": "1742850900000000000",
+      "kind": "stop",
+      "market_id": "fx.eurusd",
+      "price": "1.06889",
+      "quantity": "0.53",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "short"
+     },
+     {
+      "instant": "1742966100000000000",
+      "kind": "entry",
+      "market_id": "metal.xauusd",
+      "price": "3245.944",
+      "quantity": "0.09",
+      "receipt_quantity": "0.09",
+      "residue_r": "0.0000",
+      "side": "long"
+     },
+     {
+      "instant": "1742983200000000000",
+      "kind": "stop",
+      "market_id": "metal.xauusd",
+      "price": "3240.57",
+      "quantity": "0.09",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "long"
+     },
+     {
+      "instant": "1743092100000000000",
+      "kind": "entry",
+      "market_id": "metal.xauusd",
+      "price": "3234.202",
+      "quantity": "0.12",
+      "receipt_quantity": "0.12",
+      "residue_r": "0.0000",
+      "side": "long"
+     },
+     {
+      "instant": "1743120000000000000",
+      "kind": "target",
+      "market_id": "metal.xauusd",
+      "price": "3242.15",
+      "quantity": "0.12",
+      "receipt_quantity": "null",
+      "residue_r": "0",
+      "side": "long"
+     }
+    ]
+   },
+   "holes": {
+    "fp": "fp1:sha256:e04177a4a411f4343f161bd4cec1fbec97537e6da6caa1d8430365274f2f5ba1",
+    "rows": [
+     {
+      "after": "1741383900000000000",
+      "bars_missing": "4",
+      "before": "1741557600000000000",
+      "market_id": "fx.eurusd"
+     },
+     {
+      "after": "1741988700000000000",
+      "bars_missing": "4",
+      "before": "1742162400000000000",
+      "market_id": "fx.eurusd"
+     },
+     {
+      "after": "1742593500000000000",
+      "bars_missing": "4",
+      "before": "1742767200000000000",
+      "market_id": "fx.eurusd"
+     }
+    ]
+   },
+   "trades": {
+    "fp": "fp1:sha256:f1f83b30c09bd87ab9ae502b22bb69b3197ab5fd47945bffa8ef481941ebf995",
+    "rows": [
+     {
+      "closed_at": "1742510700000000000",
+      "entry_price": "1.06858",
+      "exit_kind": "stop",
+      "exit_price": "1.06887",
+      "market_id": "fx.eurusd",
+      "money": "-49.88",
+      "opened_at": "1742508900000000000",
+      "quantity": "1.72",
+      "r": "-1.0000",
+      "side": "short",
+      "stop": "1.06887"
+     },
+     {
+      "closed_at": "1742526900000000000",
+      "entry_price": "1.06866",
+      "exit_kind": "stop",
+      "exit_price": "1.06912",
+      "market_id": "fx.eurusd",
+      "money": "-49.68",
+      "opened_at": "1742513400000000000",
+      "quantity": "1.08",
+      "r": "-1.0000",
+      "side": "short",
+      "stop": "1.06912"
+     },
+     {
+      "closed_at": "1742575500000000000",
+      "entry_price": "1.06884",
+      "exit_kind": "close",
+      "exit_price": "1.06856",
+      "market_id": "fx.eurusd",
+      "money": "21.00",
+      "opened_at": "1742532300000000000",
+      "quantity": "0.75",
+      "r": "0.4242",
+      "side": "short",
+      "stop": "1.06950"
+     },
+     {
+      "closed_at": "1742813100000000000",
+      "entry_price": "1.06840",
+      "exit_kind": "close",
+      "exit_price": "1.06823",
+      "market_id": "fx.eurusd",
+      "money": "15.47",
+      "opened_at": "1742769900000000000",
+      "quantity": "0.91",
+      "r": "0.3148",
+      "side": "short",
+      "stop": "1.06894"
+     },
+     {
+      "closed_at": "1742838300000000000",
+      "entry_price": "1.06794",
+      "exit_kind": "stop",
+      "exit_price": "1.06825",
+      "market_id": "fx.eurusd",
+      "money": "-49.60",
+      "opened_at": "1742834700000000000",
+      "quantity": "1.60",
+      "r": "-1.0000",
+      "side": "short",
+      "stop": "1.06825"
+     },
+     {
+      "closed_at": "1742850900000000000",
+      "entry_price": "1.06796",
+      "exit_kind": "stop",
+      "exit_price": "1.06889",
+      "market_id": "fx.eurusd",
+      "money": "-49.29",
+      "opened_at": "1742843700000000000",
+      "quantity": "0.53",
+      "r": "-1.0000",
+      "side": "short",
+      "stop": "1.06889"
+     },
+     {
+      "closed_at": "1742983200000000000",
+      "entry_price": "3245.944",
+      "exit_kind": "stop",
+      "exit_price": "3240.57",
+      "market_id": "metal.xauusd",
+      "money": "-48.37",
+      "opened_at": "1742966100000000000",
+      "quantity": "0.09",
+      "r": "-1.0000",
+      "side": "long",
+      "stop": "3240.57"
+     },
+     {
+      "closed_at": "1743120000000000000",
+      "entry_price": "3234.202",
+      "exit_kind": "target",
+      "exit_price": "3242.15",
+      "market_id": "metal.xauusd",
+      "money": "95.38",
+      "opened_at": "1743092100000000000",
+      "quantity": "0.12",
+      "r": "2.0013",
+      "side": "long",
+      "stop": "3230.23"
+     }
+    ]
+   }
+  }
+ },
+ "cost_profile": "none (costs_uncalibrated)",
+ "data": "QML's synthetic March 2025 month, labelled not evidence",
+ "made_at_head": "a627750d7af5e42ea1cc7570b858bffd1d668436",
+ "made_by": "the shipped tester qmb@1.0.0 (qmx-agents/apps/qmb), through the core's conformance job path, by tests/test_conformance.py's regenerate()",
+ "realism": "B10's rules in force: gap fills, lot rounding with residue, carry as cash events, holes counted (this pack allows gaps and lists them)",
+ "versions": {
+  "qmb": "0.1.0",
+  "qml": "0.1.0",
+  "qmx-judge": "0.1.0"
+ }
+}

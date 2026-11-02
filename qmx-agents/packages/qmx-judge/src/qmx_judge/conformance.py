@@ -181,32 +181,27 @@ class Case:
 
 @dataclass(frozen=True, slots=True)
 class Pack:
-    """The pack as the core reads it: its id, its fingerprint over every file, how its goldens
-    were made, its cases, and the fixture dataset's files by path under `in/`."""
+    """The pack as the core reads it: its id, its fingerprint, how its goldens were made, its
+    cases, and the fixture dataset's files as text by their path under a run's `in/`."""
 
     id: str
     fp: str
     made: Mapping[str, object]
     cases: tuple[Case, ...]
-    fixture: Mapping[str, bytes]
+    fixture: Mapping[str, str]
 
 
-def _walk(folder: Traversable, prefix: str = "") -> dict[str, bytes]:
-    found: dict[str, bytes] = {}
-    for entry in sorted(folder.iterdir(), key=lambda e: e.name):
-        path = f"{prefix}{entry.name}"
-        if entry.is_dir():
-            found.update(_walk(entry, f"{path}/"))
-        else:
-            found[path] = entry.read_bytes()
-    return found
+def _json(root: Traversable, name: str, default: object) -> object:
+    found = root / name
+    return json.loads(found.read_text("utf-8")) if found.is_file() else default
 
 
 def load_pack(root: Traversable = PACK) -> Pack:
-    """Read the pack; its fingerprint covers the cases, the goldens and every fixture byte."""
-    every = _walk(root)
-    manifest = cast("dict[str, object]", json.loads(every["pack.json"]))
-    golden = cast("dict[str, object]", json.loads(every.get("golden.json", b'{"cases": {}}')))
+    """Read the pack. Its fingerprint covers the cases, the goldens and every fixture file's
+    text as parsed JSON, so a checkout that changes line endings changes neither."""
+    manifest = cast("dict[str, object]", _json(root, "pack.json", None))
+    golden = cast("dict[str, object]", _json(root, "golden.json", {"cases": {}}))
+    fixture = cast("dict[str, str]", _json(root, "fixture.json", {}))
     made = cast("dict[str, dict[str, object]]", golden["cases"])
     cases: list[Case] = []
     for asked in cast("list[dict[str, object]]", manifest["cases"]):
@@ -218,17 +213,11 @@ def load_pack(root: Traversable = PACK) -> Pack:
         }
         fps = {key: str(cast("dict[str, object]", body)["fp"]) for key, body in lists.items()}
         cases.append(Case(name, cast("dict[str, object]", asked["request"]), rows, fps))
-    blob = b"".join(
-        f"{path}\n{len(data)}\n".encode() + data for path, data in sorted(every.items())
-    )
-    fixture = {
-        path.removeprefix("fixture/"): data
-        for path, data in every.items()
-        if path.startswith("fixture/")
-    }
+    every = {"pack": manifest, "golden": golden, "fixture": fixture}
+    data = json.dumps(every, sort_keys=True, separators=(",", ":")).encode()
     return Pack(
         id=str(manifest["id"]),
-        fp=fingerprint_bytes(blob).value,
+        fp=fingerprint_bytes(data).value,
         made={key: value for key, value in golden.items() if key != "cases"},
         cases=tuple(cases),
         fixture=fixture,
@@ -246,7 +235,7 @@ def pack_inputs(pack: Pack, dataset: str) -> dict[str, object]:
             "id": pack.id,
             "fp": pack.fp,
             "cases": [{"case": case.case, "request": dict(case.request)} for case in pack.cases],
-            "files": {path: data.decode("utf-8") for path, data in sorted(pack.fixture.items())},
+            "files": dict(sorted(pack.fixture.items())),
         },
     }
 

@@ -1,17 +1,27 @@
 {
  "schema_version": "qmx.conformance.pack/1",
  "id": "dummy-synthetic-2025-03",
- "about": "Part A's dummy unit over QML's synthetic March 2025 month of EURUSD and XAUUSD M15 bid and ask bars (labelled not evidence), at a fixed equity, execution target, seed and cost profile. The fixture under fixture/in/ is the run folder the host laid out for the shipped tester; golden.json holds the rows that tester made from it.",
+ "about": "Part A's dummy unit over QML's synthetic March 2025 month of EURUSD and XAUUSD M15 bid and ask bars (labelled not evidence), at a fixed equity and execution target, with no cost profile (so costs_uncalibrated) and no seed. fixture.json holds the run folder's in/ files as the host laid them out for the shipped tester; golden.json holds the rows that tester made from them.",
  "cases": [
   {
    "case": "motion-on",
    "request": {
     "schema_version": 1,
-    "compiled_fp": "fp1:filled-by-regenerate",
+    "compiled_fp": "fp1:sha256:ce168cc05160a5d06f908c9eeec62056dcba1f1cec3ed3614ac481ec0d2126f9",
     "equity": "10000.00",
-    "execution_target": {"role": "paper-validation", "venue_id": "qmb", "account_id": "backtest"},
-    "markets": ["fx.eurusd", "metal.xauusd"],
-    "window": {"start": "2025-03-01", "end": "2025-04-01"},
+    "execution_target": {
+     "role": "paper-validation",
+     "venue_id": "qmb",
+     "account_id": "backtest"
+    },
+    "markets": [
+     "fx.eurusd",
+     "metal.xauusd"
+    ],
+    "window": {
+     "start": "2025-03-01",
+     "end": "2025-04-01"
+    },
     "motion": "on",
     "allow_gaps": true,
     "gap_bars_refuse": 3,
@@ -23,11 +33,21 @@
    "case": "motion-off",
    "request": {
     "schema_version": 1,
-    "compiled_fp": "fp1:filled-by-regenerate",
+    "compiled_fp": "fp1:sha256:ce168cc05160a5d06f908c9eeec62056dcba1f1cec3ed3614ac481ec0d2126f9",
     "equity": "10000.00",
-    "execution_target": {"role": "paper-validation", "venue_id": "qmb", "account_id": "backtest"},
-    "markets": ["fx.eurusd", "metal.xauusd"],
-    "window": {"start": "2025-03-01", "end": "2025-04-01"},
+    "execution_target": {
+     "role": "paper-validation",
+     "venue_id": "qmb",
+     "account_id": "backtest"
+    },
+    "markets": [
+     "fx.eurusd",
+     "metal.xauusd"
+    ],
+    "window": {
+     "start": "2025-03-01",
+     "end": "2025-04-01"
+    },
     "motion": "off",
     "allow_gaps": true,
     "gap_bars_refuse": 3,

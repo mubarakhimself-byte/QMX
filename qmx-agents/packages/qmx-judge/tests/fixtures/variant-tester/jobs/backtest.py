@@ -5,9 +5,9 @@ from __future__ import annotations
 import runpy
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
-VARIANT = cast("dict[str, Any]", runpy.run_path(str(Path(__file__).parents[1] / "variant.py")))
+VARIANT = runpy.run_path(str(Path(__file__).parents[1] / "variant.py"))
 replay = cast("Callable[[Path, str], dict[str, object] | str]", VARIANT["replay"])
 leave = cast("Callable[..., object]", VARIANT["leave"])
 

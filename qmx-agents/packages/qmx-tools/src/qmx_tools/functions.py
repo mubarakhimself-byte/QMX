@@ -289,6 +289,7 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         return {
             **page,
             "testers": [first.get("tester"), second.get("tester")],
+            "statuses": [first.get("status"), second.get("status")],
             "same_request": not request,
             "request_differs": request,
             "same_trades": not rows,
