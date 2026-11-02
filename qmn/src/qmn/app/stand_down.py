@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Final, cast
 
 from qmf.core import Ok, Result, is_refusal
+from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_kinds.unit import LIFECYCLE_SCHEMA
 from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
@@ -287,20 +288,27 @@ def _subject(found: Mapping[str, object], lane: str, world: str) -> Subject:
     )
 
 
-def held_from_start(body: Mapping[str, object]) -> Held:
-    """The stand-down a ``stand_down`` start row records (:meth:`Held.record`)."""
+def held_from_start(body: Mapping[str, object], written_ns: int) -> Held:
+    """The stand-down a ``stand_down`` start row records (:meth:`Held.record`). A row written
+    before C-13 names no scopes, and is cleared from ``all`` and its own scope, as
+    :meth:`StandDowns.hold` holds it."""
     found = body.get("subject")
     subject = None
     if isinstance(found, Mapping):
         named = cast("Mapping[str, object]", found)
         subject = _subject(named, str(named["lane"]), str(named["world"]))
     pending = body.get("pending")
+    scope = str(body["scope"])
+    since = body.get("since_ns")
+    covers = body.get("covers")
     return Held(
         Kind(str(body["stand_down"])),
-        str(body["scope"]),
-        cast("int", body["since_ns"]),
+        scope,
+        since if isinstance(since, int) else written_ns,
         str(body["cause"]),
-        frozenset(str(scope) for scope in cast("list[object]", body["covers"])),
+        frozenset(str(s) for s in cast("list[object]", covers))
+        if isinstance(covers, list)
+        else frozenset({"all", scope}),
         subject=subject,
         event_id=None if body.get("lifecycle_event") is None else str(body["lifecycle_event"]),
         pending=cast("Mapping[str, object]", pending) if isinstance(pending, Mapping) else None,
@@ -344,19 +352,32 @@ def restored(root: Path) -> Result[list[Held]]:
     """The stand-downs waiting for him when the node last stopped, rebuilt from its journals.
 
     A risk stop whose ``lifecycle`` row landed is held until a later row ``clears`` it, which
-    his resume lands; that row is what the PC reads too. Every other stand-down that waits for
-    him, and a risk stop whose ``lifecycle`` row never landed, is held from its node-journal
-    ``stand_down`` start row until a ``clear`` row for its scope follows. A read the volume
-    refuses is answered as a refusal, never as "nothing held"."""
+    his resume lands; that row is what the PC reads too. A stop whose row names no deployment
+    (written before C-13) gets no such row, so the node journal's ``clear`` row of the same
+    stop clears it. Every other stand-down that waits for him, and a risk stop whose
+    ``lifecycle`` row never landed, is held from its node-journal ``stand_down`` start row until
+    a ``clear`` row for its scope follows. A read the volume refuses, or a row it cannot
+    parse, is answered as a refusal, never as "nothing held"."""
     stops = _rows(root, JournalStream.UNIT, "lifecycle")
     if is_refusal(stops):
         return stops
     rows = _rows(root, JournalStream.NODE, "stand_down")
     if is_refusal(rows):
         return rows
+    try:
+        return Ok(_waiting(stops.value, rows.value))
+    except (KeyError, TypeError, ValueError) as error:
+        return TypedRefusal(
+            category=RefusalCategory.INVALID_INPUT,
+            retryability=Retryability.NO,
+            context={"field": "stand_down", "reason": f"a stop row does not parse: {error!r}"},
+        )
+
+
+def _waiting(stops: Sequence[JournalLine], rows: Sequence[JournalLine]) -> list[Held]:
     landed: dict[str, Held] = {}
     cleared: set[str] = set()
-    for line in stops.value:
+    for line in stops:
         body = cast("Mapping[str, object]", line.record.get("body", {}))
         by = body.get("by")
         if isinstance(body.get("clears"), str):
@@ -367,18 +388,20 @@ def restored(root: Path) -> Result[list[Held]]:
             world = str(line.record["world"])
             landed[str(body["event_id"])] = held_from_stop(body, world, line.t)
     waiting: dict[tuple[Kind, str], Held] = {}
-    for line in rows.value:
+    ended: set[tuple[Kind, str, object]] = set()
+    for line in rows:
         body = cast("Mapping[str, object]", line.record.get("body", {}))
         key = (Kind(str(body["stand_down"])), str(body["scope"]))
         if body.get("event") == "clear":
             waiting.pop(key, None)
+            ended.add((*key, body.get("since_ns")))
         elif body.get("event") == "start" and TABLE[key[0]].clears is not Clears.ITSELF:
-            waiting[key] = held_from_start(body)
+            waiting[key] = held_from_start(body, line.t)
     held = {key: found for key, found in waiting.items() if _unlanded(found, landed)}
     for event_id, stop in landed.items():
-        if event_id not in cleared:
+        if event_id not in cleared and (stop.kind, stop.scope, stop.since_ns) not in ended:
             held[(stop.kind, stop.scope)] = stop
-    return Ok(list(held.values()))
+    return list(held.values())
 
 
 def _unlanded(held: Held, landed: Mapping[str, Held]) -> bool:

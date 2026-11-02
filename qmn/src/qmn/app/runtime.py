@@ -113,7 +113,7 @@ from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
 from qmn.app.feed_keeper import Bar, FeedKeeper
 from qmn.app.healing import Healer, StuckWatch
 from qmn.app.operations import Answer, Context, Target, refused
-from qmn.app.reconciler import Reconciler
+from qmn.app.reconciler import Ours, Reconciler
 from qmn.app.stand_down import (
     REPEATED_FAULT_RESTARTS,
     REPEATED_FAULT_WINDOW_NS,
@@ -888,6 +888,7 @@ class OrderPath:
     def entry(
         self,
         *,
+        deployment_id: str,
         client_order_id: str,
         label: str,
         wire: Mapping[str, object],
@@ -899,12 +900,15 @@ class OrderPath:
         done = self._sent.get(client_order_id)
         if done is not None:
             return done
-        outcome = self._entry(client_order_id, label, wire, record, quantity, blocked_by)
+        outcome = self._entry(
+            deployment_id, client_order_id, label, wire, record, quantity, blocked_by
+        )
         self._sent[client_order_id] = outcome
         return outcome
 
     def _entry(
         self,
+        deployment_id: str,
         client_order_id: str,
         label: str,
         wire: Mapping[str, object],
@@ -923,7 +927,8 @@ class OrderPath:
             return Blocked(
                 "venue answer unknown for an earlier order, so no entry until it resolves"
             )
-        stop = Decimal(str(cast("Mapping[str, object]", wire["protection"])["stop"]))
+        protection = cast("Mapping[str, object]", wire["protection"])
+        stop = Decimal(str(protection["stop"]))
         quote = self.venue.feed.quote(market)
         reference = (
             (quote.ask if side is Side.LONG else quote.bid) if quote is not None else None
@@ -977,6 +982,8 @@ class OrderPath:
         body: dict[str, object] = {
             "event_id": f"{client_order_id}/send",
             "client_order_id": client_order_id,
+            "deployment_id": deployment_id,
+            "sent_at_ns": self.clock_ns(),
             "label": label,
             "step": "send",
             "kind": "entry",
@@ -989,6 +996,9 @@ class OrderPath:
             "stop_distance": str(distance),
             "stop_form": gate.value,
         }
+        targets = cast("Sequence[Mapping[str, object]]", protection.get("targets") or ())
+        if targets:
+            body["target"] = str(targets[0]["price"])
         sent = self._journalled(body, ticket)
         if is_refusal(sent):
             if sent.context.get("blocks_entries") is True:
@@ -1359,6 +1369,44 @@ class NodeUnit:
         snapshot = self.hosted_unit.snapshot()
         return self.start(self.orders.venue.client.equity(), self.target, snapshot)
 
+    def adopt(self, found: Iterable[Ours]) -> None:
+        """Hold each position this deployment sent that the reconcile read open at the venue
+        and this unit does not hold, as a process restart finds them: the unit manages its
+        stop, its target and its exits as its own. A position is adopted once."""
+        handler = self.handler
+        client = self.orders.venue.client
+        for ours in found:
+            venue, send = ours.position, ours.send
+            name, market = venue.position, venue.market_id
+            if (
+                handler is None
+                or send.get("deployment_id") != self.deployment.deployment_id
+                or market not in self.records
+                or name in self.placed
+                or client.closed(name) is not None
+            ):
+                continue
+            side = Side(venue.side)
+            entry_stop = Decimal(str(send["stop"]))
+            position = OwnPosition(
+                name,
+                side,
+                venue.quantity,
+                venue.entry_price,
+                self.compiled.compiled_fingerprint,
+                Instant(cast("int", send["sent_at_ns"])),
+            )
+            adopted = handler.adopt(
+                market,
+                position,
+                stop=entry_stop if venue.stop is None else venue.stop,
+                entry_stop=entry_stop,
+                target=Decimal(str(send["target"])) if "target" in send else None,
+                decision_row_id=str(send["decision_row_id"]),
+            )
+            if not is_refusal(adopted):
+                self.placed[name] = (market, side, venue.entry_price)
+
     # --- names ---
 
     def client_order_id(self, decision_row_id: str, at: Instant) -> str:
@@ -1454,6 +1502,7 @@ class NodeUnit:
             row = str(wire["decision_row_id"])
             named = self.client_order_id(row, at)
             placed = self.orders.entry(
+                deployment_id=self.deployment.deployment_id,
                 client_order_id=named,
                 label=self.label,
                 wire=wire,
@@ -1758,6 +1807,10 @@ class Runtime:
             max_restarts=REPEATED_FAULT_RESTARTS,
             window_ns=REPEATED_FAULT_WINDOW_NS,
         )
+        counted = self.healer.fold.evaluate(now_ns=clock_ns())
+        if counted.threshold_breached:
+            last = self.healer.fold.stamps[-1].reason
+            self._repeated_fault_down(counted.counted_boots, str(last))
         self.watch = StuckWatch(
             steady_ns=steady_ns,
             alive=self._alive,
@@ -1802,6 +1855,7 @@ class Runtime:
         """One pass of the runtime thread under the inner supervisor: a tick, or, after the
         tick raised, a heal. A heal waits its back-off and starts the runtime again over the
         same hosted units, which hold the node's record of what is open at the venue."""
+        self._wake.clear()
         self.watch.began = self.steady_ns()
         try:
             if self._recovering:
@@ -1819,23 +1873,38 @@ class Runtime:
     def _heal(self, why: str) -> None:
         print(json.dumps({"event": "runtime_error", "error": why}), file=sys.stderr)
         fault = self.healer.fault(why)
-        minutes = REPEATED_FAULT_WINDOW_NS // 60_000_000_000
-        cause = f"{fault.restarts} restarts in {minutes} minutes"
-        if fault.breached and self.stand_down(Kind.REPEATED_FAULT, "all", cause):
-            self.alarms.append(
-                {
-                    "alarm": "repeated_fault",
-                    "restarts": fault.restarts,
-                    "action": "no_new_entries",
-                    "why": f"{cause}, the last: {why}",
-                }
-            )
+        if fault.breached:
+            self._repeated_fault_down(fault.restarts, why)
         try:
             self._observe()
         except Exception as error:  # the store may be what failed; the heal goes on
             print(json.dumps({"event": "observe_failed", "error": repr(error)}), file=sys.stderr)
-        self.sleep(fault.wait_s)
+        self._wait(fault.wait_s)
         self._recovering = True
+
+    def _repeated_fault_down(self, restarts: int, why: str) -> None:
+        """Past the crash-loop threshold the node stands down alive until his resume."""
+        minutes = REPEATED_FAULT_WINDOW_NS // 60_000_000_000
+        cause = f"{restarts} restarts in {minutes} minutes"
+        if self.stand_down(Kind.REPEATED_FAULT, "all", cause):
+            self.alarms.append(
+                {
+                    "alarm": "repeated_fault",
+                    "restarts": restarts,
+                    "action": "no_new_entries",
+                    "why": f"{cause}, the last: {why}",
+                }
+            )
+
+    def _wait(self, seconds: float) -> None:
+        """The back-off before a heal, slept a tick at a time so his kill, any other wake and
+        a stop end it early."""
+        left = round(seconds * 1000)
+        tick = max(1, round(self.tick_s * 1000))
+        while left > 0 and not (self._wake.is_set() or self._stop.is_set()):
+            step = min(tick, left)
+            self.sleep(step / 1000)
+            left -= step
 
     def _recover(self) -> None:
         """Start the runtime again: every account reconciles before its next entry, and each
@@ -1883,12 +1952,17 @@ class Runtime:
             client = unit.orders.venue.client
             reasons.extend(
                 f"position {name} has no stop at the venue"
-                for name in sorted(unit.venue_open())
                 if client.stop_of(name) is None
+                else f"position {name} is open at the venue"
+                for name in sorted(unit.venue_open())
             )
         for account, venue in self.venues.items():
             if venue.feed.ready and self.reconciler.due(account, venue.feed.reconnects, {}):
                 reasons.append(f"account {account} is not reconciled")
+            reasons.extend(
+                f"position {orphan.position} of ours is open and no unit holds it"
+                for orphan in self._orphans(account, venue)
+            )
         reasons.extend(
             f"{held.row.word.value} at {held.scope} is held in memory only: no journal took it"
             for held in self.stand_downs.in_memory_only()
@@ -1927,13 +2001,31 @@ class Runtime:
         """Reconcile once per venue session and after an UNKNOWN, before any bar is driven."""
         path = self._paths.get(account)
         unknown = {} if path is None else path.unknown
+        units = [
+            hosted.unit
+            for hosted in self.hosted.values()
+            if hosted.unit is not None and hosted.deployment.account_id == account
+        ]
         if venue.feed.ready and self.reconciler.due(account, venue.feed.reconnects, unknown):
-            units = [
-                hosted.unit
-                for hosted in self.hosted.values()
-                if hosted.unit is not None and hosted.deployment.account_id == account
-            ]
             self.reconciler.run(account, venue.feed.reconnects, venue.client, unknown, units)
+        for unit in units:
+            unit.adopt(self.reconciler.mine(account))
+
+    def _orphans(self, account: str, venue: Venue) -> list[VenuePosition]:
+        """The node's own positions the reconcile read open on ``account`` that no hosted unit
+        holds and the venue has not closed since."""
+        held = {
+            name for hosted in self.hosted.values() if hosted.unit for name in hosted.unit.placed
+        }
+        return sorted(
+            (
+                ours.position
+                for ours in self.reconciler.mine(account)
+                if ours.position.position not in held
+                and venue.client.closed(ours.position.position) is None
+            ),
+            key=lambda position: position.position,
+        )
 
     def _path(self, account: str) -> OrderPath | None:
         venue = self.venues.get(account)
@@ -2071,6 +2163,12 @@ class Runtime:
             )
             if held_by_reconcile is not None:
                 return held_by_reconcile
+            for orphan in self._orphans(hosted.deployment.account_id, venue):
+                if orphan.market_id == market:
+                    return (
+                        f"a position of ours that no unit holds is open on {market}:"
+                        f" {orphan.position}"
+                    )
             held = self.stand_downs.blocking(
                 (
                     "all",
