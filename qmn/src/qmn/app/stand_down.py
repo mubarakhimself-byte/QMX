@@ -229,15 +229,17 @@ class Held:
         return TABLE[self.kind]
 
     def document(self) -> dict[str, Json]:
-        return {
+        shown: dict[str, Json] = {
             "stand_down": self.kind.value,
             "scope": self.scope,
             "word": self.row.word.value,
             "cause": self.cause,
             "clears": self.row.clears.value,
             "since_ns": self.since_ns,
-            "lifecycle_event": self.event_id,
         }
+        if self.event_id is not None:
+            shown["lifecycle_event"] = self.event_id
+        return shown
 
 
 def _iso(at_ns: int) -> str:

@@ -191,6 +191,9 @@ CASES = (
 )
 
 
+SELF_CLEARING = frozenset({Kind.STALE_FEED, Kind.CLOCK_BAND, Kind.DISK, Kind.VENUE_NOT_READY})
+
+
 def tickets(node: Rig, after: int) -> list[tuple[CommandKind, str, str]]:
     return [(t.command.kind, t.market_id, t.side.value) for t in node.account.received[after:]]
 
@@ -226,6 +229,15 @@ def test_each_row_stops_entries_keeps_exits_and_broker_stops_and_clears_by_its_r
     case.clear(node, probes)
     played(node, probes, at(5760))
     cleared_second = node.runtime.stand_downs.document()
+    journalled = [
+        (body["event"], body["stand_down"], body.get("cleared_by"))
+        for row in cast(
+            "list[dict[str, object]]",
+            value(node.node.call("journal_tail", {"streams": ["node"]}))["rows"],
+        )
+        if row["kind"] == "stand_down"
+        for body in [cast("dict[str, object]", row["body"])]
+    ]
 
     assert [held["stand_down"] for held in held_first] == [case.kind.value]
     assert exits == [(CommandKind.CLOSE_POSITION, "fx.eurusd", "short")]
@@ -240,6 +252,15 @@ def test_each_row_stops_entries_keeps_exits_and_broker_stops_and_clears_by_its_r
     ]
     assert guards == [case.detail]
     assert cleared_second == []
+    by = "itself" if case.kind in SELF_CLEARING else "operator"
+    assert (
+        journalled
+        == [
+            ("start", case.kind.value, None),
+            ("clear", case.kind.value, by),
+        ]
+        * 2
+    )
     node.runtime.stop()
 
 
@@ -322,7 +343,7 @@ def test_a_risk_stop_lands_one_lifecycle_event_and_waits_for_his_resume(tmp_path
 
     assert stop is not None
     assert again == stop
-    assert [(h["stand_down"], h["word"], h["lifecycle_event"]) for h in held] == [
+    assert [(h["stand_down"], h["word"], h.get("lifecycle_event")) for h in held] == [
         ("risk_stop", "Stopped by a risk rule", stop)
     ]
     assert [t for t in after_a_day if t[1] == "fx.eurusd" and t[0] is CommandKind.PLACE_ORDER] == []
