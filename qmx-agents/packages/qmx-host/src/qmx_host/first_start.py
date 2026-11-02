@@ -665,8 +665,9 @@ def land_port(store: Store, seed: Path = PORT_SEED) -> PortLanded | None:
     Keyed by the seed's fingerprint as `land_dummy` is keyed by the dummy's: the collection's item
     is named from it, so a store whose `main` holds the collection writes nothing. A draft whose
     item has a head already is kept as it is, so a landing a crash cut short finishes and never
-    writes over his edits. Only drafts are put; publishing them is his click
-    (`qmx_host.publish_collection`)."""
+    writes over his edits. The entries are put as drafts only; publishing them is his click
+    (`qmx_host.publish_collection`). The collection itself, the list of their items, goes on
+    `main` last, so he finds it, and it is the mark that the landing finished."""
     port = cast(dict[str, Any], json.loads((seed / "port.json").read_text("utf-8")))
     collection = cast(dict[str, Any], port["collection"])
     if store.head(collection["item"], MAIN) is not None:

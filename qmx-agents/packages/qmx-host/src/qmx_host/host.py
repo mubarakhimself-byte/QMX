@@ -809,7 +809,8 @@ def land_first_unit(store: Store) -> None:
 
 def land_ported_dictionary(store: Store) -> None:
     """The 239 ported dictionary entries wait in his Library as drafts in one collection from the
-    first start on (AD-114). A store that refuses the put, or a QMX that runs without its seed
+    PC's first start on (AD-114). A server or a node, which may run without the seed folder,
+    never lands them. A store that refuses the put, or a QMX that runs without its seed
     folder, is named and the host starts anyway; the next start tries again."""
     try:
         landed = land_port(store)
@@ -943,6 +944,7 @@ async def serve(
                 register_checkers(store)
                 if not serving:
                     land_first_unit(store)
+                if role == "pc":
                     land_ported_dictionary(store)
                 control.attach_library(store)
                 runtime = control.app_runtime()
