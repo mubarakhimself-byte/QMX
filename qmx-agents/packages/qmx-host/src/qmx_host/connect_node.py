@@ -291,18 +291,21 @@ def _app_card(run: Run) -> Card:
 
 
 def _keys_written(run: Run) -> bool:
-    return _keys(run) is not None and _pasted(run) is None
+    return _keys(run) is not None and run.world.keys.read(APP_SECRET) is None
 
 
 def _write_keys(run: Run) -> Card | None:
     """The keys document, empty at first, with the trading app once he has given it. The staged
-    secret is deleted only after the document holds it."""
+    secret is deleted whenever the document holds it, so a rerun after a kill between the two
+    writes still deletes it, though the pasted id is gone with the host."""
     document = _keys(run) or {"schema_version": KEYS_SCHEMA}
     pasted = _pasted(run)
     if pasted is not None:
         document["ctrader"] = {"client_id": pasted[0], "client_secret": pasted[1]}
     run.world.keys.replace(NODE_KEYS, json.dumps(document, sort_keys=True))
-    if pasted is not None:
+    staged = run.world.keys.read(APP_SECRET)
+    ctrader = cast("dict[str, Any]", document.get("ctrader") or {})
+    if staged is not None and ctrader.get("client_secret") == staged:
         run.world.keys.delete(APP_SECRET)
     held = "with this PC's cTrader trading app" if "ctrader" in document else "with no venue yet"
     run.say(f"keys: the node's keys document is in Credential Manager as {NODE_KEYS}, {held}")
