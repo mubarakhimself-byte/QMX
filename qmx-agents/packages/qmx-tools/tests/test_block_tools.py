@@ -85,14 +85,20 @@ def test_match_maps_the_rsi_sentence_and_asks_to_append_the_unknown_one(
 
 
 def test_find_names_the_trend_filters_in_one_line_each(blocks: dict[str, Row]) -> None:
-    found = blocks["blocks_find"](words="trend filter", role="filter")
+    found = blocks["blocks_find"](words="trend filter", role="filter", limit=4)
 
     assert [row["line"] for row in found["rows"]] == [
+        "adx@1 | indicator | series | level 1 | implemented | Wilder's Average Directional "
+        "Index: the smoothed mean of 100 x |+DI - -DI| / (+DI + -DI) over period bars, from 0 to "
+        "100.",
+        "alligator-line@1 | indicator | series | level 1 | implemented | One Alligator balance "
+        "line: the smoothed mean of the median price over period bars, drawn shift bars ahead. "
+        "Jaw 13 and 8, teeth 8 and 5, lips 5 and 3.",
+        "ichimoku-senkou-a@1 | indicator | series | level 1 | implemented | The mean of "
+        "Tenkan-sen and Kijun-sen, drawn shift bars ahead.",
         "roc-of-series@1 | context | state | level 1 | implemented | Rate of change of a series "
         "over a lookback, as a fraction; holds when at least the floor (long) or at most minus the "
         "floor (short).",
-        "ema@1 | context | series | level 1 | implemented | Exponential moving average of a "
-        "series, seeded with the simple mean of its first period values.",
     ]
 
 
@@ -196,7 +202,18 @@ def test_the_put_check_refuses_a_wrong_entry_and_every_unmarked_component_saves_
 def test_the_ten_qml_blocks_save_as_entries_and_their_status_is_written(
     store: Store, blocks: dict[str, Row]
 ) -> None:
-    ids = sorted(p.name for p in STDLIB.iterdir() if (p / "1" / "entry.json").is_file())
+    ids = (
+        "ema",
+        "fixed-fraction-at-stop",
+        "market-next-open",
+        "percentile-of-own-history",
+        "roc-of-series",
+        "rsi-cross-back",
+        "swing-stop-buffer",
+        "target-r-multiple",
+        "time-exit-bars",
+        "trend-floor-from-record",
+    )
     for entry_id in ids:
         blobs = {"code": source(entry_id)} | (
             {"golden": GOLDEN} if "golden" in entry(entry_id) else {}

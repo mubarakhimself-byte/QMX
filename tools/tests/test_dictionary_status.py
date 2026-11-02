@@ -29,24 +29,27 @@ def _script() -> _Script:
     return cast("_Script", module)
 
 
-def test_qmls_ten_blocks_compute_implemented(capsys: pytest.CaptureFixture[str]) -> None:
+def test_qmls_blocks_compute_implemented(capsys: pytest.CaptureFixture[str]) -> None:
     code = _script().main([])
 
-    assert (code, capsys.readouterr().out.splitlines()) == (
-        0,
-        [
-            "ema@1 implemented",
-            "fixed-fraction-at-stop@1 implemented",
-            "market-next-open@1 implemented",
-            "percentile-of-own-history@1 implemented",
-            "roc-of-series@1 implemented",
-            "rsi-cross-back@1 implemented",
-            "swing-stop-buffer@1 implemented",
-            "target-r-multiple@1 implemented",
-            "time-exit-bars@1 implemented",
-            "trend-floor-from-record@1 implemented",
-        ],
-    )
+    lines = capsys.readouterr().out.splitlines()
+    pins = sorted(f"{p.parent.parent.name}@1" for p in _STDLIB.glob("*/1/entry.json"))
+    assert code == 0
+    assert lines == [f"{pin} implemented" for pin in pins]
+    assert {
+        "ema@1 implemented",
+        "fixed-fraction-at-stop@1 implemented",
+        "market-next-open@1 implemented",
+        "percentile-of-own-history@1 implemented",
+        "roc-of-series@1 implemented",
+        "rsi-cross-back@1 implemented",
+        "swing-stop-buffer@1 implemented",
+        "target-r-multiple@1 implemented",
+        "time-exit-bars@1 implemented",
+        "trend-floor-from-record@1 implemented",
+        "cci@1 implemented",
+        "parabolic-sar@1 implemented",
+    } <= set(lines)
 
 
 def test_a_native_claim_with_no_source_is_refused_and_fails_the_run(
