@@ -39,6 +39,8 @@ class Clock:
 @pytest.fixture
 def store(tmp_path: Path) -> Iterator[Store]:
     with Store.open(tmp_path / "library", redactor=redact, wall=Clock()) as opened:
+        # The host registers the study spec's put check; this store stands in for it.
+        opened.register_checker("qmx.study-spec/1", lambda fields: [])
         yield opened
 
 

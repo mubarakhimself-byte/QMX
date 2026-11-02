@@ -128,7 +128,15 @@ from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.client import OwnerTable
 from qmx_library.kinds import Checker, Problem
 from qmx_library.landing import NOT_PRIMARY
-from qmx_library.port import Commit, Draft, LibraryRefused, MergeResult, ObjectId, StoreRole
+from qmx_library.port import (
+    Commit,
+    Draft,
+    LibraryRefused,
+    MergeResult,
+    ObjectId,
+    StoreRole,
+    Strategy,
+)
 from qmx_library.principal import MAIN, Act, Principal
 from qmx_library.store import Store
 from qmx_memory.engine import RecallEngine
@@ -723,9 +731,11 @@ class HostStore(Store):
             self._landed(who, commit.object_id)
         return commit
 
-    def merge(self, who: Principal, item: str, **kwargs: Any) -> MergeResult:
-        merged = super().merge(who, item, **kwargs)
-        if kwargs.get("into") == MAIN and merged.outcome in ("fast-forward", "merged"):
+    def merge(
+        self, who: Principal, item: str, *, from_ref: str, into: str, strategy: Strategy = "auto"
+    ) -> MergeResult:
+        merged = super().merge(who, item, from_ref=from_ref, into=into, strategy=strategy)
+        if into == MAIN and merged.outcome in ("fast-forward", "merged"):
             self._landed(who, merged.object_id)
         return merged
 
@@ -1078,7 +1088,6 @@ async def serve(
                     land_first_unit(store)
                 if role == "pc":
                     store.lifecycle = lifecycle_writer(home, control, name)
-                if role == "pc":
                     land_ported_dictionary(store)
                     land_dictionary_wave(store)
                 control.attach_library(store)

@@ -496,52 +496,48 @@ def _evidence(results: Sequence[JudgedResult], name: str) -> Mapping[str, object
     return next((r.evidence[name] for r in results if name in r.evidence), None)
 
 
-def _step(rule: StepRule, outcome: StepOutcome, detail: str) -> Step:
-    return Step(rule, outcome, detail)
-
-
-def _claim(rule: StepRule, spec: StudySpec, **_: object) -> Step:
+def _claim(rule: StepRule, spec: StudySpec) -> Step:
     if spec.claim is not None and spec.claim.edge.strip():
-        return _step(rule, "passed", f"claims {spec.claim.edge.strip()}")
-    return _step(rule, "failed", "the study names no claim")
+        return Step(rule, "passed", f"claims {spec.claim.edge.strip()}")
+    return Step(rule, "failed", "the study names no claim")
 
 
 def _random_entries(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
     found = _evidence(results, "random_entries")
     if found is None:
-        return _step(rule, "not_run", "no result in the study ran random entries")
+        return Step(rule, "not_run", "no result in the study ran random entries")
     ratio, p = _decimal(found.get("edge_ratio")), _decimal(found.get("p"))
     if ratio is None or p is None:
-        return _step(rule, "failed", "random_entries carries no edge_ratio and p as text")
+        return Step(rule, "failed", "random_entries carries no edge_ratio and p as text")
     good = ratio > spec.preset.entry_edge_ratio_min and p <= spec.preset.signal_p
     detail = f"entry edge ratio {ratio} at p {p}"
-    return _step(rule, "passed" if good else "failed", detail)
+    return Step(rule, "passed" if good else "failed", detail)
 
 
 def _cost_stress(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
     found = _evidence(results, "cost_stress")
     if found is None:
-        return _step(rule, "not_run", "no result in the study stressed its costs")
+        return Step(rule, "not_run", "no result in the study stressed its costs")
     multiplier, expectancy = _decimal(found.get("multiplier")), _decimal(found.get("expectancy_r"))
     if multiplier is None or expectancy is None:
-        return _step(rule, "failed", "cost_stress carries no multiplier and expectancy_r as text")
+        return Step(rule, "failed", "cost_stress carries no multiplier and expectancy_r as text")
     if multiplier < spec.preset.cost_stress:
         need = spec.preset.cost_stress
-        return _step(rule, "not_run", f"costs stressed {multiplier}x, the preset needs {need}x")
+        return Step(rule, "not_run", f"costs stressed {multiplier}x, the preset needs {need}x")
     detail = f"expectancy {expectancy}R at {multiplier}x costs"
-    return _step(rule, "passed" if expectancy > 0 else "failed", detail)
+    return Step(rule, "passed" if expectancy > 0 else "failed", detail)
 
 
 def _walk_forward(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
     found = _evidence(results, "walk_forward")
     if found is None:
-        return _step(rule, "not_run", "no walk-forward result in the study")
+        return Step(rule, "not_run", "no walk-forward result in the study")
     efficiency = _decimal(found.get("efficiency"))
     if efficiency is None:
-        return _step(rule, "failed", "walk_forward carries no efficiency as text")
+        return Step(rule, "failed", "walk_forward carries no efficiency as text")
     need = spec.preset.walk_forward_efficiency
     good = efficiency >= need
-    return _step(rule, "passed" if good else "failed", f"efficiency {efficiency} of {need} needed")
+    return Step(rule, "passed" if good else "failed", f"efficiency {efficiency} of {need} needed")
 
 
 def _monte_carlo(rule: StepRule, spec: StudySpec, rs: Sequence[float]) -> Step:
@@ -550,18 +546,18 @@ def _monte_carlo(rule: StepRule, spec: StudySpec, rs: Sequence[float]) -> Step:
     p5 = totals[int(0.05 * MONTE_CARLO_RESAMPLES)]
     floor = spec.preset.monte_carlo_p5_above
     good = Decimal(_decimal_text(p5)) > floor
-    return _step(rule, "passed" if good else "failed", f"5th percentile {_decimal_text(p5)}R")
+    return Step(rule, "passed" if good else "failed", f"5th percentile {_decimal_text(p5)}R")
 
 
 def _pbo(rule: StepRule, spec: StudySpec, results: Sequence[JudgedResult]) -> Step:
     found = _evidence(results, "pbo")
     if found is None:
-        return _step(rule, "not_run", "no result in the study measured the family's PBO")
+        return Step(rule, "not_run", "no result in the study measured the family's PBO")
     value = _decimal(found.get("value"))
     if value is None:
-        return _step(rule, "failed", "pbo carries no value as text")
+        return Step(rule, "failed", "pbo carries no value as text")
     good = spec.preset.pbo_pass is not None and value < spec.preset.pbo_pass
-    return _step(rule, "passed" if good else "failed", f"PBO {value}")
+    return Step(rule, "passed" if good else "failed", f"PBO {value}")
 
 
 def _try_corrected(
@@ -569,7 +565,7 @@ def _try_corrected(
 ) -> Step:
     sd, skew, kurt = _moments(rs)
     if sd == 0:
-        return _step(rule, "failed", "every trade made the same R")
+        return Step(rule, "failed", "every trade made the same R")
     sharpe = float(shrunk.shrunk_r) / sd
     bar, probability = deflated_sharpe(sharpe, len(rs), skew, kurt, tries)
     floor = spec.preset.min_expectancy_r
@@ -581,7 +577,7 @@ def _try_corrected(
         f"deflated Sharpe {_decimal_text(probability)} over {tries} effective tries "
         f"(luck alone reaches {_decimal_text(bar)} per trade, this market {_decimal_text(sharpe)})"
     )
-    return _step(rule, "passed" if good else "failed", detail)
+    return Step(rule, "passed" if good else "failed", detail)
 
 
 def _outcome(trades: int, needed: int, steps: Sequence[Step]) -> Overall:
