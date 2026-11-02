@@ -160,7 +160,7 @@ from qmx_host.connect import KINDS, Connect, World, connect_router, placement
 from qmx_host.connect_logs import Logs, NeedsAdmin, OpenObserveProcess
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
-from qmx_host.first_start import enable_first_party, land_dummy, land_port
+from qmx_host.first_start import enable_first_party, land_dummy, land_port, land_wave
 from qmx_host.jobs import Jobs, Stopped
 from qmx_host.keys import keys_router
 from qmx_host.maintenance import maintenance_router
@@ -821,6 +821,21 @@ def land_ported_dictionary(store: Store) -> None:
         print(f"library: the ported dictionary waits in the Library: {landed}", file=sys.stderr)
 
 
+def land_dictionary_wave(store: Store) -> None:
+    """The first content wave's entries wait in his Library as drafts, one collection per
+    family, from the PC's first start on (A13). As the port, a store that refuses the put or a
+    QMX that runs without its seed folders is named and the host starts anyway."""
+    try:
+        landed = land_wave(store)
+    except (LibraryRefused, OSError, ValueError) as refused:
+        print(f"library: the dictionary's first wave did not land: {refused}", file=sys.stderr)
+        return
+    for family in landed:
+        print(
+            f"library: the dictionary's first wave waits in the Library: {family}", file=sys.stderr
+        )
+
+
 def library_line(store: Store) -> DoctorLine:
     """The doctor's Library row: the store's health, its alarms and the line that stopped it."""
     state = store.state
@@ -946,6 +961,7 @@ async def serve(
                     land_first_unit(store)
                 if role == "pc":
                     land_ported_dictionary(store)
+                    land_dictionary_wave(store)
                 control.attach_library(store)
                 runtime = control.app_runtime()
                 runtime.attach_landers(

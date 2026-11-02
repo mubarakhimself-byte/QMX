@@ -1,0 +1,80 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "williams-percent-r",
+  "version": 1,
+  "family": "oscillator",
+  "aliases": [
+    "Williams %R",
+    "WPR"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Where the close sits in the high-low range of the last period bars, from 0 at the top to -100 at the bottom.",
+  "boundaries": "The stochastic's fast line upside down, with no smoothing.",
+  "recognition": "Above -20 reads as near the top of the range, below -80 near the bottom.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/wpr (read 2026-11-02)",
+      "quote": "is a dynamic technical indicator, which determines whether the market is overbought/oversold",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "2 x period",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:e7e25d6138ef785eb9df4c7a9b50a9802f5ecf9b1d3af627e34c1a86b36c3244",
+  "golden": {
+    "reference": "talib.WILLR 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "custom-indicator",
+  "version": 1,
+  "family": "indicator-reference",
+  "aliases": [
+    "iCustom",
+    "user indicator"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "An indicator someone wrote outside the built-ins, called by its file name with its own inputs and read one output buffer at a time.",
+  "boundaries": "Names the MetaTrader habit only and computes nothing; in QMX the same idea is a plain-Python block with its own entry, code and tests.",
+  "recognition": "A strategy that calls an indicator by file name instead of a built-in.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.mql5.com/en/docs/indicators/icustom (read 2026-11-02)",
+      "quote": "The function returns the handle of a specified custom indicator.",
+      "dated": "2026-11-02"
+    }
+  ]
+}

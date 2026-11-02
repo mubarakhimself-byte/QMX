@@ -466,29 +466,64 @@ def test_corpus_block_has_no_error(folder: str) -> None:
     assert (found.errors, entry["fingerprint"]) == ([], block_fingerprint(source).value)
 
 
-def test_corpus_entries_pass_the_entry_checker_and_compute_implemented() -> None:
-    golden = json.loads((_QML / "tests" / "golden" / "talib-0.7.1.json").read_text("utf-8"))
-    folders = sorted(p for p in _STDLIB.iterdir() if (p / "1" / "entry.json").is_file())
-    entries = {f.name: json.loads((f / "1" / "entry.json").read_text("utf-8")) for f in folders}
+_A4_PINS = (
+    "ema@1",
+    "fixed-fraction-at-stop@1",
+    "market-next-open@1",
+    "percentile-of-own-history@1",
+    "roc-of-series@1",
+    "rsi-cross-back@1",
+    "swing-stop-buffer@1",
+    "target-r-multiple@1",
+    "time-exit-bars@1",
+    "trend-floor-from-record@1",
+)
 
+
+def _golden(entry: Document) -> object:
+    declared = entry.get("golden")
+    cases = cast("dict[str, object]", declared).get("cases") if isinstance(declared, dict) else None
+    return json.loads((_QML.parent / cases).read_text("utf-8")) if isinstance(cases, str) else None
+
+
+def _stdlib_entries() -> dict[str, Document]:
+    folders = sorted(p for p in _STDLIB.iterdir() if (p / "1" / "entry.json").is_file())
+    return {f.name: json.loads((f / "1" / "entry.json").read_text("utf-8")) for f in folders}
+
+
+def _seed_entries() -> list[tuple[str, Document]]:
+    seeds = sorted((_QML / "catalogue-seed" / "wave-1").glob("*/*.json"))
+    return [(f"{p.parent.name}/{p.stem}", json.loads(p.read_text("utf-8"))) for p in seeds]
+
+
+def test_corpus_entries_pass_the_entry_checker_and_compute_implemented() -> None:
     computed = {
-        f"{name}@1": compute_status(entry, (_STDLIB / name / "1" / "block.py").read_bytes(), golden)
-        for name, entry in entries.items()
+        f"{name}@1": compute_status(
+            entry, (_STDLIB / name / "1" / "block.py").read_bytes(), _golden(entry)
+        )
+        for name, entry in _stdlib_entries().items()
     }
 
+    assert set(_A4_PINS) <= set(computed)
     assert {pin: (c.status, c.problems, c.missing) for pin, c in computed.items()} == dict.fromkeys(
-        (
-            "ema@1",
-            "fixed-fraction-at-stop@1",
-            "market-next-open@1",
-            "percentile-of-own-history@1",
-            "roc-of-series@1",
-            "rsi-cross-back@1",
-            "swing-stop-buffer@1",
-            "target-r-multiple@1",
-            "time-exit-bars@1",
-            "trend-floor-from-record@1",
-        ),
-        (Status.IMPLEMENTED, (), ()),
+        computed, (Status.IMPLEMENTED, (), ())
     )
-    assert corpus_problems(list(entries.values())) == ()
+
+
+@pytest.mark.parametrize(("name", "entry"), _seed_entries(), ids=[n for n, _ in _seed_entries()])
+def test_corpus_seed_entry_passes_the_entry_checker_below_implemented(
+    name: str, entry: Document
+) -> None:
+    computed = compute_status(entry)
+
+    assert (computed.status in {Status.NAMED, Status.SPECIFIED}, computed.problems) == (True, ())
+
+
+def test_corpus_names_no_entry_twice_across_qml_the_port_and_the_wave() -> None:
+    port = json.loads(
+        (_QML / "catalogue-seed" / "stats-2026-08-26" / "port.json").read_text("utf-8")
+    )
+    ported = [cast("Document", row["fields"]["entry"]) for row in port["drafts"]]
+    wave = [entry for _, entry in _seed_entries()]
+
+    assert corpus_problems([*_stdlib_entries().values(), *ported, *wave]) == ()

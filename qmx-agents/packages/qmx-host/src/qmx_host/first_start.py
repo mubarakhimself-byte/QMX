@@ -170,6 +170,10 @@ OPERATOR: Final = Principal("operator")
 PORT_SEED: Final = Path(qml.__file__).resolve().parents[2] / "catalogue-seed" / "stats-2026-08-26"
 """The frozen Stats dictionary and the drafts its port made (`tools/dictionary/port_stats.py`),
 in the checkout QMX runs from."""
+WAVE_SEED: Final = Path(qml.__file__).resolve().parents[2] / "catalogue-seed" / "wave-1"
+"""The first content wave's seed folders, one per family, each holding `qmx.entry/1` documents
+(A13), in the checkout QMX runs from."""
+SEED_NAMESPACE: Final = uuid.UUID("3b8f2c71-9a4e-5d06-8c1b-7e5a0f4d2c93")
 
 
 def default_old() -> Path:
@@ -682,6 +686,100 @@ def land_port(store: Store, seed: Path = PORT_SEED) -> PortLanded | None:
             put += 1
     store.put(OPERATOR, _port_draft("collection", collection), on=MAIN, expected_head=None)
     return PortLanded(str(collection["item"]), put, len(drafts) - put)
+
+
+@dataclass(frozen=True, slots=True)
+class SeedLanded:
+    family: str
+    collection: str
+    put: int
+    kept: int
+
+    def __str__(self) -> str:
+        return (
+            f"{self.family}: {self.put} drafts landed and {self.kept} kept "
+            f"in collection {self.collection}"
+        )
+
+
+def seed_rows(folder: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """A seed folder's collection and drafts, as `port.json` holds the port's. Each draft's
+    item is named from the family and the entry's pin, so an entry lands once whatever else
+    the folder holds; the collection's item is named from the family alone and carries the
+    folder's fingerprint."""
+    family = folder.name
+    entries = [
+        cast(dict[str, Any], json.loads(path.read_text("utf-8")))
+        for path in sorted(folder.glob("*.json"))
+    ]
+    drafts: list[dict[str, Any]] = []
+    for entry in entries:
+        pin = f"{entry['entry_id']}@{entry['version']}"
+        face = {k: v for k, v in entry.items() if k != "component_type"}
+        drafts.append(
+            {
+                "item": str(uuid.uuid5(SEED_NAMESPACE, f"wave-1/{family}/{pin}")),
+                "title": pin,
+                "tags": ["wave-1", family],
+                "fields": {"component_type": entry["component_type"], "entry": face},
+            }
+        )
+    collection = {
+        "item": str(uuid.uuid5(SEED_NAMESPACE, f"wave-1/{family}/collection")),
+        "title": f"The first content wave: {family}",
+        "tags": ["wave-1", family],
+        "fields": {
+            "items": [d["item"] for d in drafts],
+            "wave": "wave-1",
+            "family": family,
+            "source_fingerprint": _fingerprint({"family": family, "entries": entries}),
+        },
+    }
+    return collection, drafts
+
+
+def land_seed(store: Store, folder: Path) -> SeedLanded | None:
+    """One seed folder's entries as `component` drafts in one collection, once per store
+    (A13), or None when the collection on `main` already carries the folder's fingerprint.
+
+    As `land_port`: a draft whose item has a head already is kept as it is, so a landing a
+    crash cut short finishes and never writes over his edits, and publishing is his click. The
+    collection goes on `main` last; a folder that grew moves it to the new list."""
+    collection, drafts = seed_rows(folder)
+    if not drafts:
+        return None
+    item = str(collection["item"])
+    head = store.head(item, MAIN)
+    if head is not None:
+        held = store.get(OPERATOR, head[0]).fields.get("source_fingerprint")
+        if held == collection["fields"]["source_fingerprint"]:
+            return None
+    put = 0
+    for row in drafts:
+        draft_item = str(row["item"])
+        if store.head(draft_item, drafts_ref(draft_item)) is None and (
+            store.head(draft_item, MAIN) is None
+        ):
+            store.put(
+                OPERATOR,
+                _port_draft("component", row),
+                on=drafts_ref(draft_item),
+                expected_head=None,
+            )
+            put += 1
+    store.put(
+        OPERATOR,
+        _port_draft("collection", collection),
+        on=MAIN,
+        expected_head=None if head is None else head[0],
+    )
+    return SeedLanded(folder.name, item, put, len(drafts) - put)
+
+
+def land_wave(store: Store, wave: Path = WAVE_SEED) -> list[SeedLanded]:
+    """Every seed folder of the first content wave, each by `land_seed`, in name order."""
+    folders = sorted(p for p in wave.iterdir() if p.is_dir()) if wave.is_dir() else []
+    return [landed for f in folders if (landed := land_seed(store, f)) is not None]
 
 
 def open_existing(folder: Path, places: Places) -> Layout:
