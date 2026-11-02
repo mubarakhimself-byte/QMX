@@ -9,6 +9,11 @@ market's rows become pieces as its data card's fidelity declares (quotes, trades
 the bar builder folds them into the unit's bars in the venue's day, and each market keeps only
 a window of the unit's derived warm-up plus its declared lookback. The run's memory is the
 window's, whatever the run's length, and nothing caps the steps.
+
+A futures market replays contract by contract (QB-05): the data card's stitching record names
+the contracts and their roll instants, each contract's bars are its own prices, and the roll is
+an event in the feed, never a back-adjusted price. At a roll the market's window holds the next
+contract's own bars from before the roll, so the unit's warm-up never mixes two contracts.
 """
 
 # pyarrow ships no type stubs; as in the QMF store's typed writer, the unknown-type rules are
@@ -22,7 +27,7 @@ import csv
 import heapq
 import re
 import tempfile
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
@@ -72,13 +77,17 @@ __all__ = [
     "BarWindow",
     "DataCard",
     "Fidelity",
+    "FuturesChain",
     "PinnedInstrumentPriceMetadata",
     "Print",
     "RecordedReplaySource",
+    "Roll",
+    "RollHook",
     "SliceHook",
     "Tick",
     "TypedPartitionRef",
     "VenueDay",
+    "futures_feed",
     "read_bar_csv",
     "read_bar_pair_csv",
     "read_recorded_replay_source",
@@ -1224,6 +1233,12 @@ class BarWindow(Mapping[int, QuoteBar]):
         if len(self._bars) > self._size:
             self._bars.popitem(last=False)
 
+    def reset(self, bars: Iterable[QuoteBar]) -> None:
+        """Hold ``bars`` alone, as a roll does with the next contract's own bars."""
+        self._bars.clear()
+        for bar in bars:
+            self.push(bar)
+
     def __getitem__(self, key: int) -> QuoteBar:
         return self._bars[key]
 
@@ -1242,31 +1257,41 @@ def window_size(compiled: CompiledUnit, lookback: int = 0) -> int:
 SliceHook = Callable[[Instant, Sequence[str]], None]
 """Told each slice's instant and the markets whose bar closed there, before the slice runs."""
 
+RollHook = Callable[[str, "Roll"], None]
+"""Told each market's roll, once, at the roll's instant and before any slice there runs."""
+
 
 def replay_windowed(
     handler: UnitSliceHandler,
-    feeds: Mapping[str, Iterable[QuoteBar | TypedRefusal]],
+    feeds: Mapping[str, Iterable[QuoteBar | Roll | TypedRefusal]],
     windows: Mapping[str, BarWindow],
     *,
     on_slice: SliceHook | None = None,
+    on_roll: RollHook | None = None,
 ) -> Result[int]:
     """Drive ``handler`` one bar instant at a time over every market's feed; answer the steps.
 
     ``windows`` are the bars the handler was started with, so each bar enters its market's
-    window just before the slice that observes it. A slice lists its markets in ``feeds``'
-    order.
+    window just before the slice that observes it. A slice lists its markets in the order of
+    ``feeds``. A futures feed's roll swaps its market's window for the next contract's own bars
+    before the slice at the roll's instant. A unit cannot yet see a roll and act on it with its
+    exits, so a roll reached while the unit holds or waits to fill on that market refuses the
+    run rather than carry a position from one contract into the next.
     """
     streams = StreamSet.try_create([DeclaredStream(market, market) for market in feeds])
     if is_refusal(streams):
         return streams
     failed: list[TypedRefusal] = []
 
-    def timed(order: int, market: str, feed: Iterable[QuoteBar | TypedRefusal]) -> Iterator[_Timed]:
+    def timed(
+        order: int, market: str, feed: Iterable[QuoteBar | Roll | TypedRefusal]
+    ) -> Iterator[tuple[int, int, str, QuoteBar | Roll]]:
         for item in feed:
             if isinstance(item, TypedRefusal):
                 failed.append(item)
                 return
-            yield item.knowable_at.value_ns, order, market, item
+            at = item.at_ns if isinstance(item, Roll) else item.knowable_at.value_ns
+            yield at, order, market, item
 
     merged = heapq.merge(
         *(timed(i, m, f) for i, (m, f) in enumerate(feeds.items())), key=lambda t: (t[0], t[1])
@@ -1276,11 +1301,31 @@ def replay_windowed(
     steps = 0
     for ns, group in groupby(merged, key=lambda t: t[0]):
         markets: list[str] = []
-        for _, _, market, bar in group:
-            windows[market].push(bar)
+        for _, _, market, item in group:
+            if isinstance(item, Roll):
+                held = market in handler.open_positions or any(
+                    r.stream_id == market for r in resting
+                )
+                if held:
+                    return policy(
+                        "roll",
+                        "a futures roll was reached with a position or a resting order on the "
+                        "market; QMB never carries one from one contract into the next",
+                        market=market,
+                        contract=item.contract,
+                        next_contract=item.next_contract,
+                        at_ns=item.at_ns,
+                    )
+                windows[market].reset(item.warm)
+                if on_roll is not None:
+                    on_roll(market, item)
+                continue
+            windows[market].push(item)
             markets.append(market)
         if failed:
             return failed[0]
+        if not markets:
+            continue
         if on_slice is not None:
             on_slice(Instant(ns), markets)
         outcome = run_slice(
@@ -1297,3 +1342,135 @@ def replay_windowed(
     if failed:
         return failed[0]
     return Ok(steps)
+
+
+# --- futures, contract by contract (QB-05) ---------------------------------------------------
+
+CONTRACT_BY_CONTRACT: Final[str] = "contract-by-contract"
+
+
+@dataclass(frozen=True, slots=True)
+class Roll:
+    """A futures market moved from ``contract`` to ``next_contract`` at ``at_ns``.
+
+    It is an event and moves no price: ``warm`` is the next contract's own last bars before the
+    roll, which become the market's window.
+    """
+
+    at_ns: int
+    contract: str
+    next_contract: str
+    warm: tuple[QuoteBar, ...] = ()
+
+    def as_record(self) -> dict[str, object]:
+        return {
+            "event_kind": "roll",
+            "at_ns": self.at_ns,
+            "contract": self.contract,
+            "next_contract": self.next_contract,
+        }
+
+
+def _utc_ns(text: object) -> int | None:
+    if not isinstance(text, str):
+        return None
+    try:
+        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        return None
+    return _ns_of(moment)
+
+
+@dataclass(frozen=True, slots=True)
+class FuturesChain:
+    """The contracts a futures series replays, in order, and the instant each one rolls."""
+
+    contracts: tuple[str, ...]
+    rolls_ns: tuple[int, ...]
+
+    @classmethod
+    def try_create(cls, card: Mapping[str, object]) -> Result[FuturesChain]:
+        """Read a ``dataset`` card's ``stitching`` and ``rolls`` (version 2).
+
+        Only a contract-by-contract card replays. A card that says its prices were adjusted is
+        refused by name, because a back-adjusted price is a price no contract ever traded at.
+        """
+        stitching = card.get("stitching")
+        if not isinstance(stitching, Mapping):
+            return invalid("stitching", "a futures card states how its contracts are stitched")
+        shape = cast("Mapping[str, object]", stitching)
+        if shape.get("method") != CONTRACT_BY_CONTRACT or shape.get("adjusted") is not False:
+            return policy(
+                "stitching",
+                "QMB replays futures contract by contract and never a back-adjusted price",
+                method=shape.get("method"),
+                adjusted=shape.get("adjusted"),
+            )
+        rolls = card.get("rolls")
+        if not isinstance(rolls, list) or not rolls:
+            return invalid("rolls", "a futures card lists at least one roll")
+        contracts: list[str] = []
+        instants: list[int] = []
+        for index, raw in enumerate(cast("list[object]", rolls)):
+            if not isinstance(raw, Mapping):
+                return invalid("rolls", "a roll is {at, from, to}", index=index)
+            roll = cast("Mapping[str, object]", raw)
+            at, old, new = _utc_ns(roll.get("at")), roll.get("from"), roll.get("to")
+            if at is None or not isinstance(old, str) or not isinstance(new, str) or not old:
+                return invalid(
+                    "rolls", "a roll names its UTC instant and both contracts", index=index
+                )
+            if contracts and (old != contracts[-1] or at <= instants[-1]):
+                return invalid(
+                    "rolls",
+                    "each roll starts from the contract the last one rolled to, later in time",
+                    index=index,
+                )
+            contracts += [new] if contracts else [old, new]
+            instants.append(at)
+        return Ok(cls(tuple(contracts), tuple(instants)))
+
+
+def futures_feed(
+    chain: FuturesChain,
+    card: DataCard,
+    rows: Mapping[str, Callable[[], Iterable[Row | TypedRefusal]]],
+    builder: Callable[[], BarBuilder],
+    *,
+    window: int,
+    until_ns: int = 0,
+) -> Iterator[QuoteBar | Roll | TypedRefusal]:
+    """One futures market's bars, each contract's own, with a roll between two contracts.
+
+    ``rows`` opens each contract's own rows. A contract's bars that become knowable before its
+    roll in are kept, the last ``window`` of them, as the window it rolls in with, and its bars
+    from its roll out on are never read. The last contract runs to ``until_ns``.
+    """
+    for index, contract in enumerate(chain.contracts):
+        opens = rows.get(contract)
+        if opens is None:
+            yield invalid("rows", "every contract on the card has its rows", contract=contract)
+            return
+        roll_in = chain.rolls_ns[index - 1] if index else None
+        roll_out = chain.rolls_ns[index] if index < len(chain.rolls_ns) else None
+        warm: deque[QuoteBar] = deque(maxlen=max(1, window))
+        pending = roll_in is not None
+        feed = replay_feed(card, opens(), builder(), until_ns=until_ns if roll_out is None else 0)
+        for bar in feed:
+            if isinstance(bar, TypedRefusal):
+                yield bar
+                return
+            at = bar.knowable_at.value_ns
+            if roll_out is not None and at >= roll_out:
+                break
+            if roll_in is not None and pending and at < roll_in:
+                warm.append(bar)
+                continue
+            if roll_in is not None and pending:
+                yield Roll(roll_in, chain.contracts[index - 1], contract, tuple(warm))
+                pending = False
+            yield bar
+        if roll_in is not None and pending:
+            yield Roll(roll_in, chain.contracts[index - 1], contract, tuple(warm))
