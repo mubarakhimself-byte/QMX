@@ -459,11 +459,13 @@ def report(made: Port) -> tuple[list[str], int]:
 
 def land(home: Path) -> str:
     """Land the drafts into the Library of the QMX folder ``home`` as the host does at a start.
-    The host lives in the qmx-agents environment, so it is imported only here."""
+    The host lives in the qmx-agents environment, so it is imported only here. The host's
+    checkers are registered first, so each draft meets the entry checker a start's put meets."""
     store = importlib.import_module("qmx_control.library").open_store(home)
-    first_start = importlib.import_module("qmx_host.first_start")
+    host = importlib.import_module("qmx_host.host")
     try:
-        landed = first_start.land_port(store, SEED)
+        host.register_checkers(store)
+        landed = importlib.import_module("qmx_host.first_start").land_port(store, SEED)
     finally:
         store.close()
     return "nothing new: the port is in this Library already" if landed is None else str(landed)
