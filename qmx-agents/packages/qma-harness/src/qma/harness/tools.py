@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import glob
 import hashlib
 import json
 import logging
@@ -43,7 +44,7 @@ from qmx_control.catalog import (
     rows,
     spill,
 )
-from qmx_home.classes import secret_paths
+from qmx_home.classes import secret_globs, secret_paths
 
 from qma.harness.delegate import DelegateRefused
 from qma.harness.guard import QMX_SERVER, GuardRules, Rule, is_qmx_server, normalize_path
@@ -933,6 +934,17 @@ def _in_folder(home: QmxHome, path: str) -> Path:
     return home.root / inner if inner != path else home.layout.root / path
 
 
+def _secret_globs(home: QmxHome) -> tuple[str, ...]:
+    """Each wildcard `secret` rule of the class table under the home as written and as
+    resolved, the folder's own path glob-escaped so only the table's wildcards match."""
+    found: list[str] = []
+    for pattern in secret_globs():
+        inner = pattern.removeprefix("data/")
+        root, rest = (home.root, inner) if inner != pattern else (home.layout.root, pattern)
+        found += [f"{glob.escape(base)}/{rest}" for base in _both([root])]
+    return tuple(dict.fromkeys(found))
+
+
 STORE_FILES: Final = ("control.db", "portfolio.db", "library.db", "memory.db", "runs.db")
 """The QMX home's SQLite stores, each with its `-wal`, `-shm` and `-journal` files."""
 
@@ -987,6 +999,7 @@ def guard_rules(
         delete_zones=() if workspace is None else _both([workspace]),
         never=rule_rows(lists.get("never_allow")),
         always=rule_rows(lists.get("always_allow")),
+        secret_globs=_secret_globs(home),
         variables=MappingProxyType(
             {
                 "HOME": _posix(Path.home()),
