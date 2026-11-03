@@ -250,6 +250,7 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - X6: 47 hybrids, 58 variables, UI requests for 16 screens;
     - X5: 48 hybrids, 154 variables;
     - X7: 49 hybrids, 33 variables.
+    - X1: 78 hybrids, 90 variables. Its biggest restructure proposal replaces the Book and BMS containers with a unit profile, cluster tags and one portfolio guard config; he must choose the vocabulary. With all additions loaded, the checker reports 5 cross-layer duplicate warnings (X1 against X0, X6 and X7); the funnel merges them.
     **Safety flag for him and the build session (from X7):** the cTrader MCP being shipped was not checked. If it is a separate server with order tools, it could bypass the operator-only guard (agents never touch money; only he deploys or flattens). The build session should confirm that the MCP's order tools sit behind the same guard, or are left out.
 
 ## The unit build is not ours to audit (operator, 2026-11-01)
