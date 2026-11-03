@@ -30,6 +30,10 @@ dependencies = [
 requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
+[tool.uv]
+# An app installs qmf-indicators as a wheel (`uv sync --no-editable`); rebuild it on any source edit.
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**" }]
+
 [tool.uv.build-backend]
 # PEP 420 namespace submodule. Dot notation tells uv_build the module lives at
 # src/qmf/indicators/ with NO src/qmf/__init__.py anywhere in the distribution.
