@@ -622,13 +622,16 @@ ALARMS: Final = (
         "Name an ntfy topic so the node can wake you on your phone while This PC is off. Install "
         "the ntfy app, subscribe to a topic name only you know, then write the topic's address "
         "(https://ntfy.sh/ and your topic) to the key qmx/node-ntfy-topic. A test notification "
-        "reaches your phone as soon as it is there",
+        "reaches your phone as soon as it is there. Until the node reads market calendars it "
+        "pushes only protection escalations and a long clock hold; risk stops, a broker link "
+        "down and failing healing stay quiet",
         "https://docs.ntfy.sh/subscribe/phone/",
         "POST",
         {"Title": "QMX test", "Priority": "3"},
         b"A test from the trading node's setup. Alarms that need you will arrive here.",
-        "push: a test notification went to your ntfy topic; the node pushes its alarms there from "
-        "its next start",
+        "push: a test notification went to your ntfy topic; from its next start the node pushes "
+        "protection escalations and a long clock hold there, and the alarms that follow market "
+        "hours once it reads market calendars",
     ),
     Alarm(
         "liveness",
