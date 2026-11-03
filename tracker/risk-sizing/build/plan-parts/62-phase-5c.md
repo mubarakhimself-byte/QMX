@@ -275,11 +275,61 @@ Phase 5, the trading node and external connections. Part C slice C-20, Part C AD
 
 @merge
 
+## Move the two example apps off the host's bearer (C-27a)
+
+Phase 5, the trading node and external connections. Added by the C-27 build of 2026-11-03 (PR 313 at 90253c02), whose refusal turned 12 `qmx-apps` tests red. Built facts. `examples/apps/macro-daily-bias` reads `qmx/control-token` as `QMX_DATA_TOKEN` and calls the data door with it as `operator` (`macro_bias.py:129`), beside an agent it declares. `examples/apps/mql5-articles` reads it as `QMX_CONTROL_TOKEN` and calls `library_search` and `library_save` on the host MCP at `127.0.0.1:8766` (`collector.py:212-260`, `:409`). The host already gives apps both things without a bearer. `data_reads = ["market"]` hands an app the read-only market root (`supervisor.py:711-713`, the MIS's route), and a job result `{output, data}` lands as a Library artifact through the host's sink (`supervisor.py:1302-1312`, `artifacts.py`), but only one output per run. Real step none. Done when neither example declares any host secret, macro-daily-bias reads its bars from the market root, mql5-articles lands each article as its own Library artifact through its job result, and the shipped `qmx-apps` tests pass with C-27's refusal in.
+
+**Depends on.** C-05d.
+
+**Files.**
+
+- [ ] Edit `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py` (`:1302-1312`, a job result may carry `outputs`, a list of `{output, data}`, each landed through `artifacts.save`; an output with a lander still lands once per run, as today).
+- [ ] Edit `qmx-agents/packages/qmx-apps/src/qmx_apps/artifacts.py` (a ref already in the index with a Library id is not landed again, so a re-sent output adds no second Library item).
+- [ ] Edit `examples/apps/macro-daily-bias/app.toml` (drop `QMX_DATA_TOKEN`, `data_reads = ["market"]`, network keeps only the model route), `macro_bias.py` (bars from `QMX_MARKET_ROOT` through `qmf.data.series.SeriesStore`, M1 rolled up to the configured timeframe the way `qmx-agents/apps/mis/mis_core.py` rolls H1; `data_url` and the `Client` call go) and `config.json` (`data_url` becomes `market`, the store's series key for the symbol).
+- [ ] Edit `examples/apps/mql5-articles/app.toml` (no `secrets`, network `www.mql5.com` only, a `[provides.mql5-article]` contract with title, source URL, sha256, published date, markdown), `collector.py` (`run_daily` answers `outputs` with the pending articles, oldest first, at most `[publish] per_run` (200); the `Client`, the `8766` URL and the `library_search` lookup go; a row is marked landed at the next run's start once its ref reads landed) and `README.md`.
+- [ ] Edit `examples/apps/macro-daily-bias/tests/test_bias.py`, `qmx-agents/packages/qmx-apps/tests/test_shipped_apps.py`, `test_app2a.py`, `test_app2b.py` and `test_mql5_articles.py`. Create `qmx-agents/packages/qmx-apps/tests/test_job_outputs.py`.
+
+**Build.**
+
+- [ ] The two examples hold no host secret, so C-27's refusal can land as built. `QMX_MODEL_KEY = "qmx/cliproxy"` stays in macro-daily-bias. It is not one of the host's names, and its move to `llm_complete(role)` is BACKLOG RTR4.
+- [ ] No exemption for example apps. Examples get copied, so they show the pattern every app follows.
+- [ ] No new credential kind. An app-scoped host pass is not needed for either example and is not built here.
+
+**You see.**
+
+- [ ] Both example apps install and run with no host pass, and MQL5 articles still reach the Library one item per article.
+
+**Verify, unit.**
+
+- [ ] A job answering three outputs lands three artifacts. The same output sent twice leaves one Library item. A lander output still lands once per run. macro-daily-bias computes its bias from a fixture market store with no network. mql5-articles lands a fixture batch with no host call. Run `uv run --project qmx-agents pytest packages/qmx-apps/tests -q` and `uv run --project examples/apps/macro-daily-bias pytest examples/apps/macro-daily-bias/tests -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. Grep both example manifests and sources for `control-token`, `CONTROL_TOKEN`, `DATA_TOKEN` and `8766`. Save `c27a-grep.log`. Pass when nothing matches.
+- [ ] Lane 3. Install and run macro-daily-bias's daily job on a throwaway folder with a fixture market store, the model pointed at a stub. Save `c27a-macro.log`. Pass when the bias lands and the job never calls the host.
+- [ ] Lane 4. Install mql5-articles on a throwaway folder, import 50 seed articles, run the daily job with the network off. Save `c27a-mql5.log`. Pass when 50 Library items land, one per article.
+- [ ] Lane 5. Run that job again. Save `c27a-mql5-again.log`. Pass when no second Library item appears.
+- [ ] Lane 6. Apply C-27's refusal on top and install every shipped app. Save `c27a-with-c27.log`. Pass when each installs.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Seconds to land 200 articles in one job result.
+- [ ] Probe. Lane 4 at 200.
+- [ ] Baseline. None, first measure.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lenses edge-case and adversarial, on the many-outputs landing and the duplicate rule. The blast-radius fact is that every other shipped app's job result still lands exactly as before, because a result without `outputs` takes the old path.
+
+@merge
+
+
 ## Refuse the host's own pass in every app manifest (C-27)
 
 Phase 5, the trading node and external connections. Added by the validation of 2026-11-03. BACKLOG TOP "his host bearer is reachable by an app manifest". Built fact. the bearer counts as `operator` (lows.md, B16 notes), so an app that declares it can promote to live. Real step none. Done when a manifest naming `qmx/CONTROL-TOKEN`, in any letter case, is refused on every role.
 
-**Depends on.** C-05d.
+**Depends on.** C-05d, C-27a.
 
 **Files.**
 

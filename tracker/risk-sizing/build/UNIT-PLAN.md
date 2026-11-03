@@ -122,20 +122,21 @@ The dispatch order, generated from the sections below by `plan-parts/assemble.mj
 | 64 | C-18 | 5 | Wake him through his phone when it matters, and ping a liveness watcher | C-12a, C-11 |
 | 65 | C-19 | 5 | Update a server's node and MIS at a safe moment | C-17 |
 | 66 | C-20 | 5 | Cut the old node shell once the new one has traded on demo | C-14, C-15, C-12d, C-12b, C-12c, C-13 |
-| 67 | C-27 | 5 | Refuse the host's own pass in every app manifest | C-05d |
-| 68 | C-28 | 5 | Give each host its own pass key | C-17 |
-| 69 | C-29 | 5 | Deploy only the markets he chose, and show a refused deploy | C-23, C-12d |
-| 70 | C-30 | 5 | Let alarms read the market calendar and new keys | C-18, C-12d |
-| 71 | C-21 | 5 | Build the deliberate path to bind a live account | C-17, C-18, C-12d, C-25, C-27, C-28, C-29, C-30 |
-| 72 | C-22 | 5 | Let the node read the MIS board, with a fallback | C-09, C-12a |
-| 73 | B2 | 6 | Make every example and first-party app start and answer, tested in CI | B1, B6, C-09, C-10 |
-| 74 | B18a | 6 | Build the shared pieces the build-and-prove templates need | B13, A8 |
-| 75 | B18b | 6 | Build the shared pieces the slow lane needs | B13, B15, C-03 |
-| 76 | B18c | 6 | Fix the shipped templates surgically | B13 |
-| 77 | B19 | 6 | Turn a strategy idea into a tested unit with the build-and-prove family | B14, B18a, B18c, A11 |
-| 78 | B20 | 6 | Run the slow lane on This PC | B15, B18b, C-24, C-09 |
-| 79 | B16 | 6 | Bring node records home from servers | B8, B15, C-06 |
-| 80 | B21 | 6 | Watch trading nodes without ever touching them | B16, C-06, C-12a |
+| 67 | C-27a | 5 | Move the two example apps off the host's bearer | C-05d |
+| 68 | C-27 | 5 | Refuse the host's own pass in every app manifest | C-05d, C-27a |
+| 69 | C-28 | 5 | Give each host its own pass key | C-17 |
+| 70 | C-29 | 5 | Deploy only the markets he chose, and show a refused deploy | C-23, C-12d |
+| 71 | C-30 | 5 | Let alarms read the market calendar and new keys | C-18, C-12d |
+| 72 | C-21 | 5 | Build the deliberate path to bind a live account | C-17, C-18, C-12d, C-25, C-27, C-28, C-29, C-30 |
+| 73 | C-22 | 5 | Let the node read the MIS board, with a fallback | C-09, C-12a |
+| 74 | B2 | 6 | Make every example and first-party app start and answer, tested in CI | B1, B6, C-09, C-10 |
+| 75 | B18a | 6 | Build the shared pieces the build-and-prove templates need | B13, A8 |
+| 76 | B18b | 6 | Build the shared pieces the slow lane needs | B13, B15, C-03 |
+| 77 | B18c | 6 | Fix the shipped templates surgically | B13 |
+| 78 | B19 | 6 | Turn a strategy idea into a tested unit with the build-and-prove family | B14, B18a, B18c, A11 |
+| 79 | B20 | 6 | Run the slow lane on This PC | B15, B18b, C-24, C-09 |
+| 80 | B16 | 6 | Bring node records home from servers | B8, B15, C-06 |
+| 81 | B21 | 6 | Watch trading nodes without ever touching them | B16, C-06, C-12a |
 
 ### PR mechanics, for every PR
 
@@ -3856,11 +3857,72 @@ Phase 5, the trading node and external connections. Part C slice C-20, Part C AD
 - [ ] Appended to the stack on `build/unit-system`. Nothing merges. He lands the stack himself.
 
 
+## Move the two example apps off the host's bearer (C-27a)
+
+Phase 5, the trading node and external connections. Added by the C-27 build of 2026-11-03 (PR 313 at 90253c02), whose refusal turned 12 `qmx-apps` tests red. Built facts. `examples/apps/macro-daily-bias` reads `qmx/control-token` as `QMX_DATA_TOKEN` and calls the data door with it as `operator` (`macro_bias.py:129`), beside an agent it declares. `examples/apps/mql5-articles` reads it as `QMX_CONTROL_TOKEN` and calls `library_search` and `library_save` on the host MCP at `127.0.0.1:8766` (`collector.py:212-260`, `:409`). The host already gives apps both things without a bearer. `data_reads = ["market"]` hands an app the read-only market root (`supervisor.py:711-713`, the MIS's route), and a job result `{output, data}` lands as a Library artifact through the host's sink (`supervisor.py:1302-1312`, `artifacts.py`), but only one output per run. Real step none. Done when neither example declares any host secret, macro-daily-bias reads its bars from the market root, mql5-articles lands each article as its own Library artifact through its job result, and the shipped `qmx-apps` tests pass with C-27's refusal in.
+
+**Depends on.** C-05d.
+
+**Files.**
+
+- [ ] Edit `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py` (`:1302-1312`, a job result may carry `outputs`, a list of `{output, data}`, each landed through `artifacts.save`; an output with a lander still lands once per run, as today).
+- [ ] Edit `qmx-agents/packages/qmx-apps/src/qmx_apps/artifacts.py` (a ref already in the index with a Library id is not landed again, so a re-sent output adds no second Library item).
+- [ ] Edit `examples/apps/macro-daily-bias/app.toml` (drop `QMX_DATA_TOKEN`, `data_reads = ["market"]`, network keeps only the model route), `macro_bias.py` (bars from `QMX_MARKET_ROOT` through `qmf.data.series.SeriesStore`, M1 rolled up to the configured timeframe the way `qmx-agents/apps/mis/mis_core.py` rolls H1; `data_url` and the `Client` call go) and `config.json` (`data_url` becomes `market`, the store's series key for the symbol).
+- [ ] Edit `examples/apps/mql5-articles/app.toml` (no `secrets`, network `www.mql5.com` only, a `[provides.mql5-article]` contract with title, source URL, sha256, published date, markdown), `collector.py` (`run_daily` answers `outputs` with the pending articles, oldest first, at most `[publish] per_run` (200); the `Client`, the `8766` URL and the `library_search` lookup go; a row is marked landed at the next run's start once its ref reads landed) and `README.md`.
+- [ ] Edit `examples/apps/macro-daily-bias/tests/test_bias.py`, `qmx-agents/packages/qmx-apps/tests/test_shipped_apps.py`, `test_app2a.py`, `test_app2b.py` and `test_mql5_articles.py`. Create `qmx-agents/packages/qmx-apps/tests/test_job_outputs.py`.
+
+**Build.**
+
+- [ ] The two examples hold no host secret, so C-27's refusal can land as built. `QMX_MODEL_KEY = "qmx/cliproxy"` stays in macro-daily-bias. It is not one of the host's names, and its move to `llm_complete(role)` is BACKLOG RTR4.
+- [ ] No exemption for example apps. Examples get copied, so they show the pattern every app follows.
+- [ ] No new credential kind. An app-scoped host pass is not needed for either example and is not built here.
+
+**You see.**
+
+- [ ] Both example apps install and run with no host pass, and MQL5 articles still reach the Library one item per article.
+
+**Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] A job answering three outputs lands three artifacts. The same output sent twice leaves one Library item. A lander output still lands once per run. macro-daily-bias computes its bias from a fixture market store with no network. mql5-articles lands a fixture batch with no host call. Run `uv run --project qmx-agents pytest packages/qmx-apps/tests -q` and `uv run --project examples/apps/macro-daily-bias pytest examples/apps/macro-daily-bias/tests -q`.
+
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu, and the coordinator runs at most one of them.
+
+- [ ] Lane 1. Regression against the parent. The coordinator runs `just ci` at the PR head under `D:/QMX-worktrees/.ci-lock`, with `TEMP` and `TMP` on `D:/Temp`, then reruns any failing test at the parent. Save `c27a-ci.log`. Pass when the head fails nothing the parent passes.
+- [ ] Lane 2. Grep both example manifests and sources for `control-token`, `CONTROL_TOKEN`, `DATA_TOKEN` and `8766`. Save `c27a-grep.log`. Pass when nothing matches.
+- [ ] Lane 3. Install and run macro-daily-bias's daily job on a throwaway folder with a fixture market store, the model pointed at a stub. Save `c27a-macro.log`. Pass when the bias lands and the job never calls the host.
+- [ ] Lane 4. Install mql5-articles on a throwaway folder, import 50 seed articles, run the daily job with the network off. Save `c27a-mql5.log`. Pass when 50 Library items land, one per article.
+- [ ] Lane 5. Run that job again. Save `c27a-mql5-again.log`. Pass when no second Library item appears.
+- [ ] Lane 6. Apply C-27's refusal on top and install every shipped app. Save `c27a-with-c27.log`. Pass when each installs.
+- [ ] Lane 7. Grep every lane log of this PR for key, token and password values. Save `c27a-leak.log`. Pass when none appears.
+- [ ] Lane 8. Start the host at the head on a fresh throwaway QMX folder, read its health route, then stop it. Save `c27a-boot.log`. Pass when the host answers and stops clean.
+- [ ] Lane 9. Run the PR's new tests three times in a row. Save `c27a-repeat.log`. Pass when the three runs agree.
+- [ ] Lane 10. Remove the throwaway folders and the check worktree, then list processes. Save `c27a-processes.log`. Pass when no `qmx_host`, `claude`, `node` or lane process is left.
+
+**Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] Metric. Seconds to land 200 articles in one job result.
+- [ ] Probe. Lane 4 at 200.
+- [ ] Baseline. None, first measure.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** A fresh Opus reviewer checks this PR before it joins the stack. Lenses edge-case and adversarial, on the many-outputs landing and the duplicate rule. The blast-radius fact is that every other shipped app's job result still lands exactly as before, because a result without `outputs` takes the old path.
+
+- [ ] A fresh Opus reviewer agent (`model: opus`, told not to spawn sub-agents) reads this section, the full diff and the lane logs, applies the lenses named above, and reruns the blast-radius fact named above. It writes `review/c27a-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] No screenshot or video is made, because no PR in this program changes a screen (ruling 45). The operator reviews the whole stack when he lands it.
+
+**Merge.**
+
+- [ ] The CLEAN verdict at the exact head, or after the one fix round.
+- [ ] Lows in `lows.md`, new findings in `BACKLOG.md` and `IDEAS.md`, the verdict, head, parent and patch-id in `ledger.tsv`.
+- [ ] Appended to the stack on `build/unit-system`. Nothing merges. He lands the stack himself.
+
+
+
 ## Refuse the host's own pass in every app manifest (C-27)
 
 Phase 5, the trading node and external connections. Added by the validation of 2026-11-03. BACKLOG TOP "his host bearer is reachable by an app manifest". Built fact. the bearer counts as `operator` (lows.md, B16 notes), so an app that declares it can promote to live. Real step none. Done when a manifest naming `qmx/CONTROL-TOKEN`, in any letter case, is refused on every role.
 
-**Depends on.** C-05d.
+**Depends on.** C-05d, C-27a.
 
 **Files.**
 
@@ -4672,12 +4734,12 @@ Generated by `plan-parts/assemble.mjs` from every Files block. Two PRs on the sa
 
 | PR | Never runs beside | Its shared paths |
 |---|---|---|
-| B1 | B5, C-05a, A9, B12, C-05b, C-05c, C-17, C-21 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-control/src/qmx_control/service.py` |
+| B1 | B5, C-05a, A9, B12, C-05b, C-05c, C-17, C-27a, C-21 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-control/src/qmx_control/service.py` |
 | B3 | A6, B6, B12, B13, B14, B15, C-09, C-06, C-10 | `tools/ci.py`, `qmx-agents/packages/qmx-judge/`, `qmx-agents/packages/qmx-tools/src/qmx_tools/service.py`, `tools/test_all.py`, `qmx-agents/packages/qmx-tools/tests/test_tools.py` |
 | A4 | A11, A13a, A13b, A13c, A13d, A15 | `qml/src/qml/blocks/stdlib/`, `qml/tests/golden/`, `tools/dictionary/golden_talib.py`, `qml/src/qml/blocks/api.py` |
-| B5 | B1, C-05a, A7, A12, B13, B15, C-05b, C-05c, C-01, C-04, C-05d, C-06, C-10, C-23, C-17, C-27, C-21 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py` |
+| B5 | B1, C-05a, A7, A12, B13, B15, C-05b, C-05c, C-01, C-04, C-05d, C-06, C-10, C-23, C-17, C-27a, C-27, C-21 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-apps/src/qmx_apps/artifacts.py` |
 | A5 | A10 | `qml/src/qml/protocol/unit.py` |
-| C-05a | B1, B5, C-05b, C-05c, C-10, C-17, C-27 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py` |
+| C-05a | B1, B5, C-05b, C-05c, C-10, C-17, C-27a, C-27 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py` |
 | A6 | B3 | `tools/ci.py` |
 | B5b | B9, B10 | `qmb/src/qmb/host/unit_runner.py` |
 | A7 | B5, B6, C-02, A12, A13a, B13, B15, C-05c, C-09, C-01, C-04, C-05d, C-06, C-23, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/gather.py` |
@@ -4702,10 +4764,10 @@ Generated by `plan-parts/assemble.mjs` from every Files block. Two PRs on the sa
 | B14 | B3, B6 | `qmx-agents/packages/qmx-judge/src/qmx_judge/landing.py`, `qmx-agents/apps/qmb/jobs/sweep.py`, `qmx-agents/apps/qmb/jobs/walk_forward.py`, `qmx-agents/apps/qmb/jobs/robustness.py`, `qmx-agents/apps/qmb/jobs/optimize.py`, `qmx-agents/apps/qmb/jobs/whatif.py`, `qmx-agents/apps/qmb/jobs/replay_check.py`, `qmx-agents/apps/qmb/tests/` |
 | B15 | B3, B5, A7, B6, A8, A11, A12, B12, B13, C-05c, C-24, C-01, C-04, C-05d, C-06, C-23, C-21, B16 | `qmx-agents/packages/qmx-tools/tests/test_tools.py`, `qmx-agents/packages/qmx-judge/src/qmx_judge/paper.py`, `qmx-agents/packages/qmx-judge/tests/test_no_bot_writes.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`, `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-host/src/qmx_host/records.py` |
 | A14 | A8, C-24 | `qmx-agents/plugin/plugin.manifest.json`, `qmx-agents/packages/qma-harness/tests/live/test_unit_hook_probe.py` |
-| C-05b | B1, B5, C-05a, C-05c, C-17 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py` |
-| C-05c | B1, B5, C-05a, A7, A12, B13, B15, C-05b, C-01, C-04, C-05d, C-06, C-23, C-17, C-21 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py` |
+| C-05b | B1, B5, C-05a, C-05c, C-17, C-27a | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py` |
+| C-05c | B1, B5, C-05a, A7, A12, B13, B15, C-05b, C-01, C-04, C-05d, C-06, C-23, C-17, C-27a, C-21 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py` |
 | C-08 | C-20 | `qmn/src/qmn/host/`, `qmn/src/qmn/seats/host.py` |
-| C-09 | B3, A7, B6, A12, A13a, C-10 | `tools/test_all.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py` |
+| C-09 | B3, A7, B6, A12, A13a, C-10, C-27a | `tools/test_all.py`, `qmx-agents/packages/qmx-host/src/qmx_host/first_start.py`, `qmx-agents/apps/mis/` |
 | C-24 | B6, A8, A11, B12, B13, B15, A14, C-06, C-25 | `qmx-agents/packages/qmx-control/src/qmx_control/catalog.py`, `qmx-agents/packages/qmx-tools/src/qmx_tools/functions.py`, `qmx-agents/packages/qma-harness/tests/` |
 | C-01 | B5, A7, A12, B13, B15, C-05c, C-04, C-05d, C-06, C-23, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py` |
 | C-04 | B5, A7, A12, B13, B15, C-05c, C-01, C-05d, C-06, C-23, C-17, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_logs.py` |
@@ -4722,15 +4784,17 @@ Generated by `plan-parts/assemble.mjs` from every Files block. Two PRs on the sa
 | C-12d | C-10, C-11, C-17, C-18, C-20, C-28, C-30, C-21 | `qmn/src/qmn/app/operations.py`, `qmn/src/qmn/app/server.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py`, `qmn/src/qmn/app/grants.py`, `qmn/tests/test_app_grants.py`, `qmn/tests/test_app_binding.py` |
 | C-16 | C-20 | `qmn/tests/test_ccxt_client.py` |
 | C-25 | A8, C-24, C-05e | `qmx-agents/packages/qma-harness/src/qma/harness/tools.py`, `qmx-agents/packages/qma-harness/tests/test_guard_secret_globs.py`, `qmx-agents/packages/qmx-home/src/qmx_home/classes.py` |
-| C-17 | B1, B5, C-05a, A9, B12, C-05b, C-05c, C-04, C-11, C-12d, C-18, C-28, C-21 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_logs.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py` |
+| C-17 | B1, B5, C-05a, A9, B12, C-05b, C-05c, C-04, C-11, C-12d, C-18, C-27a, C-28, C-21 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_logs.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py` |
 | C-18 | C-11, C-12d, C-17, C-20, C-28, C-30, C-21 | `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py`, `qmn/src/qmn/app/alarms.py`, `qmn/src/qmn/observability/alerts.py`, `qmn/tests/test_app_alarms.py` |
 | C-20 | C-08, C-10, C-12a, C-12b, C-12c, C-13, C-12d, C-16, C-18, C-29, C-30, C-21, C-22 | `qmn/src/qmn/host/`, `qmn/src/qmn/seats/`, `qmn/src/qmn/app/`, `qmn/tests/`, `qmn/src/qmn/observability/` |
+| C-27a | B1, B5, C-05a, C-05b, C-05c, C-09, C-17, B2 | `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py`, `qmx-agents/packages/qmx-apps/src/qmx_apps/artifacts.py`, `qmx-agents/apps/mis/mis_core.py`, `qmx-agents/packages/qmx-apps/tests/test_shipped_apps.py` |
 | C-27 | B5, C-05a, C-10 | `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py` |
 | C-28 | C-06, C-11, C-12d, C-17, C-18, C-21, B16 | `qmx-agents/packages/qmx-host/src/qmx_host/host_route.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py` |
 | C-29 | C-06, C-12a, C-23, C-20, C-21, C-22 | `qmx-agents/packages/qmx-host/src/qmx_host/node_link.py`, `qmn/src/qmn/app/runtime.py`, `qmx-agents/packages/qmx-host/src/qmx_host/promote.py`, `qmn/tests/test_app_deploy_markets.py` |
 | C-30 | C-10, C-12d, C-18, C-20, C-21 | `qmn/src/qmn/app/server.py`, `qmn/src/qmn/app/operations.py`, `qmn/src/qmn/app/alarms.py`, `qmn/tests/test_app_alarms_calendar.py` |
 | C-21 | B1, B5, A7, A9, A12, B12, B13, B15, C-05c, C-01, C-04, C-05d, C-06, C-10, C-11, C-12a, C-23, C-12d, C-17, C-18, C-20, C-28, C-29, C-30, C-22 | `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, `qmx-agents/packages/qmx-host/src/qmx_host/host.py`, `qmn/src/qmn/app/server.py`, `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py`, `qmn/src/qmn/app/runtime.py` |
 | C-22 | C-12a, C-20, C-29, C-21 | `qmn/src/qmn/app/runtime.py` |
+| B2 | C-27a | `qmx-agents/packages/qmx-apps/tests/test_shipped_apps.py` |
 | B18c | B19 | `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/b-build-and-prove/scripts/spec.py`, `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/d3-iterate-against-qmb/`, `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/l4-overnight-lab-loop/`, `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/d4-variant-comparison/` |
 | B19 | B18c, B20, B21 | `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/b-build-and-prove/`, `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/d3-iterate-against-qmb/`, `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/d4-variant-comparison/`, `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/l4-overnight-lab-loop/`, `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/catalog.py`, `qmx-agents/packages/qmx-engine/tests/test_templates.py` |
 | B20 | B19, B21 | `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/catalog.py`, `qmx-agents/packages/qmx-engine/tests/test_templates.py` |
