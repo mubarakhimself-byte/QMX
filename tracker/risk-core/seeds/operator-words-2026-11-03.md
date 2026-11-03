@@ -126,3 +126,15 @@ And I hope you remember that I requested for more than one chat session. So the 
 ## M23, sent 2026-11-03 about 12:27 UTC (mid-turn), verbatim
 
 Oh my God. And once again, I'm forgetting things. There are also MT5 articles we have on disk. I think those ones were handled by the research files. I think they were looked at earlier. I'm not certain, but they can also provide ideas.
+
+---
+
+## M24, sent 2026-11-03 about 12:35 UTC, verbatim
+
+I'm going to continue nudging you. Before I forget, I'm on a free subscription on Alpha axiv, so mind it, okay? Regardless, mind it.
+
+---
+
+## M25, sent 2026-11-03 about 12:40 UTC, verbatim
+
+Maybe portfolio optimization or portfolio sizing. As well as sculpting and load time frame trading, I think even day trading, bloody hell, man. Like the trading lens is what I'm trying to point at. Okay, I think you should also consider that a lot. So macro structure, microstructure, agents, interacting with all these variables, like how do they how can agents be used for macro, micro, agents used for news, agents used for And yeah, I've switched over to smart because there are limiters hit apparently. So yeah, but the agents are actually using. So they are using pro you can switch over to smart, maybe I can upgrade that plan. Let me see. Let's see if I can upgrade the plan. $8 a month. Yeah, why not? Let me upgrade the plan. But do I need it? I mean, do I really need it? You actually have, they have an MCP. This would have been easier. You know that, right? They do have an MCP. So you can check it out also. But back to like the topics here. The topics, I think we need to also come up with better wording. Like in research, it's like, we are starting with bottom-up instead of top-down. Kinda. I'm not certain of the wording properly. But you get the

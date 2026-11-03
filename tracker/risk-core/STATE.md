@@ -99,6 +99,16 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - **R5 started**: the local MQL5 corpus (3,128 articles at `C:/Users/Mubarak/Desktop/QMX/.worktrees/mql5-library/data/mql5-library/`) mined by topic for ideas → `research/R5-mql5-corpus-ideas.md` (with "Ideas that could combine" and "Traps"). R1 had only searched it for risk-manager designs.
     - The paper mixer then takes R1-R5 together.
 
+20. **M24-M25.** alphaXiv is on his free plan; R4 told to spend messages by value and stop at any limit, never upgrade. He then switched the alphaXiv model from Pro to Smart after limits hit, and is weighing the $8/month plan (his call). alphaXiv has an MCP server: it is configured in this session as `alphaxiv` but needs his sign-in (`/mcp`); once signed in, agents could query it without the browser.
+    - **Research goes top-down, trading lens first** ("we are starting with bottom-up instead of top-down"):
+      1. portfolio optimisation and portfolio-level sizing;
+      2. scalping and low timeframes, day trading and intraday;
+      3. macrostructure, then microstructure;
+      4. agents for macro, micro and news, and how they interact with the risk variables;
+      5. then the techniques.
+      R4 and R5 both re-steered.
+    - The relaunched expansion gets a trading-lens layer first (X0, top-down: portfolio, then style and timeframe, then market structure), and the other layers hang off it.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
