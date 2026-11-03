@@ -40,4 +40,6 @@ Order for the coordinator: C-12d and C-26, then C-14 (rehearsal), then C-25 and 
 
 One decision is his. C-21 needs the workflow engine to refuse agent steps on a machine that holds a live account (`qmx_engine/runner.py` `placed()`). The engine is his (ruling 49), so that one file change waits for his go. Default if he says nothing: C-21 builds everything else and leaves that line as a labelled placeholder, and no live account can be bound without it.
 
+**His answer, 2026-11-03: "Not yet."** The engine stays unchanged. C-21 ships that line as a labelled placeholder, and live binding stays closed until he says yes.
+
 Decided here without asking, because it follows from his rulings: per-host pass keys come before any live account (C-28). The old-code cut waits for the full demo proof, C-14's real run and C-15 (the plan's "nothing is deleted before its replacement passes"). The kill line stays a placeholder until the risk session.
