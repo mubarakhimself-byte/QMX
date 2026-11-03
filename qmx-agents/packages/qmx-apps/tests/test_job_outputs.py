@@ -28,7 +28,10 @@ from qmx_apps.supervisor import Supervisor
 EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
 OPERATOR = Principal("operator")
 APP = "outputs"
-NOTE = '\n[provides.note]\ntype = "object"\nrequired = ["n"]\nproperties = { n = { type = "integer" } }\n'
+NOTE = (
+    '\n[provides.note]\ntype = "object"\nrequired = ["n"]\n'
+    'properties = { n = { type = "integer" } }\n'
+)
 TESTER = '\n[provides.backtest-result]\nlander = "qmb-run"\nschema = { type = "object" }\n'
 
 JOB = """\
@@ -142,7 +145,9 @@ def answer(supervisor: Supervisor, value: JsonValue, **kwargs: object) -> Docume
 
 
 def outputs_of(ran: Document) -> list[str]:
-    return [str(cast(Document, ref)["output"]) for ref in cast(list[JsonValue], ran["artifact_refs"])]
+    return [
+        str(cast(Document, ref)["output"]) for ref in cast(list[JsonValue], ran["artifact_refs"])
+    ]
 
 
 def test_three_outputs_land_three_artifacts_and_a_result_without_outputs_lands_as_before(
@@ -156,7 +161,15 @@ def test_three_outputs_land_three_artifacts_and_a_result_without_outputs_lands_a
     empty = answer(supervisor, {"outputs": []})
 
     assert (outputs_of(many), many["result"]) == (["note", "note", "note"], {"seen": 3})
-    assert sorted(one) == ["app_id", "artifact_ref", "instance_id", "job", "profile", "result", "version"]
+    assert sorted(one) == [
+        "app_id",
+        "artifact_ref",
+        "instance_id",
+        "job",
+        "profile",
+        "result",
+        "version",
+    ]
     assert (one["result"], cast(Document, one["artifact_ref"])["output"]) == (note(4), "note")
     assert sorted(none) == ["app_id", "instance_id", "job", "profile", "result", "version"]
     assert (empty["artifact_refs"], empty["result"]) == ([], {})

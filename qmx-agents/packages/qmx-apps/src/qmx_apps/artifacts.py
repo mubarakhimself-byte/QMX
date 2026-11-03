@@ -199,7 +199,9 @@ class Artifacts:
         ).encode()
         return Artifacts._Checked(output, data, schema, stale_after, lander, encoded)
 
-    def _land(self, definition: Definition, checked: Artifacts._Checked, run: Run | None) -> Document:
+    def _land(
+        self, definition: Definition, checked: Artifacts._Checked, run: Run | None
+    ) -> Document:
         """Store a checked output and land it. A ref the Library already holds is not handed to
         the sink again: a re-sent output refreshes its landing time and keeps its one object."""
         sha = hashlib.sha256(checked.encoded).hexdigest()

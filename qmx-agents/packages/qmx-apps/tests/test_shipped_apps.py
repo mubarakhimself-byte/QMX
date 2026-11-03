@@ -361,7 +361,8 @@ def daily_articles(host: Host) -> JsonValue:
         "first": first["result"],
         "again": again["result"],
         "landed": [len(refs), len(cast(list[JsonValue], again["artifact_refs"]))],
-        "one_item_per_article": library_articles(host) == sorted(str(ref["sha256"]) for ref in refs),
+        "one_item_per_article": library_articles(host)
+        == sorted(str(ref["sha256"]) for ref in refs),
         "status": host.runtime.call("mql5-articles", "status", {})["result"],
     }
 
