@@ -1,0 +1,1937 @@
+# Ledger additions from expansion layer X1, the template's shape (the chassis). Stage B, 3 Nov 2026.
+# Ids are prefixed x1_ so they cannot collide with other layers' files; each carries the Stage A
+# component's proposed name as an alias so the funnel can merge. Every entry is a proposal or an idea.
+# Categorical defaults (a mode, an order, a list) are set only where the research or his words give a
+# reason; every number stays null for the numbers lens. Hybrid ids (X1-Hnn) are in expansion/X1-template-shape.md.
+
+# ---------------------------------------------------------------- A. The self-configuring loop
+
+- id: x1_field_owner
+  name: Field owner, spec or status, per field of the unit document
+  level: unit
+  kind: other
+  measure: "other: spec or status"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a categorical label per field. The split follows Kubernetes spec and status with separate write rights (people and agent drafts write spec, only the runtime writes status); which existing NumberSpec fields are spec and which calibration rows are status is for the architecture to list."
+  inputs: []
+  affects:
+    - {id: number_motion_mode, direction: either, how: "a motion rule writes status only, never the spec value"}
+    - {id: applies_to_open_positions, direction: either, how: a spec field the applier reads}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H01}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:175-184}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:703}
+  seed_ids: [D32]
+  aliases: [field_owner]
+
+- id: x1_status_generation
+  name: Status generation, the spec fingerprint a tuned value or brake state was computed against
+  level: unit
+  kind: evidence
+  measure: "other: fingerprint"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a stamp, not a number. The A10 snapshot already stamps by compiled fingerprint; this names the stamp on every status row and RiskState row so a stale brake state is never acted on."
+  inputs: []
+  affects:
+    - {id: state_carry_rule, direction: either, how: a status from another generation is carried only by the declared rule}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H01 and X1-H49}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:737}
+  aliases: [status_generation]
+
+- id: x1_recommendation_bounds
+  name: Low and high bound published beside each learned target
+  level: unit
+  kind: size_input
+  measure: "other: pair of values in the number's own measure"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the VPA uses the 50th and 95th percentiles of the decayed history as bounds around a 90th-percentile target; the trading form (percentiles of the unit's own closed trades, shrunk toward the pooled group) is the numbers lens's to set. The bounds are clamped by the owner's range."
+  inputs: [calibration_min_trades, calibration_shrink_k, x1_recommendation_decay_half_life]
+  affects:
+    - {id: risk_fraction, direction: either, how: a wide band keeps the applier off; a narrow band lets the target apply}
+    - {id: x1_number_authority_mode, direction: either, how: a band wider than the dead band blocks application}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H02}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:102-133}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:10}
+  seed_ids: [A13, A24]
+  aliases: [recommendation_bounds]
+
+- id: x1_recommendation_decay_half_life
+  name: Age at which one trade's weight in the learner halves
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: counted in trades, not hours, so a scalper and a swing unit decay at comparable evidence depth (the VPA uses 24 hours). A per-style value is the numbers lens's."
+  inputs: [trade_rate]
+  affects:
+    - {id: x1_recommendation_bounds, direction: either, how: a short half-life widens the bounds on a thin record}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H02}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:10}
+  aliases: [recommendation_decay_half_life]
+
+- id: x1_number_authority_mode
+  name: Authority mode per number, who may apply a learned value and when
+  level: unit
+  kind: other
+  measure: "other: off, at_flat, at_new_position, at_period_open, live"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: "off"
+  basis: reasoned
+  derivation: "Default off (shadow) because the VPA's Off mode computes and shows without changing, and because his rule is to size down 'not quickly' and to let nothing reach live without evidence; a number earns a stronger mode through shadow rows. The shipped authority field is parsed and never read, so this gives it a runtime meaning."
+  inputs: [x1_recommendation_bounds]
+  affects:
+    - {id: applies_to_open_positions, direction: either, how: at_new_position leaves open positions alone unless this flag is set}
+    - {id: number_motion_mode, direction: either, how: a motion rule only recommends; this mode decides whether it applies}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H03}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:117-133}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:59}
+    - {gen: unit_build, ref: grounding/G8-unit-chassis-and-extensibility.md:227-232, note: authority parsed and ignored}
+  seed_ids: [A25, A3]
+  aliases: [number_authority_mode]
+  open_questions: ["What does at_flat mean for a unit holding several positions at once (A8)?"]
+
+- id: x1_retune_dead_band
+  name: Smallest relative change in a recommendation worth applying
+  level: unit
+  kind: other
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the VPA applies in place only when the recommendation differs by more than 10 %; the trading value is the numbers lens's. Too wide never applies; too narrow churns."
+  inputs: [x1_recommendation_bounds]
+  affects:
+    - {id: calibration_cadence_trades, direction: either, how: a wide band makes the cadence irrelevant}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H03}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:100}
+  aliases: [retune_dead_band]
+
+- id: x1_retune_share_cap
+  name: Most units of one cluster that may apply a learned move in one window
+  level: book
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the VPA evicts at most 50 % of replicas at once; the herding guard against forty units cutting together (MAPE-K warning). The share and the window are the numbers lens's."
+  inputs: [live_unit_count]
+  affects:
+    - {id: x1_number_authority_mode, direction: down, how: a unit over the cap waits for the next window}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H03 and P16}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:100}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:311}
+  aliases: [retune_share_cap]
+
+- id: x1_tuned_value_guard
+  name: Condition that must hold for a tuned number to stay in force
+  level: unit
+  kind: other
+  measure: "other: condition"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a guard per tuned number (for example realised loss per trade within the bound the learn assumed). HotSpot names the reason for every failed guess; the trading conditions are the numbers lens's."
+  inputs: [x1_recommendation_bounds]
+  affects:
+    - {id: x1_guard_trip_count, direction: up, how: a failed guard counts one trip}
+    - {id: x1_value_reason_code, direction: either, how: a revert writes frozen_after_trips or reverted_by_guard}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H04}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:152-169}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:223}
+  aliases: [tuned_value_guard]
+
+- id: x1_guard_trip_count
+  name: Failed guesses counted per tuned number
+  level: unit
+  kind: measure
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a counter the runtime keeps in status; reset rule undecided (HotSpot never resets per method)."
+  inputs: [x1_tuned_value_guard]
+  affects:
+    - {id: x1_guard_freeze_limit, direction: up, how: reaching the limit freezes the number at its default}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H04}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:223}
+  aliases: [guard_trip_count]
+
+- id: x1_guard_freeze_limit
+  name: Trips after which a tuned number freezes at its default and is flagged to him
+  level: unit
+  kind: limit
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: HotSpot stays in the interpreter after 400 recompiles of one method; the trading count is the numbers lens's. A freeze can lock a number at a default that is wrong for a new class (known failure)."
+  inputs: [x1_guard_trip_count]
+  affects:
+    - {id: number_motion_mode, direction: down, how: a frozen number stops moving until he unfreezes it}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H04}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:152-169}
+  aliases: [guard_freeze_limit]
+
+- id: x1_safe_region_bound
+  name: Projected open risk and drawdown past which the fixed sizer takes over from the tuned one
+  level: unit
+  kind: limit
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the Simplex rule switches to the verified controller when the one-step predicted state would leave the safe region; the region in R per unit, including the gap scenario for indices and futures, is the numbers lens's."
+  inputs: [open_risk_at_stop, equity_drawdown_halt, kill_line_distance]
+  affects:
+    - {id: risk_fraction, direction: down, how: outside the region the baseline fraction replaces the tuned one}
+    - {id: x1_fallback_dwell, direction: either, how: leaving the region starts the dwell}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H04}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:471-480}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:269}
+  aliases: [safe_region_bound]
+
+- id: x1_fallback_dwell
+  name: Trades the fixed sizer keeps control before the tuned one may return
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Simplex switches back only after a dwell time to avoid oscillation; in trades for scalpers, sessions for intraday. Value open."
+  inputs: [x1_safe_region_bound]
+  affects:
+    - {id: grow_back_rule, direction: either, how: the dwell delays any regrowth}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H04}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:269}
+  aliases: [fallback_dwell]
+
+- id: x1_motion_window_down
+  name: Span over which a cut is decided, per moving number
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the HPA takes the highest recommendation of the last 300 s before scaling down; QMX points the other way (cut fast, grow slowly), so the down window is short and graded by signal severity. In trades, sessions or weeks by style. Value open."
+  inputs: [trade_rate]
+  affects:
+    - {id: drift_size_down_step, direction: either, how: the window sets how many readings a step-down needs}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H05}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:86-100}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:141}
+  seed_ids: [A25]
+  aliases: [motion_window_down]
+
+- id: x1_motion_window_up
+  name: Span over which evidence must hold, at the current size, before a number may grow
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: growth only on evidence gathered at the current size (Netflix AIMD grows only when the limit is in use; TCP grows on acknowledged bytes). Longer than the down window. Value open."
+  inputs: [trade_rate]
+  affects:
+    - {id: grow_back_rule, direction: either, how: the window gates every step up}
+    - {id: size_ramp_to_full, direction: either, how: a warm-up ramp uses the same window}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H05}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:63-73}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:141}
+  aliases: [motion_window_up]
+
+- id: x1_motion_rate_cap
+  name: Most a number may move per update, per direction
+  level: unit
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: chat-17 suggested at most 5 % of a parameter's normalised value per weekly update; the HPA caps per direction per period. The caps per direction are the numbers lens's."
+  inputs: []
+  affects:
+    - {id: risk_fraction, direction: either, how: bounds each step of the fraction}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H05}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:6457}
+  aliases: [motion_rate_cap, parameter_move_cap_per_update]
+
+- id: x1_motion_tolerance
+  name: Band around the target inside which nothing moves
+  level: unit
+  kind: other
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the HPA default tolerance is 0.1 of the ratio; the trading value is the numbers lens's."
+  inputs: []
+  affects:
+    - {id: x1_retune_dead_band, direction: either, how: two bands on one number; the architecture decides whether they merge}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H05}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:141}
+  aliases: [motion_tolerance]
+
+- id: x1_cautious_direction
+  name: For each number, which way a missing input must push it
+  level: unit
+  kind: other
+  measure: "other: up or down"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a label per number (the HPA assumes 100 % use on a scale-down and 0 % on a scale-up when metrics are missing). For risk numbers the cautious way is almost always smaller size or no move; a mislabelled direction becomes a ratchet the wrong way."
+  inputs: []
+  affects:
+    - {id: x1_fail_mode, direction: either, how: the per-number form of the fail mode}
+    - {id: decision_freshness_bound, direction: either, how: a stale input counts as missing}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H05}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:187}
+  aliases: [cautious_direction]
+
+- id: x1_never_self_tune_list
+  name: Numbers no learner, applier, agent or expression may move, owned by him, per template
+  level: portfolio
+  kind: other
+  measure: "other: list of ledger ids"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: [portfolio_floor, bms_buffer_before_floor, kill_line_floor, kill_switch_level]
+  basis: reasoned
+  derivation: "The floor and the cushion are user-configured by his ruling (C11); the kill switch goes down only by his hand (C21). OtterTune keeps a per-version black-list of knobs the tuner may never touch and MT5 sinput excludes an input from optimisation. He may add rows; the list is his to edit."
+  inputs: []
+  affects:
+    - {id: portfolio_floor, direction: either, how: "cannot be learnt, applied or proposed; only he edits it"}
+    - {id: kill_switch_level, direction: either, how: no proposal may lower it}
+    - {id: x1_number_authority_mode, direction: down, how: a listed number has no mode; it is always off}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H06}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:135-150}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:672}
+    - {gen: operator_words, ref: seeds/SEEDS.md, note: C11 and C21}
+  seed_ids: [C11, C21]
+  aliases: [never_self_tune_list]
+
+- id: x1_changed_by_class
+  name: Measured, self or user, per ledger row
+  level: system
+  kind: other
+  measure: "other: measured, self or user"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a label on every row (MQL5 24237 keeps venue facts, the strategy's responses and the firm's limits apart). The ledger's changed_by field already lists who may change a row; this names which part of the template the row belongs to. The checker refuses a profile that self-derives a user row or types a measured one."
+  inputs: []
+  affects:
+    - {id: x1_never_self_tune_list, direction: either, how: every user row belongs on the list}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H06 and X1-H18}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1787}
+  seed_ids: [D32]
+  aliases: [changed_by_class]
+
+- id: x1_value_reason_code
+  name: Reason code on every resolved value in the sizer receipt
+  level: trade
+  kind: evidence
+  measure: "other: code"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a closed list (default, calibrated, inherited:<level>, capped_by:<rule>, stale_so_default, frozen_after_trips, reverted_by_guard, user), after OpenFeature's reasons; the list is fixed by the architecture, not a number."
+  inputs: [x1_tuned_value_guard]
+  affects:
+    - {id: rounding_residue_r, direction: either, how: both ride the same receipt}
+    - {id: control_rank_table, direction: either, how: capped_by names the rank that bound}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H07}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:251-264}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1102}
+  seed_ids: [A13]
+  aliases: [value_reason_code, binding_cap_reason]
+
+- id: x1_derivation_rule
+  name: Entry id and version of the block that derives a number
+  level: unit
+  kind: other
+  measure: "other: entry id and version"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a binding per number, beside motion. Swapping it is a version. The first derivation families (derive_at_boot, derive_on_schedule, derive_from_record, derive_from_state, learner) are the architecture's."
+  inputs: []
+  affects:
+    - {id: risk_fraction, direction: either, how: the fraction gets its value and its reason from the bound derivation}
+    - {id: number_motion_mode, direction: either, how: a motion rule is one derivation family}
+    - {id: kelly_fraction_raw, direction: either, how: Kelly is one derivation among others}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H08}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1852}
+    - {gen: operator_words, ref: seeds/operator-words-2026-11-03.md:13, note: "What if I want to change the way it is derived?"}
+  seed_ids: [D46, D29]
+  aliases: [derivation_rule]
+
+- id: x1_derivation_receipt
+  name: Calibration row body with derivation id, inputs, old and new value
+  level: unit
+  kind: evidence
+  measure: "other: journal row"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the calibration row exists for moved numbers; this extends its body so every derived value, including boot and fallback values, has a reason row he can read."
+  inputs: [x1_derivation_rule]
+  affects:
+    - {id: x1_value_reason_code, direction: either, how: the receipt carries the code}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H08}
+    - {gen: unit_build, ref: grounding/G9-runtime-brakes-isolation-evidence.md:228-243, note: calibration row kind}
+  seed_ids: [A13, D29]
+  aliases: [derivation_receipt]
+
+- id: x1_derivation_fallback_order
+  name: Rungs a number falls back through when its derivation lacks evidence
+  level: unit
+  kind: other
+  measure: "other: ordered list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: [own_record, pooled_group, class_default, preset_default, refuse_compile]
+  basis: reasoned
+  derivation: "Own record first because the unit self-configures (A3); a pooled group posterior next because shrinkage borrows strength when the record is thin (chat-17, Carver); class then preset defaults because every number must have a reasoned value (D30); refuse to compile last because a blank key setting must never reach live (Gen 3 blank_effect). Each rung writes a receipt."
+  inputs: [calibration_min_trades, calibration_shrink_k]
+  affects:
+    - {id: paper_to_live_carry_rule, direction: either, how: which rung a promoted unit starts from}
+    - {id: x1_derivation_receipt, direction: either, how: every rung writes one}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H08}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1888}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:6421}
+  seed_ids: [D30, A3]
+  aliases: [derivation_fallback_order]
+
+- id: x1_expression_names_allowed
+  name: Ledger ids an expression may read
+  level: system
+  kind: other
+  measure: "other: list of ledger ids"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the name list the expression parser accepts; generated from the ledger snapshot, minus the never-self-tune list (n8n's noDataExpression)."
+  inputs: [x1_never_self_tune_list]
+  affects:
+    - {id: x1_derivation_rule, direction: either, how: an expression compiles into a generated derivation block}
+  configurable: false
+  changed_by: [none]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H09}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1920}
+  aliases: [expression_names_allowed]
+
+- id: x1_trading_state
+  name: Trading state per scope, ACTIVE, REDUCING, HALTED or RESTORE
+  level: unit
+  kind: other
+  measure: "other: state"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a state, not a number. ACTIVE allows everything; REDUCING allows smaller or no new entries and tighten-only amendments, exits run; HALTED allows no new entries, exits and broker stops and the kill switch work (unlike Nautilus, protective stops are never denied); RESTORE regrows by steps through a half-open probe. Kept per scope: position, unit, cluster, portfolio, account."
+  inputs: [brake_state, kill_switch_level]
+  affects:
+    - {id: risk_fraction, direction: down, how: REDUCING scales the fraction; HALTED sets new-entry size to zero}
+    - {id: grow_back_rule, direction: either, how: RESTORE is the state the rule runs in}
+    - {id: risk_stop_resume_rule, direction: either, how: resume moves HALTED to RESTORE}
+  configurable: false
+  changed_by: [automatic, operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H10}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2150}
+    - {gen: research, ref: linking/components/A2-brakes-drift-exits.yaml:2574}
+  seed_ids: [C21, A25]
+  aliases: [trading_state]
+
+- id: x1_state_transition_table
+  name: Which events move which scope between trading states, with a reason and a cost per transition
+  level: portfolio
+  kind: other
+  measure: "other: table"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the table every brake and accelerator is a row of; each transition names its trigger, reason code, declared cost in growth given up (Stitch tactics) and separate trip and clear levels (hysteresis). The kill switch's four levels map onto the same words (YELLOW to HALTED at scope, RED to HALTED with flatten, BLACK to HALTED at all) and only he lowers them."
+  inputs: [x1_trading_state, x1_brake_registry_row]
+  affects:
+    - {id: kill_switch_effect_matrix, direction: either, how: the matrix is one column of the table}
+    - {id: brake_state, direction: either, how: brake_state becomes the per-scope state word}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H10 and P15}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2150}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:383}
+  aliases: [state_transition_table]
+
+- id: x1_restore_probe_trades
+  name: Probe trades judged as a group before a braked scope returns to full size
+  level: unit
+  kind: brake_reset
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: resilience4j permits 10 calls in the half-open state and judges them together; MQL5 23315 probes before restoring. In trades for scalpers, sessions for intraday; a swing unit's probe group is small. Value open."
+  inputs: [trade_rate]
+  affects:
+    - {id: circuit_breaker_reset, direction: either, how: "the reset becomes a probe, not a timer"}
+    - {id: x1_trading_state, direction: either, how: RESTORE holds until the group is judged}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H11}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:270-288}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:6248}
+  aliases: [restore_probe_trades]
+
+- id: x1_restore_probe_size_share
+  name: Share of baseline size a probe trade runs at
+  level: unit
+  kind: brake_reset
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a reduced share during the half-open phase; value open."
+  inputs: []
+  affects:
+    - {id: risk_fraction, direction: down, how: scales the fraction during the probe}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H11}
+  aliases: [restore_probe_size_share]
+
+- id: x1_memory_ceiling
+  name: Size level just below where the last trip happened, up to which regrowth is fast and past which it is slow
+  level: unit
+  kind: brake_reset
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: TCP ssthresh and CUBIC's plateau; R9 names it a new accelerator kind (memory ceiling). The runtime records the level at the trip; the margin below it is the numbers lens's."
+  inputs: [x1_trading_state]
+  affects:
+    - {id: grow_back_rule, direction: either, how: the rule changes speed at the ceiling}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H11}
+    - {gen: research, ref: research/R9-accelerators-and-brake-pairs.md:132-141}
+  aliases: [memory_ceiling]
+
+- id: x1_brake_shadow_mode
+  name: Brake mode, shadow (records would_have), ramped (enforced with a chance) or live
+  level: unit
+  kind: other
+  measure: "other: shadow, ramped or live"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: shadow
+  basis: reasoned
+  derivation: "Default shadow because resilience4j's METRICS_ONLY and Envoy's enforcement at 0 % both let a new rule record before it acts, and because he withheld agreement on every brake set ('let's first explore', B13): a brake earns live through its precision in shadow rows. Any brake he names urgent can be set live at once."
+  inputs: []
+  affects:
+    - {id: brake_precision, direction: either, how: precision is read from shadow rows before the mode rises}
+    - {id: x1_enforcement_percent, direction: either, how: ramped mode uses the chance}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H12}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:270-288}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:6248}
+  seed_ids: [B13, E27]
+  aliases: [brake_shadow_mode]
+
+- id: x1_enforcement_percent
+  name: Chance that a ramped brake's trip is enforced, raised from zero
+  level: portfolio
+  kind: other
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Envoy's enforcing_* settings ramp ejection from 0 %; the ramp schedule is the numbers lens's."
+  inputs: [x1_brake_shadow_mode]
+  affects:
+    - {id: market_isolation_trigger, direction: either, how: isolation brakes ramp this way}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H12}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:297-312}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:6212}
+  aliases: [enforcement_percent]
+
+- id: x1_slot_combiner_rule
+  name: How several opinions on one slot combine
+  level: unit
+  kind: other
+  measure: "other: smallest_cap, newest_wins, all_must_pass or refuse"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: per slot kind. dash.js takes the lowest request within a priority and a strong priority beats the rest; LEAN chains risk models where the newest target wins; gates must all pass. Which rule each slot gets is the architecture's; the rank table above all of them is Gen 3's."
+  inputs: [control_rank_table]
+  affects:
+    - {id: x1_value_reason_code, direction: either, how: capped_by names the opinion that bound}
+    - {id: context_size_modifier, direction: either, how: modifiers become opinions with a priority}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H13 and X1-H17}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:528}
+    - {gen: research, ref: linking/components/A5-topup.yaml:3146}
+  aliases: [modifier_priority]
+
+- id: x1_brake_registry_row
+  name: One registry row per brake or accelerator with the nine attributes plus counting rule, fail mode and equity base
+  level: system
+  kind: other
+  measure: "other: registry row"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a schema, not a number: reads, scope, anchor, changes, direction, shape, speed, hysteresis, memory and clear (R9 §0.2), plus loss_counting_rule, fail_mode, brake_equity_basis and the declared baseline. The dictionary entry's machine face."
+  inputs: [loss_counting_rule, brake_equity_basis, x1_fail_mode]
+  affects:
+    - {id: x1_state_transition_table, direction: either, how: every row is a transition in the table}
+    - {id: brake_state, direction: either, how: the row names what the state word means for that brake}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H14}
+    - {gen: research, ref: research/R9-accelerators-and-brake-pairs.md:87-101}
+    - {gen: research, ref: linking/components/A5-topup.yaml:2410}
+  seed_ids: [D37, C7]
+  aliases: [brake_registry_row]
+
+- id: x1_fail_mode
+  name: What a piece does when its inputs are missing or the guard is down
+  level: unit
+  kind: other
+  measure: "other: fail_closed, fall_back_to_default or fall_back_to_position_rules"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: declared per number, brake and derivation. Platforms differ (RiskGate rejects all, freqtrade falls back, Zipline declares on_error); the board read fails open today while the stand-down table fails closed. The brakes layer sets defaults; the chassis gives the field."
+  inputs: []
+  affects:
+    - {id: board_stale_after, direction: either, how: a stale board is a missing input handled by this mode}
+    - {id: x1_guard_unavailable_action, direction: either, how: the unit-wide form of the same choice}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H14 and P8}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1985}
+    - {gen: research, ref: linking/components/A2-brakes-drift-exits.yaml:2622}
+  aliases: [fail_mode]
+
+- id: x1_day_baseline_confirmation
+  name: Whether the day's starting equity is computed, or computed and confirmed by him
+  level: account
+  kind: other
+  measure: "other: computed or confirmed"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: MQL5 24396 suggests the day's starting balance, has the trader confirm it, persists it and restores it on restart so a daily limit cannot be breached twice after a moving baseline. Crypto needs a declared boundary or a rolling window (Gap 3)."
+  inputs: [day_boundary]
+  affects:
+    - {id: day_start_equity, direction: either, how: fixes the anchor every day brake reads}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H14 and X1-H39}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2084}
+  aliases: [day_baseline_confirmation]
+
+# ---------------------------------------------------------------- B. The document and its plug-ins
+
+- id: x1_profile_schema_version
+  name: Version of the risk-profile document shape
+  level: system
+  kind: other
+  measure: "other: version"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: qmx.risk-profile/N, with an upgrader required for every change (A10's rule for stored shapes). Unknown fields refused."
+  inputs: []
+  affects:
+    - {id: x1_profile_version_pin, direction: either, how: a pin names the schema its profile was written in}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H15}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2944}
+  seed_ids: [D43]
+  aliases: [profile_schema_version]
+
+- id: x1_profile_version_pin
+  name: Profile version and fingerprint a unit version runs
+  level: unit
+  kind: other
+  measure: "other: pin"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the Pin shape in model.py (entry id, version, fingerprint) applied to the profile, as n8n pins typeVersion. A new profile version sits beside the old one; units move by his click."
+  inputs: [x1_profile_schema_version]
+  affects:
+    - {id: state_carry_rule, direction: either, how: a profile-only change must not cold-start logic block state}
+    - {id: effective_tries, direction: either, how: whether a pin change is a counted try is the identity table's}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H43}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1295}
+  aliases: [profile_version_pin]
+
+- id: x1_adopt_at_next_flat
+  name: Whether a new profile version waits for the unit to be flat before it applies
+  level: unit
+  kind: schedule
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "Yes by default because a profile change on an open position changes its stop and size mid-trade (the VPA's Initial mode; Gen 3's next-period-open rule). Units that are rarely flat (swing, overnight indices) use at_period_open through x1_edit_effective_at instead."
+  inputs: [x1_profile_version_pin]
+  affects:
+    - {id: x1_edit_effective_at, direction: either, how: the profile-level form of the same choice}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H43}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1295}
+  aliases: [adopt_at_next_flat]
+
+- id: x1_edit_effective_at
+  name: When an edit to a number takes effect, now, next flat or next period open
+  level: unit
+  kind: schedule
+  measure: "other: now, next_flat or next_period_open"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Gen 3's kill line took effect at the next period open; the VPA's modes are the same choice per number. Per number, by style."
+  inputs: [x1_number_authority_mode]
+  affects:
+    - {id: kill_line_floor, direction: either, how: Gen 3's rule for this row}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H03}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:3396}
+  aliases: [edit_effective_at]
+
+- id: x1_preset_id
+  name: Which preset and version a unit was created from
+  level: unit
+  kind: other
+  measure: "other: id and version"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: lineage, kept after the unit diverges (the Home Assistant warning); a preset is a Library template item whose values are derivations."
+  inputs: []
+  affects:
+    - {id: x1_upgrade_offer_policy, direction: either, how: an improved preset offers its new defaults to units that forked from it}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H16}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1820}
+  seed_ids: [A5]
+  aliases: [preset_id, template_lineage]
+
+- id: x1_pack_order
+  name: Order packs apply in a profile
+  level: unit
+  kind: other
+  measure: "other: ordered list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: declared per profile, shown on the card; LEAN chains risk models in declared order. Two packs claiming one slot need a combiner (x1_slot_combiner_rule) or are refused."
+  inputs: []
+  affects:
+    - {id: x1_slot_combiner_rule, direction: either, how: a slot claimed twice invokes the combiner}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H17}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2977}
+  seed_ids: [B6]
+  aliases: [pack_order]
+
+- id: x1_needs_list
+  name: Statistics a profile reads, each with a fallback if the host does not provide it
+  level: unit
+  kind: other
+  measure: "other: list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: compile is needs within the host's provides, or a named fallback (compute_here, treat_as_absent, no_new_entries, the three the reads field has). Binding a halt inserts the statistics it needs into the guard (Bevy required components)."
+  inputs: []
+  affects:
+    - {id: session_loss_limit_r, direction: either, how: a halt on this needs the guard to compute session loss}
+    - {id: day_start_equity, direction: either, how: the most common need}
+    - {id: x1_fail_mode, direction: either, how: the per-need fallback}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H19}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2626}
+  aliases: [needs_list]
+
+- id: x1_card_required_before_live
+  name: Whether a profile version needs a passed self-test card before it may size live
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "Yes, because 'how do they know that the things are correct?' (D43) and because only he promotes: the card (contract tests, resize replay, scenario battery, ledger check, placeholders left, shadow comparison) is what he and an agent read before the click."
+  inputs: [replay_match_floor]
+  affects:
+    - {id: x1_profile_version_pin, direction: either, how: a pin cannot move to a version without a card}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H21}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:3238}
+  seed_ids: [D43]
+  aliases: [card_required_before_live]
+
+- id: x1_min_trust_per_slot
+  name: Lowest trust level a block needs to fill a slot live
+  level: system
+  kind: other
+  measure: "other: trust level"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: trust is origin (qml, human, agent, community) times evidence (named, specified, implemented, contract_passed, tested_on_data, used_in_unit, shadowed_live). A proposal: live sizing needs contract_passed and shadowed_live; a derivation contract_passed; a brake tested_on_data. His to set."
+  inputs: [x1_shadow_trades_before_live]
+  affects:
+    - {id: x1_pin_signature_required_for_live, direction: either, how: a community origin needs the signature on top of the trust level}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H22}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2820}
+  seed_ids: [D43]
+  aliases: [min_trust_per_slot, block_trust_level]
+
+- id: x1_pin_signature_required_for_live
+  name: Whether a block pin from an outside origin needs his signature before it may size live
+  level: node
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "Yes, because a money app already needs his signature to activate (G8 6.1), because only trading-node holds keys, and because only he promotes; the loader checks the signature on the pin, so an agent draft cannot bind a landed community pack to a live slot."
+  inputs: [x1_min_trust_per_slot]
+  affects:
+    - {id: kill_switch_level, direction: either, how: none directly; both are his-hand-only gates on the money path}
+  configurable: false
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H22}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2406}
+  seed_ids: [D43]
+  aliases: [pin_signature_required_for_live]
+
+- id: x1_plain_python_quarantine_trades
+  name: Shadow trades a raw-code risk piece runs before it may act
+  level: unit
+  kind: limit
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a count in trades; the checker also demands a catalogued brake at the same scope so raw code is never the only brake. Value open."
+  inputs: [x1_shadow_trades_before_live]
+  affects: []
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H24}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2440}
+  aliases: [plain_python_quarantine_trades]
+
+- id: x1_adapters_per_slot_min
+  name: Passing blocks a slot needs before it counts as extensible
+  level: system
+  kind: limit
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 2
+  basis: reasoned
+  derivation: "Two, because one adapter means a hypothetical seam and two means a real one (codebase-design); the contract tests today exercise one sizer, long only. A release gate, not a trading number."
+  inputs: []
+  affects: []
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H25}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2659}
+  aliases: [adapters_per_slot_min]
+
+# ---------------------------------------------------------------- C. Where pieces live
+
+- id: x1_hook_answer_kinds
+  name: Answers before_order may give, pass, shrink or refuse, each with a closed reason code
+  level: account
+  kind: other
+  measure: "other: pass, shrink or refuse"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the hook today passes every order and can only pass or refuse; shrink{to, reason} is added so a cluster or portfolio rule can keep a trade at a smaller size. Reason codes in CATEGORY_CONDITION form (Nautilus); every refusal counted by reason with the right denominator."
+  inputs: [open_risk_ceiling, cluster_exposure_cap, budget_remaining]
+  affects:
+    - {id: exit_reason_code, direction: either, how: the same closed-code discipline on both doors}
+    - {id: lot_size, direction: down, how: shrink lowers the order's size}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H27}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:3040}
+  seed_ids: [C7]
+  aliases: [hook_answer_kinds]
+
+- id: x1_guard_unavailable_action
+  name: What every unit does when the host guard cannot answer
+  level: node
+  kind: other
+  measure: "other: fail_closed, fall_back_to_position_rules or reduce"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a stand-down row to add (guard_unavailable). RiskGate rejects everything, freqtrade trades on position rules, REDUCING is the middle; the brakes layer picks the default."
+  inputs: [x1_fail_mode]
+  affects:
+    - {id: x1_trading_state, direction: either, how: the chosen action is a state transition}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H26 and P8}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1985}
+  aliases: [guard_unavailable_action]
+
+- id: x1_scope_key_set
+  name: Scope keys the kill switch, stand-downs, brakes and proposals share
+  level: node
+  kind: other
+  measure: "other: list of key kinds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: [all, account, deployment, unit, instrument, class, region, currency, underlying_group, cluster_tag]
+  basis: reasoned
+  derivation: "The kill switch takes all, account, deployment and instrument and the stand-down table all, account, instrument and unit today (G9); his isolation ask names class, region and instrument (C27, C28) and correlated FX pairs need currency and an underlying group; clusters as tags add one more. One vocabulary for the kill switch, isolation and proposals."
+  inputs: [instrument_class]
+  affects:
+    - {id: isolation_scope, direction: either, how: isolation resolves through these keys}
+    - {id: kill_switch_scope, direction: either, how: the kill switch gains the same keys}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H28 and X1-H34}
+    - {gen: research, ref: linking/components/A3-structure-regimes-scenarios.yaml:2523}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md:293-298}
+  seed_ids: [C27, C28]
+  aliases: [scope_key_set]
+
+- id: x1_runs_on
+  name: Where a profile's unit and guard run, the PC, the node or both
+  level: unit
+  kind: other
+  measure: "other: list of hosts"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the PC is home and the node substitutes (his C23 and the standing ruling); the learner may run on the PC, the applier runs beside the order path; the ledger snapshot and status travel with the profile."
+  inputs: []
+  affects: []
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H31}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:6026}
+  seed_ids: [C23]
+  aliases: [runs_on]
+
+- id: x1_starter_budget_share
+  name: Share of its eventual budget a newly promoted unit starts at
+  level: portfolio
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: chat-23's proposal starts a new strategy at 10 to 25 % of its eventual risk budget and raises it in stages on live net evidence; April's 0.85 Kelly probation discount is the old QMX form. Value is the numbers lens's."
+  inputs: [unit_capital_share]
+  affects:
+    - {id: size_ramp_to_full, direction: either, how: the ramp starts from this share}
+    - {id: kelly_probation_discount, direction: either, how: the same idea as a discount}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H32}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1034}
+  aliases: [starter_budget_share]
+
+- id: x1_ledger_snapshot_in_compiled_unit
+  name: Whether the compiled unit carries the ledger rows it uses
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "Yes, because nothing a unit needs may depend on the Library at trade time (G2 ruling 11): the compiler freezes the rows (level, measure, fail mode, affects, changed_by) into the compiled unit; who releases a snapshot is undecided (Collision 10)."
+  inputs: []
+  affects: []
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H65}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:3272}
+  seed_ids: [D50]
+  aliases: [ledger_snapshot_in_compiled_unit]
+  open_questions: ["Who releases a ledger snapshot, and is the planning file the same rows at an earlier stage?"]
+
+# ---------------------------------------------------------------- D. Levels
+
+- id: x1_scope_overlap_rule
+  name: How answers from overlapping scopes combine
+  level: portfolio
+  kind: other
+  measure: "other: strictest or ranked"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: strictest
+  basis: reasoned
+  derivation: "Strictest by default (min size, max state) because the identity table already lets the highest edit label win and because a brake outranks every accelerator (R9); the cost, stacked caution across many weak scopes, is the reason brake precision is tracked before a scope goes live."
+  inputs: [x1_scope_key_set]
+  affects:
+    - {id: risk_fraction, direction: down, how: the smallest answer across scopes binds}
+    - {id: x1_trading_state, direction: either, how: the most restrictive state across scopes holds}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H34}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:3110}
+  seed_ids: [B1]
+  aliases: [scope_overlap_rule]
+
+- id: x1_coupling_direction
+  name: Direction of a ledger edge across levels, down as cap, down as state or up as event
+  level: system
+  kind: other
+  measure: "other: down_cap, down_state or up_event"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a type on every affects edge that crosses a level: a higher level publishes caps and states, a lower level sends events; a higher level never calls a lower level's code."
+  inputs: []
+  affects:
+    - {id: budget_remaining, direction: either, how: a down_cap edge}
+    - {id: decision_freshness_bound, direction: either, how: a stale broadcast is handled by the lower level's fail mode}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H35}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2593}
+  aliases: [coupling_direction]
+
+- id: x1_limit_importance
+  name: Normal or important; an important limit is won by the outermost level and may only be tightened inside it
+  level: portfolio
+  kind: other
+  measure: "other: normal or important"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: CSS reverses the cascade for important declarations; conv-01 says a child may tighten a cap but never loosen it. Which rows are important is his (the floor, the buffer, the aggregate limit are the obvious ones)."
+  inputs: []
+  affects:
+    - {id: cluster_exposure_cap, direction: either, how: an important cap cannot be loosened by a unit}
+    - {id: open_risk_ceiling, direction: either, how: likewise}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H36}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:349-354}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1525}
+  seed_ids: [C10]
+  aliases: [limit_importance]
+
+- id: x1_settable_by_levels
+  name: Which levels may set a number, with the account as the policy level above all
+  level: system
+  kind: other
+  measure: "other: list of levels"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: VS Code's policy settings override every scope and some settings cannot be set by a workspace; here the account is the policy level and his. Per row."
+  inputs: []
+  affects:
+    - {id: x1_never_self_tune_list, direction: either, how: a row settable only at account is on the list by construction}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H36}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1490}
+  aliases: [settable_by_levels, policy_value, lock_lower_overrides]
+
+- id: x1_override_chain_order
+  name: The fixed order of levels a value resolves through, later wins
+  level: system
+  kind: other
+  measure: "other: ordered list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: [preset, style, class, bucket, instrument, venue_account, unit, market, timeframe, session, event]
+  basis: reasoned
+  derivation: "The order proposed in R3 5.8 and X1 idea 29 (preset to market), extended with timeframe and session because cost over stop distance changes with the bar size and records differ by session (G9 5.4, G7), and with an expiring event override that may only tighten (conv-01). A residual bucket holds anything unclassified (ISDA SIMM). The resolved value carries its provenance path."
+  inputs: [instrument_class, x1_instrument_bucket]
+  affects:
+    - {id: x1_value_reason_code, direction: either, how: inherited:<level> names the winning rung}
+    - {id: session_windows, direction: either, how: the session rung keys on these windows}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H37}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1713}
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md:311-322}
+  seed_ids: [D51]
+  aliases: [override_chain_order]
+
+- id: x1_instrument_bucket
+  name: Bucket code inside a class that picks default parameters, with a residual bucket
+  level: system
+  kind: other
+  measure: "other: code"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a code per instrument in the style of ISO 10962, with buckets inside each class (fx-major, fx-cross, metal, index-us, index-eu, index-asia, energy, stock by size and sector, crypto-perp-major, crypto-perp-alt, residual); buckets are a Library collection he can extend."
+  inputs: [instrument_class]
+  affects:
+    - {id: x1_override_chain_order, direction: either, how: the bucket rung}
+    - {id: cluster_exposure_cap, direction: either, how: a bucket can be a cluster tag}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H37}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1752}
+    - {gen: research, ref: linking/components/A1-sizing-allocation.yaml:3874}
+  seed_ids: [D51]
+  aliases: [instrument_bucket, risk_bucket]
+
+- id: x1_event_override_expiry
+  name: Time after which a temporary event override lapses
+  level: unit
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: conv-01's event overrides expire and may only tighten; the width is the brakes and scenarios layers' (news windows by class)."
+  inputs: [news_blackout_after]
+  affects:
+    - {id: x1_override_chain_order, direction: either, how: "the last rung, time-limited"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H37}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1713}
+  aliases: [event_override_expiry]
+
+- id: x1_override_evidence_record
+  name: Evidence window, effective sample, uncertainty, last update and expiry stored with every instrument or session override
+  level: unit
+  kind: evidence
+  measure: "other: record"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: chat-17's governance: an override earns its place on forward evidence (as a starting rule 100 effective trades across 30 sessions and two volatility conditions) and carries its evidence; no override is a valid and common outcome. The thresholds are governance numbers, not statistics."
+  inputs: [calibration_min_trades]
+  affects:
+    - {id: x1_override_chain_order, direction: either, how: an instrument or session rung is empty until the record justifies it}
+  configurable: true
+  changed_by: [agent_proposal, operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H37}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:6376}
+  aliases: [override_evidence_record, override_min_independent_evidence]
+
+- id: x1_upgrade_offer_policy
+  name: Whether improved defaults are offered as cards, auto-adopted in shadow, or ignored
+  level: unit
+  kind: other
+  measure: "other: offer, shadow_adopt or ignore"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: offer
+  basis: reasoned
+  derivation: "Offer, because nothing changes silently on the money path (the Home Assistant warning) and every change needs a stated reason (A13); n8n's silent reach of a new default to untouched nodes is the milder form of the same failure."
+  inputs: [x1_preset_id]
+  affects: []
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H47}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1953}
+  seed_ids: [E2, A13]
+  aliases: [upgrade_offer_policy]
+
+- id: x1_bet_key_rule
+  name: Rule that assigns every open position a bet key, so the same bet is counted once
+  level: portfolio
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: keys from the underlying, currency legs, class, direction, driver and window; open risk is capped per key, per class and per account. FX keys on currency legs, indices and stocks on beta and region, crypto on BTC beta, futures on the underlying across contracts."
+  inputs: [instrument_class, x1_scope_key_set]
+  affects:
+    - {id: open_risk_at_stop, direction: either, how: open risk is summed per key}
+    - {id: currency_exposure_limit, direction: either, how: a currency key implements the limit}
+    - {id: cluster_exposure_cap, direction: either, how: a key cap is a cluster cap}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H38}
+    - {gen: research, ref: linking/components/A1-sizing-allocation.yaml:2746}
+  seed_ids: [B15, A8]
+  aliases: [bet_key_rule, open_risk_cap_per_key]
+
+- id: x1_aggregate_limit_factor
+  name: Factor by which the portfolio limit sits below the sum of its clusters' limits
+  level: portfolio
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: RiskMetrics sets a parent limit below the sum of its children because they rarely lose together; the factor is measured from joint losses, with stressed correlation when available because co-loss rises in stress. Value is the numbers lens's."
+  inputs: [unit_result_correlation, cluster_exposure_cap]
+  affects:
+    - {id: portfolio_daily_risk_budget, direction: down, how: the portfolio budget is the factor times the sum}
+    - {id: bms_daily_loss_limit, direction: down, how: likewise for the loss limit}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H38}
+    - {gen: research, ref: linking/components/A1-sizing-allocation.yaml:2059}
+  seed_ids: [C29]
+  aliases: [aggregate_limit_factor]
+
+- id: x1_cluster_tag_set
+  name: Cluster tags a unit carries, several at once, in place of one Book container
+  level: unit
+  kind: other
+  measure: "other: list of tags"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: tags by style, methodology, class, region, bucket and driver; each tag is a cluster document applied as a drop-in beneath the unit's own settings; a restructure proposal that replaces the Book container (X1-H40) and waits on his vocabulary ruling."
+  inputs: [x1_scope_key_set, x1_instrument_bucket]
+  affects:
+    - {id: cluster_exposure_cap, direction: either, how: each tag may carry a cap}
+    - {id: per_trade_cap_by_family, direction: either, how: a family is one kind of tag}
+    - {id: x1_scope_overlap_rule, direction: either, how: several tags answer at once}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H40}
+    - {gen: research, ref: linking/components/A5-topup.yaml:214}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:376-383}
+  seed_ids: [B1, B3]
+  aliases: [cluster_tag_set, methodology_drop_in]
+  open_questions: ["Does the word Book stay on screen for the style cluster, or go?"]
+
+- id: x1_shed_priority_class
+  name: Class a unit is shed in when a budget tightens, probation first and core last
+  level: unit
+  kind: other
+  measure: "other: probation, paper_graduate, proven or core"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Google's load shedding uses four criticality values and sheds from the bottom; here a newly promoted unit is probation and a unit with a long money record is core. The assignment rule (by record length, by his click) is the architecture's."
+  inputs: [x1_starter_budget_share]
+  affects:
+    - {id: unit_capital_share, direction: down, how: a lower class is cut first when the portfolio budget binds}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H41}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:322-328}
+  seed_ids: [C26]
+  aliases: [shed_priority_class]
+
+- id: x1_budget_burn_rate
+  name: How fast a level's loss budget is being used, relative to using it exactly over its window
+  level: book
+  kind: measure
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: burn rate = budget used over the short window divided by the share of the window elapsed (SRE workbook); tiers over two windows (short window about one twelfth of the long) map to REDUCING, size down or a review card. Windows in trades for scalpers, sessions for intraday, weeks for swing."
+  inputs: [period_loss_budget, budget_remaining]
+  affects:
+    - {id: x1_trading_state, direction: either, how: a fast burn moves the level to REDUCING or HALTED}
+    - {id: x1_version_freeze_on_spent_budget, direction: either, how: a spent budget triggers the freeze}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H41}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:330-343}
+  aliases: [budget_burn_rate]
+
+- id: x1_version_freeze_on_spent_budget
+  name: Whether a unit with its loss budget spent may receive a new risk version
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the SRE error-budget policy halts changes when the budget is used up, except urgent fixes; whether a tighten-only version counts as an urgent fix is undecided."
+  inputs: [x1_budget_burn_rate]
+  affects:
+    - {id: x1_profile_version_pin, direction: either, how: the pin cannot move while frozen}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H41}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1203}
+  aliases: [version_freeze_on_spent_budget]
+
+- id: x1_unit_working_anchor
+  name: A unit's working drawdown reference, which may restart after a near-breach while the portfolio floor and high-water mark never do
+  level: unit
+  kind: other
+  measure: "other: anchor"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: two anchors kept apart (chat-04; Hsieh's restart result, 20.18 % against a 20 % cap when the peak resets). The local anchor's restart rule is the brakes layer's; the global ones are on the never-self-tune list."
+  inputs: [high_water_mark_equity]
+  affects:
+    - {id: portfolio_floor, direction: either, how: never moved by a unit restart}
+    - {id: state_carry_rule, direction: either, how: a world switch must not move the global anchors}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H39}
+    - {gen: research, ref: linking/components/A5-topup.yaml:236}
+  seed_ids: [C10, C12]
+  aliases: [unit_working_anchor]
+
+# ---------------------------------------------------------------- E. Versions and rollout
+
+- id: x1_block_migration_map
+  name: Old block id and version to new id and version, with a parameter transform
+  level: system
+  kind: other
+  measure: "other: map"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Simulink's forwarding tables; a declared migration lets the placeholder sizer become a real one as a version that keeps the record. The transform language is a gap."
+  inputs: []
+  affects:
+    - {id: x1_identity_profile_version_change, direction: either, how: a mapped swap earns the cheaper label}
+    - {id: effective_tries, direction: either, how: whether a mapped migration is a counted try}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H43}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:429-436}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1329}
+  aliases: [block_migration_map]
+
+- id: x1_identity_profile_version_change
+  name: Identity-table result for a change inside a risk profile
+  level: system
+  kind: other
+  measure: "other: none, calibration_row, new_version or new_unit"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed as new_version (counted try, his click) for profile_version_change and new_unit for profile_swap; his ruling needed because it changes what a counted try and a click mean (G2 rulings 1 and 4). The table is his to edit."
+  inputs: [x1_block_migration_map]
+  affects:
+    - {id: effective_tries, direction: either, how: a new version is a counted try}
+    - {id: x1_money_record_scope, direction: either, how: a new version starts a money record}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H43 and P1}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1423}
+  aliases: [identity_profile_version_change]
+  open_questions: ["May a profile version change keep the unit's record and skip the new-unit path?"]
+
+- id: x1_money_record_scope
+  name: Profile version a money record belongs to
+  level: unit
+  kind: evidence
+  measure: "other: version"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the logic record in R continues across profile versions (the judge is size-blind); dollars, drawdown, budget used and brake fires start fresh per profile version, filled from the resize replay so a new version is not blank."
+  inputs: [x1_profile_version_pin]
+  affects:
+    - {id: expectancy_r, direction: either, how: unchanged across profile versions}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H44}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1456}
+  aliases: [money_record_scope]
+
+- id: x1_shadow_trades_before_live
+  name: Trades a proposed profile must shadow (would_have rows) before it may size live
+  level: unit
+  kind: limit
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: no product self-tunes under guardrails (R1 8.15), so shadow first is the guardrail; in trades by style. Value open."
+  inputs: [trade_rate]
+  affects:
+    - {id: x1_canary_share, direction: either, how: the canary step follows the shadow step}
+    - {id: x1_min_trust_per_slot, direction: either, how: shadowed_live is the top rung of the trust ladder}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H45}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:1069}
+  seed_ids: [A25]
+  aliases: [shadow_trades_before_live]
+
+- id: x1_canary_share
+  name: Share of a unit's markets or size that runs a new profile version live while the old version runs the rest as control
+  level: unit
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Argo sets a weight per step and Kayenta judges the canary against a baseline started at the same time, same size and same traffic; the trading share and steps are the numbers lens's. A second deployment of one unit version is refused today (G9 3.2)."
+  inputs: [x1_shadow_trades_before_live]
+  affects:
+    - {id: size_ramp_to_full, direction: either, how: the rollout steps are the ramp}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H45}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:215-249}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:937}
+  aliases: [canary_share, rollout_share_steps]
+
+- id: x1_analysis_outcome
+  name: Outcome of one rollout analysis run, pass, fail or inconclusive
+  level: unit
+  kind: evidence
+  measure: "other: pass, fail or inconclusive"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Argo's three outcomes; pass continues, fail rolls back to the pinned version and is never retried on the same version, inconclusive pauses for his card. Critical metrics and the no-data rule come from Kayenta; Promote's anytime-valid test can be the statistic."
+  inputs: [x1_canary_share]
+  affects:
+    - {id: x1_profile_version_pin, direction: either, how: pass moves the pin; fail keeps it}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H45}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:831}
+  aliases: [analysis_outcome, canary_critical_metrics]
+
+- id: x1_rollout_time_to_promote
+  name: Declared minimum trades or time for a new version to reach full share
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Flagger's interval times max weight over step weight; in trades for scalpers; a swing unit's canary needs weeks (Collision 28). The motion engine is frozen on both arms while judging."
+  inputs: [x1_canary_share, trade_rate]
+  affects:
+    - {id: calibration_cadence_trades, direction: either, how: motion is paused during the window}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H45}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:868}
+  aliases: [rollout_time_to_promote, rollout_time_to_rollback]
+
+- id: x1_approval_effect_digest
+  name: Hash of the canonical effect a card approves, signed by his click and re-checked at use
+  level: system
+  kind: evidence
+  measure: "other: hash"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the card is rendered from a descriptor (artifact hash, base version, instruments, account scope, risk envelope, expiry); apply executes the stored effect and refuses if the unit's fingerprint moved since the plan (Terraform's stale plan) or the descriptor expired."
+  inputs: [x1_profile_version_pin]
+  affects:
+    - {id: x1_profile_version_pin, direction: either, how: the pin moves only to the approved hash}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H46}
+    - {gen: research, ref: linking/components/A5-topup.yaml:1252}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:186-193}
+  seed_ids: [D41]
+  aliases: [approval_effect_digest, plan_staleness_check]
+
+- id: x1_approved_config_set
+  name: The few pre-approved profile versions a unit's live bandit may switch among, the default as the baseline arm
+  level: unit
+  kind: other
+  measure: "other: list of versions"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a wild hybrid (X1-H48): offline tuning proposes two or three stable versions; he approves the set once; a conservative bandit switches only when a lower confidence bound keeps the result above a baseline-relative floor, stale rewards discounted. Whether a switch is a calibration row or a version is Question 5."
+  inputs: [x1_profile_version_pin]
+  affects:
+    - {id: number_motion_mode, direction: either, how: a bandit is a motion mode across whole versions}
+    - {id: effective_tries, direction: either, how: counted tries if a switch is a version}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H48}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:6526}
+  aliases: [approved_config_set]
+
+# ---------------------------------------------------------------- F. Agents and MCPs
+
+- id: x1_proposal_direction_allowed
+  name: Which proposal directions may apply without his click, tighten only or both
+  level: node
+  kind: other
+  measure: "other: tighten_only or both"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: tighten_only
+  basis: reasoned
+  derivation: "Tighten only, because agents never touch money and only he promotes (G2 ruling 5, STATE); chat-17 and Steward both let automatic changes only reduce risk. A loosening proposal becomes a card. The collision with the sitting duck (automation that can only cut) is named, not resolved."
+  inputs: [x1_never_self_tune_list]
+  affects:
+    - {id: x1_trading_state, direction: down, how: an applied proposal can only move a scope toward REDUCING or HALTED}
+    - {id: market_isolation_trigger, direction: either, how: an isolation proposal is a tighten}
+    - {id: kill_switch_level, direction: either, how: never lowered by a proposal}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H50}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:3460}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:4347}
+  seed_ids: [D42, C27]
+  aliases: [proposal_direction_allowed]
+  open_questions: ["May an automatically applied tightening be released automatically by expiry and the restore state?"]
+
+- id: x1_proposal_expiry
+  name: Time after which an agent proposal lapses on its own
+  level: node
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: every agent output is a typed, timestamped record with an expiry (MarketSenseAI: news minutes to hours, macro to the next release); the values by evidence type are the agents and scenarios layers'."
+  inputs: [decision_freshness_bound]
+  affects:
+    - {id: x1_proposal_direction_allowed, direction: either, how: an expired tightening releases through the restore state}
+    - {id: isolation_end_rule, direction: either, how: an isolation proposal ends at its expiry unless renewed}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H50}
+    - {gen: research, ref: linking/components/A5-topup.yaml:1591}
+  aliases: [proposal_expiry, evidence_expiry_by_type]
+
+- id: x1_card_flood_cap
+  name: Most cards that may land for him per night, grouped by root cause
+  level: system
+  kind: limit
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: one card per night per unit across forty units floods him; approval queues against flooding are in the agents research. Value is his."
+  inputs: [live_unit_count]
+  affects: []
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H46 and X1-H51}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:4828}
+  seed_ids: [D41]
+  aliases: [card_flood_cap]
+
+- id: x1_risk_state_emit_interval
+  name: How often the RiskState row is emitted per unit, cluster and portfolio
+  level: node
+  kind: schedule
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: every pass, or on change plus a heartbeat; the observability layer sets it. The row carries status_generation."
+  inputs: [x1_status_generation]
+  affects:
+    - {id: liveness_heartbeat_cadence, direction: either, how: the two cadences should agree}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H49}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:5031}
+  seed_ids: [D49]
+  aliases: [risk_state_emit_interval_s]
+
+# ---------------------------------------------------------------- G and H. Stack changes and the dictionary
+
+- id: x1_compiler_format
+  name: Compiler format a profile needs, format 2 runs halts, reads, derivations and the override chain
+  level: system
+  kind: other
+  measure: "other: format number"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: format 1 refuses halts and reads and compiles two of six motion modes; format 2 is the list in X1-H56. A format number on the profile lets old units compile as before."
+  inputs: [x1_profile_schema_version]
+  affects:
+    - {id: number_motion_mode, direction: either, how: more modes compile}
+    - {id: x1_needs_list, direction: either, how: format 2 checks needs against provides}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H56}
+    - {gen: unit_build, ref: grounding/G8-unit-chassis-and-extensibility.md:384-401}
+  aliases: [compiler_format]
+
+- id: x1_layer_h_rules
+  name: Ledger-coupling checks a profile must pass before it compiles
+  level: system
+  kind: other
+  measure: "other: rule list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: every number id exists in the snapshot; level and measure match; every need is provided or has a fallback; every affects edge is honoured; no user row is self-derived; the minimum trust per slot holds; the rank table has no blank cell; the never-self-tune list covers every user row."
+  inputs: [x1_never_self_tune_list, x1_needs_list, x1_min_trust_per_slot, control_rank_table]
+  affects: []
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H65}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2786}
+  seed_ids: [D43, D50]
+  aliases: [layer_h_rules]
+
+- id: x1_entry_class_coverage
+  name: Class keys a dictionary entry's golden cases cover; a slot bound on an uncovered class compiles only in shadow
+  level: system
+  kind: evidence
+  measure: "other: list of class keys"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: the multi-instrument lens on the dictionary: fx, index, metal, energy, crypto, futures, stock, each with one instrument record in the contract tests (lot step 0.01 lots, 1 contract, 0.001 BTC, 1 share)."
+  inputs: [instrument_class]
+  affects:
+    - {id: x1_brake_shadow_mode, direction: either, how: an uncovered class forces shadow}
+    - {id: x1_min_trust_per_slot, direction: either, how: tested_on_data is per class}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H68}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2820}
+  seed_ids: [D51]
+  aliases: [entry_class_coverage]
+
+# ---------------------------------------------------------------- I. Late additions named in hybrids
+
+- id: x1_deploy_retry_rule
+  name: Whether a failed deploy of the same unit or profile version may be retried
+  level: unit
+  kind: other
+  measure: "other: never_same_version or allowed"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: never_same_version
+  basis: reasoned
+  derivation: "Argo CD never retries a failed sync for the same commit and parameters, and rollback cannot run while automated sync drives the same app; a failed version waits for a new version, so automation and his rollback never fight over one unit."
+  inputs: [x1_profile_version_pin]
+  affects:
+    - {id: x1_analysis_outcome, direction: either, how: "fail is final for that version"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H47}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:196-209}
+  aliases: [deploy_retry_rule]
+
+- id: x1_proposal_evidence_record
+  name: Evidence record carried by every agent proposal, source, availability time, confidence, permitted use, expiry
+  level: node
+  kind: evidence
+  measure: "other: record"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: a typed record (MarketSenseAI, OpenPM point-in-time); the guard validates it against the ledger before the proposal is applied or carded; the fields are the agents layer's to fix."
+  inputs: [x1_proposal_expiry]
+  affects:
+    - {id: x1_proposal_direction_allowed, direction: either, how: "a proposal without a record is refused in both directions"}
+  configurable: false
+  changed_by: [agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H50}
+    - {gen: research, ref: linking/components/A5-topup.yaml:1591}
+  aliases: [proposal_evidence_record]
+
+- id: x1_override_priority
+  name: Numbered strength of a definition in the cascade; lowest number wins
+  level: system
+  kind: other
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: Nix priorities (option default 1500, mkDefault 1000, plain 100, mkForce 50) make who-wins readable and checkable; the QMX numbers per level are the architecture's."
+  inputs: [x1_override_chain_order]
+  affects:
+    - {id: x1_limit_importance, direction: either, how: "important is a low priority number at an outer level"}
+  configurable: false
+  changed_by: [none]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H36}
+    - {gen: research, ref: research/R7-software-patterns-self-configuring.md:385-397}
+  aliases: [override_priority]
+
+- id: x1_oracle_mode
+  name: Whether a central risk service answers every unit's size (wild) or the node-local guard does
+  level: node
+  kind: other
+  measure: "other: local_guard or central_oracle"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: local_guard
+  basis: reasoned
+  derivation: "Local guard, because only the node sends orders and nothing a unit needs may depend on an outside call at trade time (G2 rulings 6 and 11), and because RiskGate's own author calls the oracle a single point of failure; the oracle is kept as a wild option only."
+  inputs: []
+  affects:
+    - {id: x1_guard_unavailable_action, direction: either, how: "an oracle rejects all when unreachable; the local guard needs no such rule"}
+  configurable: false
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H69}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:2503}
+  aliases: [oracle_mode]
+
+- id: x1_affects_graph_runtime
+  name: Whether the ledger's affects edges run at trade time, recomputing dependents when a number moves (wild)
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: false
+  basis: reasoned
+  derivation: "No by default, because running couplings at trade time may be this generation's too much machine (his 'design for complexity, not a complex system'); the edges are checked at compile by layer H instead. Kept as a wild option."
+  inputs: [x1_layer_h_rules]
+  affects: []
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X1-template-shape.md, note: X1-H71}
+    - {gen: research, ref: linking/components/A4-template-agents-telemetry.yaml:3272}
+  seed_ids: [D50]
+  aliases: [affects_graph_runtime]
