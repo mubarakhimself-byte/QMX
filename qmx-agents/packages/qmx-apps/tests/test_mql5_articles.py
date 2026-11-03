@@ -167,7 +167,7 @@ def test_seed_checksum_failure_is_not_silently_marked_ready(tmp_path: Path) -> N
     assert store.status()["available"] == 0
 
 
-def volume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings: dict[str, Any]) -> Store:
+def volume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings: object) -> Store:
     """The app's volume where the host keeps it, `<home>/apps/mql5-articles`, as the job sees it."""
     root = tmp_path / "home/apps/mql5-articles"
     store = Store(root)
@@ -244,6 +244,18 @@ def test_an_article_whose_library_landing_failed_is_answered_again_and_lands_onc
     assert landings == [article_url(7)]
     assert (after["landed"], after["outputs"]) == (1, [])
     assert store.status()["pending_publication"] == 0
+
+
+@pytest.mark.parametrize(
+    "config", [[1, 2], {"publish": 5}, {"publish": {"per_run": True}}, {"crawl": "no"}]
+)
+def test_a_config_that_is_not_the_documented_shape_is_refused_in_words(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, config: Any
+) -> None:
+    volume(tmp_path, monkeypatch, config)
+
+    with pytest.raises(ValueError, match=r"publish\.per_run to 1 or more"):
+        run_daily()
 
 
 def test_one_run_answers_at_most_per_run_articles_and_an_unreachable_site_still_lands(

@@ -402,15 +402,20 @@ def settings(root: Path) -> tuple[bool, int]:
     """Whether the job crawls www.mql5.com, and `publish.per_run`, from the instance's
     `data/config.json` over the defaults."""
     own = root / "data" / "config.json"
-    found = (
-        cast(dict[str, Any], json.loads(own.read_text(encoding="utf-8"))) if own.is_file() else {}
+    refused = (
+        "data/config.json is an object that sets crawl to true or false"
+        " and publish.per_run to 1 or more."
     )
-    crawl = found.get("crawl", True)
-    per_run = cast(dict[str, Any], found.get("publish", {})).get("per_run", PER_RUN)
-    if not isinstance(crawl, bool) or not isinstance(per_run, int) or per_run < 1:
-        raise ValueError(
-            "data/config.json sets crawl to true or false and publish.per_run to 1 or more."
-        )
+    found: object = json.loads(own.read_text(encoding="utf-8")) if own.is_file() else {}
+    if not isinstance(found, dict):
+        raise ValueError(refused)
+    publish = cast(dict[str, object], found).get("publish", {})
+    if not isinstance(publish, dict):
+        raise ValueError(refused)
+    crawl = cast(dict[str, object], found).get("crawl", True)
+    per_run = cast(dict[str, object], publish).get("per_run", PER_RUN)
+    if not isinstance(crawl, bool) or type(per_run) is not int or per_run < 1:
+        raise ValueError(refused)
     return crawl, per_run
 
 
