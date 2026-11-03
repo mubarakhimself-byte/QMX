@@ -213,6 +213,8 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - **Brake and accelerator are working words with no definitions.** They must be defined, along with a taxonomy. These concepts came from pattern recognition and linking logic: house money was seen; **reverse house money was his own idea**. R9 now defines both, including reverse house money from the old system, and may propose new kinds. Stage B and the funnel use those definitions and may extend them.
     - R8 done and committed: stops help only under momentum (Kaminski-Lo); no study tests breakeven moves or fractional early cuts after costs, so the cut size is set per strategy from its own trades; volatility models pooled across classes beat per-instrument fits; accumulation is modelled per shared dependency.
 
+37. **M40: definitions come from the transcript too.** Brake and accelerator definitions must rest on how they were discussed (1 Nov and 3 Nov): his backstory, accepted and refused ideas, his corrections. R9 told to read SEEDS.md and the verbatim word files for this. The alphaXiv chats may also add brake and accelerator ideas; Stage A top-up and the funnel catch them.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
