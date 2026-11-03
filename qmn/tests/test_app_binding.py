@@ -23,6 +23,7 @@ import pytest
 import test_app_runtime as base
 from qmf.core import Ok, PriceDelta, Quantity, Result, TypedRefusal
 from qmf.venue.commands import (
+    CloseScope,
     Command,
     OrderParameters,
     OrderType,
@@ -32,10 +33,12 @@ from qmf.venue.commands import (
 from qml.unit.model import Side
 from qmn.app import grants as grants_module
 from qmn.app import server
+from qmn.app.attribution import Claim, OrderState, VenueOrder, VenuePosition, attribute
 from qmn.app.grants import Grants, TokenEndpoint
 from qmn.app.runtime import Phase, Runtime, Ticket
 from qmn.app.server import DEFINITIONS, CTraderDoor, Node, open_node
 from qmn.app.store import Json, Store
+from qmn.venue import order_tags
 from qmn.venue.ctrader_account import Codec, CTraderVenue, Wire
 
 KEYS = json.dumps(
@@ -102,11 +105,17 @@ class FakeCTrader:
     codec: Codec
     live_account: bool = False
     holds_stops: bool = True
+    lose_answers: int = 0
+    """How many coming entries fill at the broker with every answer lost."""
     tokens: set[str] = field(default_factory=lambda: {"fake-a1"})
     received: list[tuple[str, dict[str, object]]] = field(
         default_factory=list[tuple[str, dict[str, object]]]
     )
     held: dict[int, Held] = field(default_factory=dict[int, Held])
+    orders: dict[int, list[dict[str, object]]] = field(
+        default_factory=dict[int, list[dict[str, object]]]
+    )
+    """The orders on each position, opening order first."""
     quotes: dict[int, tuple[Decimal, Decimal]] = field(
         default_factory=dict[int, tuple[Decimal, Decimal]]
     )
@@ -243,6 +252,14 @@ class FakeCTrader:
             "ProtoOAReconcileRes", {"ctidTraderAccountId": CTID, "position": positions}, msg_id
         )
 
+    def _on_ProtoOAOrderListByPositionIdReq(self, msg_id: str, body: dict[str, object]) -> None:
+        listed = self.orders.get(int(str(body["positionId"])), [])
+        self._say(
+            "ProtoOAOrderListByPositionIdRes",
+            {"ctidTraderAccountId": CTID, "order": listed, "hasMore": False},
+            msg_id,
+        )
+
     def _on_ProtoOANewOrderReq(self, msg_id: str, body: dict[str, object]) -> None:
         symbol = int(str(body["symbolId"]))
         side = str(body["tradeSide"])
@@ -266,6 +283,25 @@ class FakeCTrader:
             str(body.get("clientOrderId", "")),
         )
         self.held[held.position_id] = held
+        self.orders[held.position_id] = [
+            {
+                "orderId": held.position_id,
+                "tradeData": {
+                    "symbolId": symbol,
+                    "volume": held.volume,
+                    "tradeSide": side,
+                    "label": held.label,
+                },
+                "orderType": "MARKET",
+                "orderStatus": "ORDER_STATUS_FILLED",
+                "executionPrice": float(price),
+                "clientOrderId": held.client_order_id,
+                "positionId": held.position_id,
+            }
+        ]
+        if self.lose_answers:
+            self.lose_answers -= 1
+            return
         for kind in ("ORDER_ACCEPTED", "ORDER_FILLED"):
             self._execution(kind, held, "POSITION_STATUS_OPEN", price, "MARKET", msg_id)
 
@@ -430,11 +466,14 @@ def bound_rig(
     profile: bool = False,
     lifetime_s: int = 2_628_000,
     grant: str | None = None,
+    broker: FakeCTrader | None = None,
+    at: int = base.LIVE_FROM - base.DAY,
 ) -> Bound:
-    """A node on ``root`` with its cTrader door over the fakes, its runtime not started."""
-    now = [base.LIVE_FROM - base.DAY]
+    """A node on ``root`` with its cTrader door over the fakes, its runtime not started. A
+    restart passes the same ``broker``, which still holds what it held."""
+    now = [at]
     steady = [0]
-    fake = FakeCTrader(codec(), live_account=live_account)
+    fake = broker or FakeCTrader(codec(), live_account=live_account)
     tokens = Tokens(lifetime_s)
     memory = Memory()
     memory.held = grant
@@ -602,12 +641,36 @@ def test_the_self_test_lands_its_five_checks_ok_on_the_passport(tmp_path: Path) 
     runtime(rig).stop()
 
 
-def test_the_dummy_trades_through_the_ctrader_binding_with_its_stop_at_the_venue(
+def test_a_retried_self_test_trades_once_and_a_reused_op_id_trades_nothing(
     tmp_path: Path,
 ) -> None:
     rig = bound_rig(tmp_path)
     signed_in(rig)
     bind(rig)
+    tick_quotes(rig)
+
+    first = rig.node.call("self_test", {"op_id": "test-1", "account": ACCOUNT})
+    tick_quotes(rig, 1)
+    retried = rig.node.call("self_test", {"op_id": "test-1", "account": ACCOUNT})
+    tick_quotes(rig, 1)
+    after_retry = rig.fake.requests().count("ProtoOANewOrderReq")
+    rotated = rig.node.call("rotate_keys", {"op_id": "shared-1"})
+    reused = rig.node.call("self_test", {"op_id": "shared-1", "account": ACCOUNT})
+    tick_quotes(rig, 1)
+
+    assert first == retried == {"ok": True, "value": {"state": "accepted"}, "op_id": "test-1"}
+    assert after_retry == 1
+    assert rotated["ok"] is True
+    assert (reused["ok"], reused["code"]) == (False, "op_id_reused")
+    assert rig.fake.requests().count("ProtoOANewOrderReq") == 1
+    runtime(rig).stop()
+
+
+BAR = 900_000_000_000
+
+
+def deploy_dummy(rig: Bound) -> Runtime:
+    """The dummy deployed on the bound account with its recorded history, compiled."""
     runtime = rig.node.runtime
     assert runtime is not None
     feed = runtime.venues[ACCOUNT].feed
@@ -618,16 +681,213 @@ def test_the_dummy_trades_through_the_ctrader_binding_with_its_stop_at_the_venue
     deployed = rig.node.call(
         "deploy", {"op_id": "op-deploy-1", "deployment": base.deployment(rig.data)}
     )
+    assert value(deployed)["state"] == "accepted"
+    compiled(runtime)
+    return runtime
+
+
+def compiled(runtime: Runtime) -> None:
     deadline = 600
     while runtime.hosted.get("dep-1") is None or runtime.hosted["dep-1"].phase is Phase.COMPILING:
         runtime.tick()
         deadline -= 1
         assert deadline, "the compile did not finish"
         time.sleep(0.05)
+
+
+def play_until_sent(rig: Bound) -> int:
+    """Play the recorded days bar by bar until the node sends its first entry; the next bar."""
+    at = base.LIVE_FROM
+    while "ProtoOANewOrderReq" not in rig.fake.requests():
+        assert at < base.LIVE_FROM + 2 * base.DAY, "the dummy sent no entry"
+        play_spots(rig, at, at + BAR)
+        at += BAR
+    return at
+
+
+def node_rows(rig: Bound, kind: str) -> list[dict[str, Json]]:
+    rows = cast(
+        "list[dict[str, Json]]",
+        value(rig.node.call("journal_tail", {"streams": ["node"]}))["rows"],
+    )
+    return [cast("dict[str, Json]", row["body"]) for row in rows if row["kind"] == kind]
+
+
+def sent_entries(rig: Bound) -> list[str]:
+    return [str(body["clientOrderId"]) for n, body in rig.fake.received if n == "ProtoOANewOrderReq"]
+
+
+def closes(rig: Bound) -> list[dict[str, object]]:
+    return [body for name, body in rig.fake.received if name == "ProtoOAClosePositionReq"]
+
+
+FIRST_ENTRY_ROW: dict[str, Json] = {
+    "claim": "mine",
+    "tags": ["a4dqobyh"],
+    "market_id": "fx.eurusd",
+    "side": "short",
+    "quantity": "0.04",
+}
+
+
+def test_an_entry_whose_answer_is_lost_is_the_node_own_booked_taken_and_killed_flat(
+    tmp_path: Path,
+) -> None:
+    rig = bound_rig(tmp_path)
+    signed_in(rig)
+    bind(rig)
+    rig.fake.lose_answers = 1
+    deploy_dummy(rig)
+    at = play_until_sent(rig)
+    name = sent_entries(rig)[0]
+
+    play_spots(rig, at, at + BAR)
+    killed = rig.node.call("kill", {"op_id": "op-kill", "level": "RED", "scope": "all"})
+    play_spots(rig, at + BAR, at + 2 * BAR)
+    reconciled = node_rows(rig, "reconcile")
+    venue = cast(CTraderVenue, runtime(rig).venues[ACCOUNT].client)
+
+    assert [str(r["step"]) for r in node_rows(rig, "order") if r["client_order_id"] == name][
+        :2
+    ] == ["send", "unknown"]
+    assert [(r["why"], r["resolved"]) for r in reconciled][:2] == [
+        ("start", []),
+        ("unknown", [{"client_order_id": name, "outcome": "filled", "price": "PRICE"}]),
+    ]
+    assert cast("list[dict[str, Json]]", reconciled[1]["positions"]) == [
+        {**FIRST_ENTRY_ROW, "position": name}
+    ]
+    assert value(killed) == {"level_in_force": "RED"}
+    assert closes(rig) == [
+        {"ctidTraderAccountId": "4401", "positionId": "9001", "volume": "400000"}
+    ]
+    assert sent_entries(rig) == [name]
+    assert rig.fake.held == {}
+    assert venue.held() == {}
+    runtime(rig).stop()
+
+
+def test_after_a_restart_the_node_reads_its_open_position_as_its_own_and_kills_it_flat(
+    tmp_path: Path,
+) -> None:
+    rig = bound_rig(tmp_path)
+    signed_in(rig)
+    bind(rig)
+    rig.fake.lose_answers = 1
+    deploy_dummy(rig)
+    at = play_until_sent(rig)
+    name = sent_entries(rig)[0]
+    rig.node.stop()
+
+    again = bound_rig(tmp_path, grant=rig.grants.held, broker=rig.fake, at=rig.now[0])
+    compiled(runtime(again))
+    play_spots(again, at, at + BAR)
+    killed = again.node.call("kill", {"op_id": "op-kill", "level": "RED", "scope": "all"})
+    play_spots(again, at + BAR, at + 2 * BAR)
+    reconciled = node_rows(again, "reconcile")
+
+    assert [(r["why"], r["resolved"]) for r in reconciled][-1:] == [("start", [])]
+    assert cast("list[dict[str, Json]]", reconciled[-1]["positions"]) == [
+        {**FIRST_ENTRY_ROW, "position": name}
+    ]
+    assert value(killed) == {"level_in_force": "RED"}
+    assert closes(again) == [
+        {"ctidTraderAccountId": "4401", "positionId": "9001", "volume": "400000"}
+    ]
+    assert sent_entries(again) == [name]
+    assert again.fake.held == {}
+    runtime(again).stop()
+
+
+def test_an_entry_answered_after_its_wait_is_the_node_own_and_closes(tmp_path: Path) -> None:
+    rig = bound_rig(tmp_path)
+    signed_in(rig)
+    bind(rig)
+    tick_quotes(rig)
+    venue = cast(CTraderVenue, runtime(rig).venues[ACCOUNT].client)
+    symbol = venue.symbols["fx.eurusd"]
+    gap = PriceDelta.try_create(500, symbol.instrument, symbol.digits)
+    size = Quantity.try_create(1, "lot", 2)
+    tags = order_tags("e" * 36, "qmx:a4dqobyh:probe")
+    assert not isinstance(gap, TypedRefusal) and not isinstance(size, TypedRefusal)
+    assert not isinstance(tags, TypedRefusal)
+    params = OrderParameters.try_create(
+        OrderType.MARKET,
+        TimeInForce.IMMEDIATE_OR_CANCEL,
+        size.value,
+        protective_stop_distance=gap.value,
+        instrument=symbol.instrument,
+        trade_side="buy",
+    )
+    assert not isinstance(params, TypedRefusal)
+    entry = Command.place_order(venue.account.venue, venue.account, "session-1", 1, params.value)
+    close = Command.close_position(
+        venue.account.venue,
+        venue.account,
+        "session-1",
+        2,
+        CloseScope.INSTRUMENT_WITHIN_BINDING,
+        "e" * 36,
+    )
+    assert not isinstance(entry, TypedRefusal) and not isinstance(close, TypedRefusal)
+    lots = Decimal("0.01")
+    api = venue.api
+    assert api is not None
+
+    api.wait_s = 0.0
+    entered = venue.send(
+        Ticket(entry.value, "fx.eurusd", Side.LONG, Decimal("1.08012"), lots, lots, tags.value)
+    )
+    api.wait_s = 5.0
+    read = venue.read_back()
+    assert not isinstance(read, TypedRefusal)
+    claimed = attribute(read.value, tag="a4dqobyh", sent=["e" * 36])
+    closed = venue.send(
+        Ticket(close.value, "fx.eurusd", Side.LONG, Decimal(0), position="e" * 36)
+    )
+
+    assert not isinstance(entered, TypedRefusal) and not isinstance(closed, TypedRefusal)
+    assert entered.value.outcome is SubmissionOutcome.UNKNOWN
+    assert read.value.orders == (
+        VenueOrder(
+            "e" * 36,
+            "qmx:a4dqobyh:probe",
+            "fx.eurusd",
+            OrderState.FILLED,
+            "e" * 36,
+            Decimal("1.08012"),
+        ),
+    )
+    assert read.value.positions == (
+        VenuePosition(
+            "e" * 36,
+            "qmx:a4dqobyh:probe",
+            "fx.eurusd",
+            "long",
+            Decimal("0.01"),
+            Decimal("1.08012"),
+            Decimal("1.07512"),
+        ),
+    )
+    assert [attributed.claim for _, attributed in claimed.positions] == [Claim.MINE]
+    assert (closed.value.outcome, closed.value.price) == (
+        SubmissionOutcome.ACCEPTED_BY_VENUE,
+        Decimal("1.08000"),
+    )
+    assert rig.fake.held == {}
+    runtime(rig).stop()
+
+
+def test_the_dummy_trades_through_the_ctrader_binding_with_its_stop_at_the_venue(
+    tmp_path: Path,
+) -> None:
+    rig = bound_rig(tmp_path)
+    signed_in(rig)
+    bind(rig)
+    runtime = deploy_dummy(rig)
     play_spots(rig, base.LIVE_FROM, base.LIVE_FROM + 2 * base.DAY)
     venue = cast(CTraderVenue, runtime.venues[ACCOUNT].client)
     orders = [body for name, body in rig.fake.received if name == "ProtoOANewOrderReq"]
-    closes = [body for name, body in rig.fake.received if name == "ProtoOAClosePositionReq"]
     trades = [
         cast("dict[str, Json]", row["body"])
         for row in cast(
@@ -637,7 +897,6 @@ def test_the_dummy_trades_through_the_ctrader_binding_with_its_stop_at_the_venue
         if row["kind"] == "trade"
     ]
 
-    assert value(deployed)["state"] == "accepted"
     assert [(o["tradeSide"], o["volume"], o["relativeStopLoss"]) for o in orders] == [
         ("SELL", "400000", "1164"),
         ("SELL", "17200000", "29"),
@@ -649,7 +908,7 @@ def test_the_dummy_trades_through_the_ctrader_binding_with_its_stop_at_the_venue
         ("target", "1.72"),
     ]
     assert [t["trade_id"] for t in trades] == [o["clientOrderId"] for o in orders]
-    assert closes == [
+    assert closes(rig) == [
         {"ctidTraderAccountId": "4401", "positionId": "9001", "volume": "400000"},
         {"ctidTraderAccountId": "4401", "positionId": "9005", "volume": "17200000"},
     ]
