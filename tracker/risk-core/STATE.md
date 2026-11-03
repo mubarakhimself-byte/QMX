@@ -67,6 +67,18 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - **Ledger v0 started** (Opus) → `ledger/variables.yaml`, `ledger/check.py` (validates, checks couplings across `additions/*.yaml`, writes `couplings.md`), `ledger/README.md`.
     - Expansion round waits for R3. Planned agents, each adding `ledger/additions/<layer>.yaml`: chassis/template shape (Fable), sizing and accelerators (Opus), brakes x frequency x exits x drift per level and style (Opus), scenario catalogue (Fable), edge verification workflow (Fable), observability and UI states (Opus), where agents come in (Opus). Then the Fable consistency judge, then Fable architecture, then an Opus reviewer.
 
+16. **R3 done and committed.** Proof costs trades (55 % at 1:1 needs about 610 trades, 52.5 % about 2,470); daily 95 % checks pass dead units about three times too often; Basel's three zones; dose-escalation sizing; grids, reclosers, SRE burn rates and the insurers' hours clause for brakes and "losing together"; defaults, class, bucket, instrument and unit overrides for the variable count. The "Ideas" site he saw is IDEAS/RePEc (https://ideas.repec.org).
+    - **Grounding is complete** (G1-G11, R1-R3, SEEDS).
+    - **Expansion round started** (about 14:58 local), seven agents on one shared brief `expansion/BRIEF-COMMON.md`. Each writes `expansion/<id>.md` and `ledger/additions/<id>.yaml`:
+      - X1 template shape (Fable)
+      - X2 sizing and accelerators (Opus)
+      - X3 brakes, exits and drift (Opus)
+      - X4 scenario catalogue (Fable)
+      - X5 edge verification workflow (Fable)
+      - X6 observability and UI states (Opus)
+      - X7 where agents come in (Opus)
+    - Ledger v0 still running in parallel.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
