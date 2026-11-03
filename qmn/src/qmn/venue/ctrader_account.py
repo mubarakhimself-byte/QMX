@@ -1304,11 +1304,14 @@ class CTraderVenue:
         )
         if is_refusal(command):
             return command
+        symbol = self.symbols.get(held.market_id)
         encoded = client.encode_command(
             command.value,
             compiled=self.codec.proto,
             declaration=client.bound_declaration,
             ctid_trader_account_id=self.ctid,
+            trade_side="buy" if held.side is Side.LONG else "sell",
+            digits=None if symbol is None else symbol.digits,
         )
         if is_refusal(encoded):
             return encoded
