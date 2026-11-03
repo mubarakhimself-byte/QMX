@@ -5,9 +5,9 @@ A tool the node did not declare (its `policy_args["tools"]`) is denied at once w
 agent reads. An external MCP tool passes: the harness gives an engine chat only the external
 servers its node names as `mcp:` toolsets (C-36). A step that declares a write tool is born in
 its attempt overlay, which `policy_args["overlay"]` names: its file writes are allowed only under
-that folder, and a declared
-`Bash` or `PowerShell` runs, because a shell's writes cannot be bounded by path (AD-60's honest
-boundary; only declared outputs ever leave the overlay). A chat with no overlay is read-only.
+that folder, and a declared `Bash` or `PowerShell` runs, because a shell's writes cannot be
+bounded by path (AD-60's honest boundary; only declared outputs ever leave the overlay). A chat
+with no overlay is read-only.
 """
 
 from __future__ import annotations

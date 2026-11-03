@@ -287,6 +287,9 @@ FLAG_KEYS: Final = frozenset({"includeCoAuthoredBy", "alwaysThinkingEnabled", "r
 CLEANUP_PERIOD_DAYS: Final = 3650
 """Transcripts outlive the CLI's 30-day sweep. The settings reference rejects `0`."""
 SPAWN_DEPTH_DEFAULT: Final = "1"
+EXTERNAL_UNATTENDED_DEFAULT: Final = ("ctrader/*",)
+"""`external_tools_unattended` until he sets it (C-36): a workflow agent step that names
+`mcp:ctrader` may run that server's tools, which the harness offers only on a demo account."""
 
 _RULE = re.compile(r"[A-Za-z][\w-]*(?:\(.+\))?", re.DOTALL)
 
@@ -299,7 +302,8 @@ class ClaudeSettings:
 
     @property
     def external_tools_unattended(self) -> frozenset[str]:
-        return frozenset(cast("list[str]", self.raw.get("external_tools_unattended", [])))
+        found = self.raw.get("external_tools_unattended", EXTERNAL_UNATTENDED_DEFAULT)
+        return frozenset(cast("list[str]", found))
 
     def remembered(self, workspace: Path) -> list[str]:
         table = cast("Mapping[str, Mapping[str, list[str]]]", self.raw.get("remembered", {}))

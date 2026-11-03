@@ -352,9 +352,6 @@ CTRADER_MCP: Final[Document] = {"credential_ref": "qmx/ctrader-mcp", "venue": "c
 """The `[mcp_servers] ctrader` row's fixed keys (C-36): cTrader's Remote MCP, shipped off. He
 pastes its url and one demo account's token, which stays in Credential Manager. `venue` makes the
 harness offer it only when the token's account is a demo account record on main."""
-EXTERNAL_UNATTENDED: Final = ("ctrader/*",)
-"""`[claude] external_tools_unattended` until he sets it: workflow agent steps naming `mcp:ctrader`
-may run its tools."""
 
 
 def _check_ctrader(row: JsonValue) -> None:
@@ -1046,8 +1043,6 @@ class ControlService:
                 if not isinstance(ctrader, dict):
                     raise ControlError("invalid_settings", "cTrader MCP settings must be a table.")
                 values["ctrader"] = {"enabled": False, **ctrader, **CTRADER_MCP}
-            if section == "claude":
-                values = {"external_tools_unattended": list(EXTERNAL_UNATTENDED), **values}
             if section == "backup":
                 values = cast(
                     Document, backup_defaults(values, cast(Document, stored.get("engine", {})))

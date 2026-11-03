@@ -739,4 +739,6 @@ def test_external_tools_unattended_is_read_by_qmx_and_never_passed_to_the_cli(
     )
     assert "external_tools_unattended" not in rendered
     assert rendered["language"] == "en"
-    assert parse_claude_settings({}).external_tools_unattended == frozenset()
+    assert parse_claude_settings({}).external_tools_unattended == frozenset({"ctrader/*"})
+    unset = parse_claude_settings({"external_tools_unattended": []})
+    assert unset.external_tools_unattended == frozenset()

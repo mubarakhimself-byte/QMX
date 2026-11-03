@@ -342,6 +342,7 @@ def test_keyring_refs_reads_names_from_three_sections(tmp_path: Path) -> None:
         "qmx/chatgpt",
         "qmx/control-token",
         "qmx/firecrawl",
+        "qmx/ctrader-mcp",
     }
 
 
@@ -359,7 +360,8 @@ def test_server_config_shapes() -> None:
     for name, row, message in [
         ("qmx", {"command": "py"}, "belong to QMX"),
         ("qmx_library", {"command": "py"}, "belong to QMX"),
-        ("f", {"url": "https://x", "credential_ref": "qmx/f"}, "stored credential"),
+        ("f", {"command": "py", "credential_ref": "qmx/f"}, "only an HTTP server"),
+        ("f", {"url": "https://x", "credential_ref": "f"}, "a qmx/\\* Credential Manager"),
         ("f", {}, "a command or a url"),
         ("qmx__evil", {"command": "py"}, "belong to QMX"),
         ("evil__x", {"command": "py"}, "single _"),
