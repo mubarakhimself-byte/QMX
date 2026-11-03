@@ -204,6 +204,10 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - **Route:** R4 and R8 → Stage A top-up → Stage B linking → Fable funnel judge → **architecture in versions** (if several real options emerge) → **fold into one final, with the lead's recommendations** → **then** explain to him in plain words → review → slices → builders. The explanation comes after the folded architecture, not before it.
     - **Agents per step:** a plan step may use several agents (one per cluster or layer), never two on the same job.
 
+35. **M38.**
+    - **QML dictionary expansion is a downstream deliverable.** The component catalogue (sizers, brakes, detectors, exits, readings, cost models) maps onto dictionary entries in the A11/A12 format. After the architecture, a slice set turns the chosen components into dictionary entries and blocks. Ideas for the trading node may also come in.
+    - **Brakes and accelerators get their own deeper research.** Accelerators are the thinnest part (house money and grow-back untested; win clustering unmeasured). **R9 started** (Opus, alphaXiv MCP, MQL5 corpus, built-in browser), covering every accelerator, return clustering, the brake-accelerator pair (one signal, asymmetric speeds, hysteresis), deeper brakes (money-based, frequency-scaled, FI-aware) and analogues from other fields → `research/R9-accelerators-and-brake-pairs.md`. It enters with the Stage A top-up.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
