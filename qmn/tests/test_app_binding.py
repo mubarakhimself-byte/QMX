@@ -730,7 +730,6 @@ class NoCredentialManager:
 
 @pytest.fixture
 def environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    monkeypatch.setattr(server, "CredentialManager", NoCredentialManager)
     monkeypatch.setattr(grants_module, "CredentialManager", NoCredentialManager)
 
     def memory(data: Path, tag: str) -> Memory:

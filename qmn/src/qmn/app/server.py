@@ -41,7 +41,6 @@ from qmn.app.grants import (
     LIVE_GRANT_MESSAGE,
     REDIRECT,
     TOKEN_URL,
-    CredentialManager,
     Fetch,
     Grant,
     GrantAccount,
@@ -134,8 +133,11 @@ class Node:
             self.runtime.start()
 
     def stop(self) -> None:
+        """Stop the runtime, then close every venue session it held."""
         if self.runtime is not None:
             self.runtime.stop()
+            for venue in self.runtime.venues.values():
+                venue.feed.source.close()
         self.alarms.stop()
 
     def call(self, name: str, arguments: object) -> Answer:
@@ -304,23 +306,6 @@ def endpoints(data: Path) -> Endpoints:
     return Endpoints((host, port), False, token)
 
 
-def keys_again(initial: str | None) -> str | None:
-    """The keys document as ``rotate_keys`` reads it again. On Windows that is the Credential
-    Manager entry the host's key route wrote; elsewhere the supervisor's copy stands until the
-    node restarts. The node never reads it at start: the supervisor's copy is the start."""
-    if sys.platform == "win32":
-        try:
-            again = CredentialManager(NODE_KEYS_ENTRY, encoding="utf-16-le").read()
-        except OSError:
-            again = None
-        if again:
-            return again
-    return initial
-
-
-NODE_KEYS_ENTRY: Final = "qmx/trading-node-keys"
-
-
 def _image_digest() -> str | None:
     """The installed image the node runs from: the supervisor names each app environment by
     its definition hash. None when the node does not run from an installed image."""
@@ -343,7 +328,7 @@ class CTraderDoor:
     store: Store
     data: Path
     keys: Callable[[], str | None]
-    """The keys document at start: the supervisor's ``NODE_KEYS``."""
+    """The keys document: the supervisor's ``NODE_KEYS``. The node never reads a key store."""
     grants: Grants
     endpoint: TokenEndpoint
     open_wire: Callable[[str], Result[Wire]]
@@ -352,8 +337,6 @@ class CTraderDoor:
     steady_ns: Callable[[], int]
     host: str = DEMO_HOST
     image_digest: Callable[[], str | None] = _image_digest
-    rotated: Callable[[], str | None] | None = None
-    """How ``rotate_keys`` reads the keys document again; ``keys`` when None."""
     bar_ns: int = BAR_NS
     runtime: Runtime | None = None
     journal: JournalWriter | None = None
@@ -381,7 +364,6 @@ class CTraderDoor:
         clock_ns: Callable[[], int],
         steady_ns: Callable[[], int],
         endpoints: Endpoints,
-        rotated: Callable[[], str | None] | None = None,
         grant_store: GrantStore | None = None,
         fetch: Fetch | None = None,
         definitions: Path = DEFINITIONS,
@@ -411,7 +393,6 @@ class CTraderDoor:
             clock_ns=clock_ns,
             steady_ns=steady_ns,
             image_digest=image_digest,
-            rotated=rotated,
         )
 
     def attach(
@@ -582,7 +563,10 @@ class CTraderDoor:
         return ok({"state": "accepted"})
 
     def rotate_keys(self) -> Answer:
-        self._app = registration((self.rotated or self.keys)())
+        """Read the keys document again. The supervisor hands the node its keys when it starts
+        it, so a document changed since reaches the node at its next start, which the connect
+        dialog makes once the node is safe to restart."""
+        self._app = registration(self.keys())
         return ok({"state": "accepted"})
 
     # --- the self-test, on the runtime thread ---------------------------------------------
@@ -820,7 +804,6 @@ def from_environment() -> Node:
         door = partial(
             CTraderDoor.compose,
             keys=lambda: initial,
-            rotated=lambda: keys_again(initial),
             facts=volume / HOST_FACTS,
             clock_ns=time.time_ns,
             steady_ns=time.monotonic_ns,

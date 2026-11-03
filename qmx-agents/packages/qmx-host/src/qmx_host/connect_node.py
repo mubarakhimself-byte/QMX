@@ -321,8 +321,9 @@ def _write_keys(run: Run) -> Card | None:
 
 
 def _rotate(run: Run) -> None:
-    """A running node reads the keys document again (C-11 review L3); one not running yet reads
-    it when it starts."""
+    """A running node is asked to read its keys again (C-11 review L3). The supervisor hands an
+    app its keys when it starts it, so the node is restarted once it reads safe to restart; one
+    not running yet reads the new document when it starts."""
     apps = _apps(run)
     try:
         running = _installed(apps, NODE_APP) is not None and _running(run)
@@ -337,7 +338,15 @@ def _rotate(run: Run) -> None:
     answer = cast("dict[str, Any]", called.get("result") or {})
     if answer.get("ok") is not True:
         raise Stopped(f"keys: the trading node answered rotate_keys with {answer.get('code')}")
-    run.say("keys: the running trading node read its keys again")
+    safe = cast("dict[str, Any]", _ask(run, "status").get("safe_to_restart") or {})
+    if safe.get("ok") is not True:
+        run.say("keys: the trading node reads its new keys at its next safe restart")
+        return
+    try:
+        apps.restart(NODE_APP)
+    except AppError as error:
+        raise Stopped(f"keys: the trading node did not restart on its new keys: {error}") from None
+    run.say("keys: the trading node restarted on its new keys")
 
 
 def _never(_run: Run) -> bool:
