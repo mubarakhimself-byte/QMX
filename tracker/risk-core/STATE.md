@@ -200,6 +200,10 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - A4: 203 components (22 seeds, 127 new variables proposed); agent-harness pieces are flagged as QMA, not designed.
     **Top-up pass (one Opus agent) when R4 and R8 land**: the R4 chats not yet dissected (02 in part, 04, 05, 11, 12, 14, any after 29, and the parts of 07 and 17 not taken), plus R8. It writes `linking/components/A5-topup.yaml` with the same schema and adds to the unit idea bank. Then merge the unit seeds into `linking/UNIT-IDEA-BANK.md`, then Stage B.
 
+34. **M37 check-in: order fixed.**
+    - **Route:** R4 and R8 → Stage A top-up → Stage B linking → Fable funnel judge → **architecture in versions** (if several real options emerge) → **fold into one final, with the lead's recommendations** → **then** explain to him in plain words → review → slices → builders. The explanation comes after the folded architecture, not before it.
+    - **Agents per step:** a plan step may use several agents (one per cluster or layer), never two on the same job.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.

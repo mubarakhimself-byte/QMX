@@ -377,6 +377,251 @@ Exit types (assistant's claim): fixed vs ATR stops (compare out of sample by ins
 
 **Per asset class (assistant's claim).** FX: decentralised 24/5; model stops on the executable side (bid for long exits); rollover handoff, weekends, macro releases; round numbers attract clustered orders. Index futures: trade beyond cash hours, cash-open jumps, exchange limits and pauses; an ETF stop cannot fire while its venue is closed. Metals: gold liquid across sessions, silver jumpier; handle expiry, roll and delivery. Energy: inventory, OPEC, weather; limits can block exits; stop-market may fill far past, stop-limit may not fill. Crypto: weekends with thin venues; know whether stops trigger on last, mark or index price; liquidation can beat the stop; isolated vs cross margin. Futures: active contract and roll schedule; limit-lock means no exit. Single stocks: overnight and earnings gaps, halts, borrow recall. Log trigger, order type, venue, price source, decision, submission and fill times and spread for every stop.
 
+## Technique 18 - LLM-agent harnesses for alpha discovery (chat 18)
+
+Asked without any budget figure; newest papers only. Bookmarked to **qmx-agents**.
+
+**Core answer (assistant's claim).** "More search can improve a backtest while weakening the evidence for it." Count every candidate evaluation, make future information inaccessible by design (typed registries, not prompts), keep final out-of-sample results out of the agent's loop, and treat model-training contamination as a separate failure from code leakage (a leaky oracle still passed DSR). Critics are useful but deterministic tests are the safety boundary. Human approval promotes a frozen, hashed artifact into **paper trading only**; live money is a later, separate decision.
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| What survives honest evaluation? Leakage-safe, search-aware assessment of LLM-driven strategy discovery | https://arxiv.org/abs/2608.27734 | 2026 | Typed tools over a feature registry; deterministic publication-delay audit; trial ledger; DSR, PBO, bootstrap. No discovered strategy passed certification: a 102-trial winner had design Sharpe 1.69, held-out 0.18; ETF discovery -21%. A deliberately leaky oracle scored DSR 1.00. | X5, X7 |
+| AQuA: Recursively Self-Improving Quantitative Trading Research Agents | https://arxiv.org/abs/2608.12841 | 2026 | Manager plus six specialists (Data Steward, Visual Analyst, Idea Miner, Factor Evaluator, Backtest Engineer, Research Librarian); falsifiable hypotheses first; restricted DSL; memory of failures. US-equity Sharpe +2.50 held-out (2 bp), ~2.00 causal walk-forward. A look-ahead bug (full-day volume) escaped both generator and LLM reviewer. | X7 |
+| EvoQuantLab | https://arxiv.org/abs/2610.17130 | 2026 | LLM hypotheses + typed genetic programming; family-diverse elites; L0-L6 staged admission; outer loop patches the **next** cycle's protocol only. Short OOS: CSI 500 18.34% ann. / -4.78% DD; S&P 500 21.30% / -5.82%; crypto 37.91% ann. (7.17% cumulative, -3.23% DD), months-long windows. | X7, X5 |
+| Quant-Arena: Benchmarking LLM Agents for Quantitative Trading Research | https://arxiv.org/abs/2610.30113 | 2026 | Five-candidate cap, sealed 2024 test, costed cash account. 1 of 38 configurations beat gross equal weight (18.4% vs 17.1%); iteration raised score for 9 of 9 models but returns for 4. Agents often found cash or exposure timing, not stock-picking. | X5, X7 |
+| From Search to Research | https://arxiv.org/abs/2609.35559 | 2026 | Parallel search beat sequential at a matched ten-iteration budget; held-out results never flow back. | X7 |
+| Alpha-R1 | https://arxiv.org/abs/2512.23515 | 2025/2026 | RL-trained LLM selects a sparse factor subset from a timestamped market-state description; 2025 S&P 500 47.87% (Sharpe 1.62) and CSI 300 40.57% (2.23) after 10 bp; one-year test. | X7, seed |
+| QuantEvolve | https://arxiv.org/abs/2510.18569 | 2025 | Hypothesis and coding agents with evolutionary islands, a quality-diversity map, and an archive of rejects. Authors flag data snooping. | X7 |
+| Cognitive Alpha Mining via LLM-Driven Code-Based Evolution | https://arxiv.org/abs/2511.18850 | 2025 | Seven-level agent hierarchy, code validation, quality checker, mutation and crossover. | X7 |
+| AlphaAgent (operator's saved paper) | https://arxiv.org/abs/2502.16789 | 2025 | AST novelty, hypothesis alignment and complexity penalties against alpha decay; 11.0% excess (IR 1.5) CSI 500 and 8.74% (IR 1.05) S&P 500, 2021-24, after fees. | X7, seed |
+| MASS (operator's saved paper) | https://arxiv.org/abs/2505.10278 | 2025 | Simulated heterogeneous investors and a learned aggregation; candidate stress and diversity mechanism. | X4, X7 |
+| Can We Stop the Backtest Yet? Anytime-Valid Promotion Tests (Promote) | https://arxiv.org/abs/2611.03384 | 2026 | Lifetime testing-wealth ledger; each frozen candidate funded and tested only on returns after registration; replay promoted 0 of 24 rules; naive repeated looks crossed in 94.5% of null paths vs 0 of 3,000 funded. | X5 |
+| Propose, Don't Judge | https://arxiv.org/abs/2609.27051 | 2026 | A frozen referee admitted 5-11x fewer sub-threshold factors than leaky referees; cost: ~500 trading days median wait and a certified portfolio with lower Sharpe than ungated. Factor-viability e-detector: 204-322 days delay, 0.5-1.5% false retirement (synthetic). | X5, X3 |
+| FORESIGHT-9 | https://arxiv.org/abs/2608.29372 | 2026 | Nine counterfactual worldlines: the retrospective winner stayed first in 1 of 9; equal-weight or inverse-vol beat 31 of 36 agent runs. | X4 |
+| Auditing LLM Alpha-Factor Mining: Metric Provenance and Full-Cohort Reanalysis | https://arxiv.org/abs/2610.29500 | 2026 | Keep the whole cohort, failures included; state which candidates each metric averages. | X5, X6 |
+| AllPath | https://arxiv.org/abs/2610.26662 | 2026 | Approval queue, versioned strategy files, no agent approves its own proposal (operational case study). | X6, X7 |
+
+**Growth vs survival (assistant's claim).** Evidence splits three ways: promising costed retrospective tests (AlphaAgent, AQuA), short sealed windows (EvoQuantLab, Quant-Arena), and prospective or live tests (crypto paper: no LLM method beat BTC). Strict gates cost growth (Propose, Don't Judge: long admission waits, lower certified Sharpe) but stop selection noise from reaching money.
+
+**Per asset class (assistant's claim; research-design floors, not standards).** FX: bid/ask fills, swap, Sunday open, rollover, holidays; multiple years and policy regimes, 3-5 years OOS for slower signals. Indices: point-in-time membership, cash vs overnight futures sessions, rolls; 10+ years for daily signals. Metals: separate spot, futures, ETFs; actual contracts for P&L; a decade or more. Energy: contract-specific curves, limit moves, seasonality; a decade-plus, plus explicit stress because crises are rare. Crypto: venue-specific books, funding, liquidations, token survivorship; thousands of decisions across several years and venues plus exchange paper trading. Futures: raw contract histories and roll calendars; several full roll cycles. Single stocks: point-in-time constituents incl. delisted names; 10-20+ years; count independent events, not stock-days. False discovery is worst where evidence is thin relative to search: rare-event energy, wide single-stock searches, short crypto histories, heavily parameterised FX session filters.
+
+## Technique 2 - Breadth and the effective number of bets (chat 02)
+
+Asked without any budget figure. Some answers contain raw alphaXiv citation tags (citepaper=...) that the Copy button kept; they are left verbatim.
+
+**Core answer (assistant's claim).** Count independent **net P&L bets**, not strategy names. Publish three numbers together: spectral effective rank of the strategy universe (what variance directions exist), the portfolio's effective number of bets or risk-contribution concentration (how the current allocation spreads risk), and incremental out-of-sample net performance per new strategy (whether it adds alpha). Breadth never raises the total risk limit; it only shapes how a fixed limit is split. A strategy counts as new breadth only for its residual P&L after common exposures (USD and funding, equity beta, commodities, rates, crypto beta, vol and liquidity), and only if that separation survives stress.
+
+Formulas it gave: participation ratio N_PR = (sum lambda)^2 / sum lambda^2; entropy effective rank exp(-sum p log p), p = lambda / sum lambda; Euler risk contribution RC_i = w_i (Sigma w)_i / sigma_p^2 with concentration 1 / sum RC^2; diversification ratio DR = sum |w_i| sigma_i / sqrt(w' Sigma w); Fundamental Law IR ~ IC sqrt(B) TC with B_eff = B / (1 + (B-1) rho), which saturates at 1/rho.
+
+**Breadth to budget (its procedure; the numbers are illustrative).** Total risk from survival constraints first; estimate breadth at three levels with shrunk and stressed correlations and use the lowest relevant conservative one; cluster by measured exposures and failure modes; roughly equal risk per supported cluster, each capped (example: 20% of total risk, so eight clusters start at 12.5%); within clusters weight by conservative posterior edge and marginal risk. Recompute exposures continuously, correlations daily or weekly, full breadth and allocation monthly or after a regime break.
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| Managing Diversification (Meucci) | https://papers.ssrn.com/sol3/papers.cfm?abstract_id=1358533 | 2009 | Effective number of bets: eigen-directions of covariance, each direction's share of portfolio variance, ENB = exp(entropy); conditional version for constrained portfolios. | X2, X6 |
+| The Minimum Torsion Bet (Meucci) | scholar link in chat 02 | 2010 | Decorrelated bets that stay close to the original strategies. | X2 |
+| The Fundamental Law of Active Management (Grinold); Portfolio Constraints and the Fundamental Law (Clarke, de Silva, Thorley) | https://papers.ssrn.com/sol3/papers.cfm?abstract_id=290322 | 1989; 2002 | Skill x sqrt(breadth) x transfer coefficient; correlated forecasts saturate breadth. | X2 |
+| The Effective Rank (Roy, Vetterli); Toward Maximum Diversification (Choueifaty, Coignard); ERC portfolios (Maillard, Roncalli, Teiletche) | scholar links in chat 02 | 2007; 2008; 2010 | Entropy rank; diversification ratio; equal risk contribution. | X2 |
+| ...and the Cross-Section of Expected Returns (Harvey, Liu, Zhu) | https://doi.org/10.1093/rfs/hhv059 | 2016 | A large search raises the evidence bar; apparent backtest breadth is not skill. | X5 |
+| In-Sample and Out-of-Sample Sharpe Ratios for Linear Predictive Models | https://www.alphaxiv.org/abs/2501.03938 | 2025 | Out-of-sample replication falls as assets and weak signals grow vs history; at 10% average correlation the out-of-sample Sharpe gain from adding assets reverses. | X2, X5 |
+| Re-evaluating Short- and Long-Term Trend Factors in CTA Replication: A Bayesian Graphical Approach | https://www.alphaxiv.org/abs/2507.15876 | 2025 | 2010-2025 futures: short-term trend Sharpe 0.37, long-term 0.70, correlation 0.50; adding short-term trend to market cut max DD 20.3% -> 14.9% and lifted Sharpe; adding long-term trend on top did not raise Sharpe. All-in drag 1.38-1.68% a year. | X2, seed |
+| Follow the Leader: Enhancing Systematic Trend-Following Using Network Momentum | https://www.alphaxiv.org/abs/2501.07135 | 2025 | Network (lead-lag) momentum net Sharpe 0.364 vs 0.233 MACD on 2005-2024 futures; P&L correlation to baseline 0.71-0.89: a related sleeve, not a new cluster. | seed |
+| Is Trend Still Your Friend? | https://www.alphaxiv.org/abs/2607.01550 | 2026 | ~100 futures: since 2009 the fastest trend Sharpe fell to 0.12 while slower trend held 0.40; volatility-normalised tick size separates outcomes better than asset class. | X1, seed |
+| Cross-asset network and turbulence study (crypto, fiat, S&P 500, 381 assets) | https://www.alphaxiv.org/abs/2605.30442 | 2026 | Near-zero average FX-equity correlation, but in high turbulence fiat becomes the leading transmitter; stress blurs class boundaries. | X3, X4 |
+| TrendFolios | https://www.alphaxiv.org/abs/2506.09330 | 2025 | Higher return (7.35% vs 4.80%) but lower Sharpe (0.48 vs 0.51) and higher vol than 60/40: growth is not breadth. In-sample. | X2 |
+| Optimal Portfolio Choice with Parameter Uncertainty (Kan, Zhou) | https://doi.org/10.1093/rfs/hhm045 | 2007 | Parameter-uncertainty-aware allocation. | X2 |
+
+**Growth vs survival (assistant's claim).** Adding a strategy helps only when it adds incremental forecast or payoff structure after costs; a lower-Sharpe sleeve can improve the book by changing the tail (CTA example), while many weak correlated signals inflate in-sample results.
+
+**Per asset class (assistant's claim).** FX: majors share the USD leg; long and short versions of one signal are one bet. Indices and single stocks: index scalpers, sector and stock signals can all be one equity cluster; count residuals after market and sector. Metals and energy: not one factor, not independent either (gold on real rates and USD; copper and oil on growth). Crypto: token count is a poor breadth proxy; one crypto factor plus liquidity; weekend coupling is under-measured. Futures: broadest universe, but instrument count still exaggerates; horizon and tick size matter. Sessions: Asia, Europe and US variants of one exposure are one bet unless residual P&L stays distinct.
+
+## Technique 15 - Stress tests and scenario generation (chat 15)
+
+Asked without any budget figure.
+
+**Core answer (assistant's claim).** Stress-test the **whole trading system** (all strategies together, real entry, inventory, stop and exit logic, shared exit liquidity), not a return simulation. Historical replay and transparent hypotheticals are primary; reverse stress testing finds failures you did not think of; generators broaden scenarios but are not the authority on how bad it gets. For rare joint losses, matching marginal tails is not enough: the generator must preserve **extremal dependence** (which factors go extreme together). Separate survival gates (hard, portfolio and cluster) from growth controls (allocate by marginal contribution to stressed loss and liquidity demand). Keep a fixed crisis library so calm data cannot erase it. Cadence: limits daily; rolling dependence and liquidity monthly; full generator validation quarterly; sooner after a break.
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| Simulating Stress Laws under Extremal Dependence (SSGEN) | https://www.alphaxiv.org/abs/2608.13056 | 2026 | Split extremes into Pareto magnitude and angular direction; learn directions from intermediate exceedances (diffusion as the learner), extrapolate magnitude. Synthetic test: CoVaR error ~15% vs 25% empirical conditioning vs 47% t-copula. | X4 |
+| Tail-GAN: Learning to Simulate Tail Risk Scenarios | https://www.alphaxiv.org/abs/2203.01664 | 2022 | Train the generator on benchmark **strategy P&L** VaR and ES. Synthetic: 4.6% VaR/ES error vs 3.4% historical simulation vs 21.3% WGAN; 20 stocks: 25.6% vs 25.9% historical. Needs LOB data for HF realism. | X4 |
+| Correlation scenarios and correlation stress testing (Packham, Woebbeking) | https://www.alphaxiv.org/abs/2107.06839 | 2021 | Factor-driven correlation scenarios and reverse stress in a plausibility region; stressed 99% VaR often >50% above unstressed in calm markets. | X4 |
+| Beating the Correlation Breakdown | https://www.alphaxiv.org/abs/2504.15268 | 2025 | Dependence-matrix inference with flexible scenario restrictions. | X4 |
+| Reverse Stress Testing for Multivariate Scenarios | https://www.alphaxiv.org/abs/2606.09274 | 2026 | Work backward from an adverse outcome to a coherent multivariate scenario; nonparametric version is thin when few observations sit near the target. | X4 |
+| Generating Plausible Stress Scenarios via Large Deviations | https://www.alphaxiv.org/abs/2606.31122 | 2026 | Severe but plausible configurations; candidate method. | X4 |
+| Diffusion Factor Models | https://www.alphaxiv.org/abs/2504.06566 | 2025/2026 | Factor-structured diffusion for high-dimensional returns; sub-Gaussian assumption, heavy tails open. | X4 |
+| CoFinDiff | https://www.alphaxiv.org/abs/2503.04164 | 2025 | Conditional diffusion for requested trend and volatility; multi-asset correlation is future work. | X4 |
+| Quant GANs | https://www.alphaxiv.org/abs/1907.06673 | 2020 | Baseline generator. | X4 |
+| Beyond Visual Realism: Toward Reliable Financial Time Series Generation | https://www.alphaxiv.org/abs/2601.12990 | 2026 | Realistic-looking paths can still give implausible strategy outcomes: validate through the downstream strategy. | X4, X5 |
+| Negative Oil & Nickel Squeeze | https://www.alphaxiv.org/abs/2610.00951 | 2026 | Forced-closure feedback (WTI -$37.63, nickel 2022) as a scenario mechanism. | X4 |
+| Where does the criticality live? (BTC perpetual liquidation cascades) | https://www.alphaxiv.org/abs/2607.27070 | 2026 | Taker order-flow variance compression preceded 6 of 7 cascades (population p ~ 5e-6) but is not a reliable per-event alarm; price autocorrelation fails on sudden-news events. | X3, seed |
+| Robust Hedging Valuation Adjustment under Liquidity-Demand Stress | https://www.alphaxiv.org/abs/2606.26731 | 2026 | No-trade band widened 0.02 -> 0.10 -> 0.30 as liquidity fell: costs change the risk-trading trade-off. | X1, X4 |
+
+**Growth vs survival (assistant's claim).** Limits cost growth when they cut a real, diversified edge; they pay for themselves when they stop a forced-exit spiral (FARSIGHT sim: 400 agents selling into a 2010-sized shock deepened the fall from 9.2% to 17.3%; external interrupt plus hard limits removed it). Make limits selective by horizon, microstructure and portfolio contribution (trend Sharpe fell far more in small-tick futures after 2008) rather than one haircut everywhere.
+
+**Per asset class: scenarios (assistant's claim).** FX: surprise central-bank moves, intervention, peg or band break through a weekend, carry unwind, cross-currency basis. Indices: overnight gap opens, vol repricing, pauses and limits, futures-led sell-offs, vol-control deleveraging. Metals: squeezes and short covering, real-rate and USD shocks, margin hikes. Energy: front-month collapse near expiry, negative prices, limit moves, storage and delivery constraints. Crypto: perpetual liquidation cascades, stablecoin or collateral depeg, funding spikes, venue outages that concentrate forced flow elsewhere. Futures: roll squeezes, calendar-spread dislocations, margin shocks, delivery constraints; each leg separately. Single stocks: earnings gaps, halts and reopen auctions, borrow squeezes, fraud news. Model contagion as a **time-indexed dependency graph** with direction, lag and regime per edge, including one market closed or one venue down.
+
+## Technique 5 - Allocating risk across strategies and clusters over time; pod-shop practice (chat 05)
+
+Asked without any budget figure. Two rendered charts were captured as text into the chat file.
+
+**Core answer (assistant's claim).** Hierarchical clustering to control concentration, robust optimisation for sleeve weights, a slower risk overlay to scale capital; a **static, capped, robust clustered budget is the control portfolio**, and any adaptive allocator must beat it after costs on both growth and drawdown across walk-forward periods. Cluster by what makes strategies lose together (shared signals, exposures, hours, liquidity), not asset labels. There is **no public causal evidence** that pod-shop scaling and stop-outs improve long-run returns: measure it with a shadow allocator (fixed budgets vs staged scale-and-cut vs robust clustered).
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| Schur Complementary Allocation: A Unification of HRP and Minimum Variance | https://www.alphaxiv.org/abs/2411.05807 | 2024 | A damping parameter gamma moves from hierarchical (0) to global minimum variance (1) using A - B D^-1 C at each split; simulated variance gain worth ~10 bp a year. | X2 |
+| Nested Clustered Optimization Is One End of a Schur Bridge, and the Interior Is Sometimes Provably Better | https://www.alphaxiv.org/abs/2609.21271 | 2026 | NCO (within-cluster min-variance, then across clusters) as one end of a bridge; intermediate coupling can be best under estimation noise. Theory; no empirical returns. | X2 |
+| Optimal Portfolio Construction: RL Embedded Bayesian HRP (RL-BHRP) | https://www.alphaxiv.org/abs/2508.11856 | 2025 | Bayesian shrinkage to sector means + Ledoit-Wolf + HRP; PPO picks sector and within-sector weights with turnover and ERC penalties. 2020-2025 OOS: CAGR 15.16% vs 13.36% static vs 12.33% benchmark; Sharpe 0.905 vs 0.846 vs 0.763; max DD -20.33% vs -19.10% vs -18.32% (more growth, slightly deeper drawdown). | X2 |
+| Relative Robust Portfolio Optimization | https://www.alphaxiv.org/abs/1305.0144 | 2013 | Robust weights under estimation error. | X2 |
+| Adaptive and Regime-Aware RL for Portfolio Optimization | https://www.alphaxiv.org/abs/2509.14385 | 2025 | Candidate regime-adaptive allocator. | X2 |
+| Efficient and Near-Optimal Online Portfolio Selection | https://www.alphaxiv.org/abs/2209.13932 | 2022 | Online allocation reference. | X2 |
+| Meta-Learning the Optimal Mixture of Strategies for Online Portfolio Selection | https://www.alphaxiv.org/abs/2505.03659 | 2025 | Allocation as an online mixture of strategies. | X2 |
+| Regime-Adaptive Continual Learning for Portfolio Management | https://www.alphaxiv.org/abs/2606.00143 | 2026 | Regime layer adjusting window or budget only after persistent evidence. | X2 |
+| Systematic Trend-Following with Adaptive Portfolio Construction in Cryptocurrency Markets | https://www.alphaxiv.org/abs/2602.11708 | 2026 | Crypto trend with adaptive construction. | seed |
+| Dynamic Multi-Pair Trading Strategy in Cryptocurrency Markets with Deep RL | https://www.alphaxiv.org/abs/2606.04574 | 2026 | Crypto relative value. | seed |
+
+**Pod-style policy it proposed (a starting policy to backtest, not proven thresholds).** Pilot budget 0.10% of NAV in one-day 99% ES; scale only after 60 live trading days and 100 trades with positive net performance and no breaches; +25% per review, at most one increase a month, capped by capacity and cluster limits. High-water mark on net P&L at assigned risk: at 2R drawdown halve the budget and freeze scaling; at 3R cut to a diagnostic budget; at 4R stop new risk and require human review (R = pre-defined expected-loss unit). Operational violations stop at once regardless of P&L. Re-entry after a documented cause review, at half the pilot budget with a fresh observation period.
+
+**Growth vs survival (assistant's claim).** Dynamic allocators may add growth when they predict relative future net performance and move slowly; they may chiefly cut drawdowns when they de-risk in bad regimes; they hurt by chasing noisy winners, cutting losers just before recovery, and turnover. A bandit's "best arm so far" is a selection-bias trap with short, intermittent histories. Use ablations: signal alone, signal + static budget, signal + adaptive allocator.
+
+**Per asset class (assistant's claim).** FX: G10 vs EM, USD legs, carry, trend and mean-reversion sleeves; carry unwinds synchronise in risk-off. Equity indices: regional beta; index contracts merge into one global equity cluster in sell-offs. Single stocks: sector, beta, style and event exposure; crowding in mega-caps and factors. Metals: precious vs industrial. Energy: oil and products, gas, energy equities separately; crowding in the same curve, month or roll. Futures: count by underlying exposure; roll dates create correlated execution stress. Crypto: majors vs small tokens; its own clock; high beta in deleveraging. Distinguish overnight, regular-session and shared-session risk, weekend gaps and event windows when estimating co-movement.
+
+## Technique 17 - Self-configuring parameters across many instruments (chat 17)
+
+Asked without any budget figure. One rendered chart was captured as text into the chat file.
+
+**Core answer (assistant's claim).** Partial pooling by default, instrument or session overrides only when they earn their complexity in forward tests, and no autonomous path from tuning to live capital. Separate **contract facts** (tick size, multiplier, hours, minimum order, fees: exact configuration, never pooled) from **learned statistics** (volatility, costs, normalised stops, thresholds, edge: shared priors with instrument posteriors). Express parameters in comparable units (stops in vol units, costs relative to spread or vol). Shrink edge toward zero, not toward an optimistic group mean. Pooling hierarchy: instrument -> liquidity, venue or session subgroup -> asset class -> strategy-family default. Never pool clock-time session windows or roll, expiry, corporate-action and funding rules.
+
+Shrinkage formula it gave: theta_i = w_i theta_hat_i + (1 - w_i) mu_g, w_i = tau_g^2 / (tau_g^2 + s_i^2); estimate group quantities inside each training fold only.
+
+**Defaults-with-overrides policy (governance thresholds it proposed, not statistical constants).** An instrument earns an override with a plausible mechanism, >= 100 effective independent trades over >= 30 distinct sessions and >= 2 distinct volatility conditions (session override: >= 60 instances of that session), and a material, cost-stressed gain over the group default on identical untouched forward windows. Cadence: execution-state (vol, spread) continuous or daily; instrument posteriors and overrides weekly; group priors monthly; group definitions quarterly. Rate limits: at most 5% of a parameter's normalised value per weekly update, thresholds at most 0.1 group standard deviations per update. Automatic changes may only tighten risk; loosening risk or adding an override is a human decision.
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| Improving Bayesian Optimization for Portfolio Management with an Adaptive Scheduling (TPE-AS) | https://www.alphaxiv.org/abs/2504.13529 | 2025 | TPE that penalises variability more as the budget runs out; best Sharpe in 8 of 12 scenarios, lowest optimisation variance in all 12 (3.288 vs 2.980 standard TPE; variance 0.309 vs 1.367). Search stability on undisclosed backtests, not live robustness. | X1, X5 |
+| Practical Bayesian Optimization of Machine Learning Algorithms (Snoek et al.) | https://www.alphaxiv.org/abs/1206.2944 | 2012 | Sample-efficient bounded offline search. | X1 |
+| AlgoXpert Alpha Research Framework: a rigorous IS-WFA-OOS protocol | https://www.alphaxiv.org/abs/2603.09219 | 2026 | Prefer stable parameter plateaus, rolling forward tests, lock before final OOS, cost stress; USDJPY OOS Sharpe 2.34, MaxDD 4.21% with simplified execution. | X5 |
+| Conservative Bandits | https://www.alphaxiv.org/abs/1602.04282 | 2016 | Explore a new configuration only when a lower confidence bound keeps cumulative reward above a baseline-relative floor. | X2, X3 |
+| Rotting Bandits | https://www.alphaxiv.org/abs/1702.07274 | 2017 | Arms whose reward decays: discount stale observations so a decayed configuration is not kept. | X3 |
+| Unlocking Profit Potential: Bayesian Optimization of Supertrend Parameters | https://www.alphaxiv.org/abs/2405.14262 | 2024 | Cautionary: in-sample maxima, one stock worse than default (-28%), no forward evidence. | X5 |
+| AQuA (also chat 18) | https://www.alphaxiv.org/abs/2608.12841 | 2026 | Held-out US-equity long/short Sharpe 2.15, 2.50 with causal vol targeting, 2.00 walk-forward; positive each year 2021-2025 at 2 bp. | X7, seed |
+
+**Growth vs survival (assistant's claim).** No direct evidence here that hierarchical pooling raises held-out returns; its benefit is lower estimation variance. Tuning can find profitable windows that still fail selection-aware tests (search-aware study: 0 of 5 LLM-found volatility-breakout strategies survived deflation despite OOS Sharpe 0.59-0.70).
+
+## Technique 4 - Drawdown-controlled sizing (chat 04)
+
+Asked without any budget figure. The follow-up (a) answer failed once ("Something went wrong") and was retried.
+
+**Core answer (assistant's claim).** Distinguish reducing size **because the estimated edge fell** from reducing it **mechanically because equity fell**. Put the hard floor on the **whole book** (unreset global high-water mark), caps on clusters of shared exposure, and use strategy-level drawdown only as a soft throttle or review trigger; independent hard stops on many noisy strategies can cut several at once after a shared transient shock. Restart logic is separate from the hard constraint and must never reset the book's loss record.
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| Optimal Investment Strategies for Controlling Drawdowns (Grossman, Zhou) | https://doi.org/10.1111/j.1540-6261.1993.tb04708.x | 1993 | Exposure proportional to the cushion above a floor tied to the running max (V >= alpha H); no ruin in the model. | X2, X3 |
+| On Portfolio Optimization under Drawdown Constraints (Cvitanic, Karatzas) | scholar link in chat 04 | 1994 | Generalisation. | X2 |
+| The Grossman and Zhou Investment Strategy is Not Always Optimal (Klass, Nowicki) | scholar link in chat 04 | 2005 | The continuous-time rule does not transfer to discrete time; use dynamic programming. | X2 |
+| Cherny, Obloj: nonlinear drawdown constraints | https://www.alphaxiv.org/abs/1110.6289 | 2013 | Transform to an unconstrained problem with modified utility. | X2 |
+| Kardaras, Obloj, Platen: numeraire portfolio under drawdown constraints | https://www.alphaxiv.org/abs/1206.2305 | 2017 | Long-run growth optimality within the drawdown-constrained class. | X2 |
+| On Control of Drawdown: Robust Invariance and Optimality (Hsieh) | https://www.alphaxiv.org/abs/2609.23272 | 2026 | Safe exposure = cushion x feasible direction; worst loss over an assumed return support must fit the cushion; Bellman choice of direction. SPY/TLT: higher expected terminal return than linear feedback at every tested limit (plotted). | X2, X3 |
+| Drawdown-modulated feedback (Hsieh, Barmish) | https://www.alphaxiv.org/abs/1710.01503 | 2017 | TSLA 60-day OOS: Kelly $11,360 and 22.5% DD vs modulation $10,050 and 5.0% DD: protection at a clear growth cost. | X2 |
+| On Data-Driven Drawdown Control with Restart Mechanism in Trading (Hsieh) | https://www.alphaxiv.org/abs/2303.02613 | 2023 | VT: -8.42% without restart vs +20.97% with, both 10% DD; BTC: +17.41% vs +101.82%, DD 20.00% vs 20.18% (limit overshoot). | X2, X3 |
+| Fractional Kelly with a ridge penalty (Hakobyan, Lototsky) | https://www.alphaxiv.org/abs/2503.17927 | 2025 | Bernoulli p = 0.75: growth 0.13 -> 0.08 (-38%) for log-growth variance 0.22 -> 0.03 (-86%). | X2 |
+| Drawdown Risk Beyond Brownian Motion (Landolfi) | https://www.alphaxiv.org/abs/2608.00127 | 2026 | Same Sharpe 1, different shapes: 90th-pct max DD 1.32x Gaussian for mean-reversion or short-vol, 1.05x for trend (but longer time under water); 1.48x with Sharpe uncertainty. Calibrate drawdown budgets per strategy archetype. | X2, X4 |
+| When Alpha Breaks (Sanderink) | https://www.alphaxiv.org/abs/2603.13252 | 2026 | Model-specific health gate (AUROC 0.721, 0.750 final period vs VIX percentile 0.449 / 0.504) plus a position-level tail cap: final-period Sharpe 0.375 -> 0.925. | X3, X6 |
+| Minimum regime performance (Alexander, Fabozzi) | https://www.alphaxiv.org/abs/2604.08356 | 2026 | Minimum Sharpe across candidate regime splits as a durability diagnostic (not predictive). | X5 |
+| Drawdown Measure in Portfolio Optimization (Chekhlov, Uryasev, Zabarankin); constrained max-drawdown optimisation (Dorador) | scholar link; https://www.alphaxiv.org/abs/2401.02601 | 2005; 2024 | Drawdown-aware book optimisation. | X2 |
+| AllocateSmartly, "Surfing the Equity Curve" (practitioner study) | https://allocatesmartly.com/surfing-the-equity-curve-using-trend-following-to-switch-strategies-on-and-off/ | 2026 | 100+ tactical strategies since 1973: moving-average equity filters improved max DD in nearly all variants but every variant lost to the average strategy on return and Sharpe. | X3 |
+
+**Growth vs survival (assistant's claim).** Theory gives no universal "X% less CAGR for Y% less drawdown". Case studies show both sides: modulation can cost most of the gain on a path (TSLA), restart can recover return at the same drawdown (VT), and equity-curve filters trade return and Sharpe for drawdown. Equity-curve trading on noisy or mean-reverting strategies cuts at the wrong time; it is not a free Sharpe improvement.
+
+**Per asset class (assistant's claim).** FX: aggregate USD, JPY and carry; weekend reopen gaps; carry and short-vol have quiet gains and sharp losses. Indices: overnight gap stress separate from daily vol; variation margin forces reductions. Metals: precious vs industrial; session boundaries, rolls. Energy: most conservative jump scenarios; inventory, limit moves, rolls. Crypto: tail and gap stress plus venue limits and collateral buffers; liquidation can fire before the strategy stop. Futures: control by notional, vol and stressed margin, not contract count. Single stocks: issuer, sector and event limits; borrow recalls and squeezes. Calibrate drawdown rules to each strategy's holding period: intraday loss accumulation for scalpers, close-to-open for overnight holds.
+
+## Technique 12 - Gradual, safe de-risking and re-risking (chat 12)
+
+Asked without any budget figure.
+
+**Core answer (assistant's claim).** Three transferable controls: a **cumulative baseline budget** (conservative bandits: try a new strategy or setting only while a lower confidence bound keeps cumulative performance above a set fraction of the incumbent, at every time), **shared-uncertainty certificates** so an uncertain baseline is not charged twice, and **increase / hold / decrease bands** from dose-escalation designs. Ramp down faster than up. No paper gives a universal "growth surrendered per drawdown avoided" figure for trading.
+
+**Ramp ladder it proposed (to backtest, not proven).** Six live tiers: 5%, 10%, 20%, 35%, 60%, 100% of the intended allocation; the first tier small enough that total failure is tolerable. Step up on matured, independent evidence, never on calendar time alone. Hard breach (loss limit, bad data, runaway orders, exposure breach): cut to zero and require human re-promotion. Soft breach (drawdown-budget use above 80%, or two completed windows with the lower confidence bound below the minimum edge): drop one tier at once. At every tier size to the tightest constraint (instrument loss budget, impact, depth, operations, book capacity); re-estimate costs at each size, never scale tiny-size costs linearly.
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| Conservative Bandits (Wu et al.) | https://www.alphaxiv.org/abs/1602.04282 | 2016 | Anytime constraint: cumulative reward >= (1 - alpha) x baseline; Conservative UCB pays an additive regret cost O(KL/(alpha mu0)), not the multiplicative cost of "save budget, then explore". | X2, X3 |
+| Conservative Contextual Linear Bandits; Conservative Contextual Bandits: Beyond Linear Representations | https://www.alphaxiv.org/abs/1611.06426 ; https://www.alphaxiv.org/abs/2412.06165 | 2017; 2024 | Context-aware and nonlinear versions of the baseline guarantee. | X2 |
+| Reserve-Aware Contrast Certificates for Conservative Bandits with Uncertain Baselines (Reserve-C4B) | https://www.alphaxiv.org/abs/2609.39106 | 2026 | Shared confidence set for candidate vs baseline: fallback to baseline fell 88.2% -> 19.4% (0.5% with prefix refresh) and reward vs baseline rose 1.0084 -> 1.0557 (1.0606) in a linear simulation. More growth kept for the same safety. | X2 |
+| Bayesian Decision-optimal Interval Designs for Phase I Clinical Trials (BOIN) | https://www.alphaxiv.org/abs/1309.5019 | 2013 | Fixed batch at the current level, compare the observed harm rate with two boundaries: move up, stay, or move down one level. Simulated: right dose 46.2% vs 44.7% CRM, high-toxicity risk 14.8% vs 16.9%, poor allocation 28.7% vs 43.0%. | X2, X3 |
+| The i3+3 Design; accelerated BOIN; BE-BOIN (backfill and late-onset toxicity) | https://www.alphaxiv.org/abs/1901.01303 ; https://www.alphaxiv.org/abs/2309.08616 ; https://www.alphaxiv.org/abs/2509.11333 | 2019; 2023; 2025 | Late-onset toxicity maps to delayed P&L (positions still open, costs not booked). | X2 |
+| Provably Safe, Yet Scalable Reinforcement Learning | https://www.alphaxiv.org/abs/2606.14536 | 2026 | Hard safety projection instead of a soft penalty (100% safe episodes in robotics; 0% without the layer). Architecture lesson only. | X3 |
+| Forecast-to-Fill: Benchmark-Neutral Alpha and Billion-Dollar Capacity in Gold Futures (2015-2025) | https://www.alphaxiv.org/abs/2511.08571 | 2025 | Gold futures alpha and capacity study (named as an idea source). | seed |
+
+**Growth vs survival (assistant's claim).** Conservative UCB's constrained performance approaches plain UCB over time (cost is additive); Reserve-C4B shows smarter certificates recover most of the growth; dose-escalation designs cut poor allocation with similar sample sizes. All assume bounded, stationary rewards; a mean-reward floor does not prevent a ruinous realised loss, so hard loss limits stay outside the learner.
+
+**Per asset class (assistant's claim).** Steps follow executable liquidity and loss capacity per instrument: FX by session and pair, aggregated by currency factor (24/5, weekend gaps, rollover); indices in micro-contract or small-ETF steps, regular vs overnight evidence kept separate; metals as separate buckets with roll and delivery constraints; energy the slowest ramp and smallest feasible size; crypto by venue with funding and weekend liquidity; futures in integer contracts; single stocks by liquidity tier and event calendar.
+
+## Technique 14 - Early exit and fast invalidation: meta-labelling, triple barrier, exit classifiers (chat 14)
+
+Asked without any budget figure. Four rendered charts were captured as text into the chat file.
+
+**Core answer (assistant's claim).** Keep three separate layers: **meta-labelling** gates and sizes entries (take or skip a primary signal, probability as a size input after calibration); a **state-based hold/exit classifier** decides whether an open trade is still worth holding; **portfolio risk** sits above both. Triple barriers are one way to build outcome labels, not proof of profitable exits. Survival or hazard models estimate how long a trade stays viable, not whether its expected net value turned negative. Sequential tests inside a trade must be calibrated for how often they are checked (repeated looks cause false exits). Barrier width heuristic: d = max(k x sigma_h, c_min x round-trip cost), calibrated per instrument on forward data.
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| MLP-Initialized Reinforcement Learning for Exit Timing in SPX Short-Straddle Portfolios | https://www.alphaxiv.org/abs/2610.13126 | 2026 | Label each open-trade state "hold" until the hindsight-best executable exit, then "exit"; train a classifier on market, quote and position state. Locked 2024-26 test: return 35.01% vs 11.56% hold-to-expiry, Sharpe 1.651 vs 0.441, max DD 4.04% vs 12.82%; mechanical exits (fixed 5-day, PT/SL, combined) did worse than holding. Chronological split required. | X3, seed |
+| Supervised Autoencoders with Fractionally Differentiated Features and Triple Barrier Labelling | https://www.alphaxiv.org/abs/2411.12753 | 2024 | Triple-barrier labels on crypto: 30-minute strategy IR 2.56, max DD 23.55% vs 59.46% buy-and-hold (bullish 2020-22 test). | X3, seed |
+| Stock Price Prediction Using Triple Barrier Labeling and Raw OHLCV Data: Korean Markets | https://www.alphaxiv.org/abs/2504.02249 | 2025 | Triple-barrier labels on OHLCV; same-bar barrier crossings labelled as time-limit. | X1 |
+| Label Unbalance in High-frequency Trading (operator's saved paper) | https://www.alphaxiv.org/abs/2503.09988 | 2025 | Class imbalance in short-horizon futures labels: set take/skip thresholds by cost of false positives on forward data, not accuracy. | X5 |
+| When Does Order Flow Matter? State-Dependent L2 Liquidity-State Transitions in Crypto Futures | https://www.alphaxiv.org/abs/2607.09230 | 2026 | Order flow matters conditionally on L2 liquidity state; candidate exit-classifier input. | seed |
+| Advances in Financial Machine Learning (Lopez de Prado): meta-labelling and triple barrier | book | 2018 | Origin of both methods. | X1, X3 |
+
+**Growth vs survival (assistant's claim).** The SPX exit classifier improved both return and drawdown on one strategy and market; mechanical exits there cost return. No clean experiment in these papers isolates meta-labelling's effect on returns, so treat it as a design pattern; require shadow operation and forward validation before an exit model may close live trades.
+
+**Per asset class (assistant's claim).** Scale barriers to each instrument's holding-horizon volatility and round-trip cost (spread, fees, slippage, funding). FX: session end is a vertical barrier only for intraday strategies; include rollover and weekend closure. Indices and stocks: overnight gaps and earnings mean the loss barrier is not a fill price. Energy and metals: event and roll days need their own handling. Crypto: 24/7, funding timestamps; OHLC bars cannot show which barrier came first, so use quotes or a conservative intrabar fill convention. Scheduled events enter as decision-time flags only, never as leaked labels.
+
+## Technique 11 - Backtest overfitting and validation pipelines (chat 11)
+
+Asked without any budget figure. The first answer failed once ("Something went wrong") and was retried.
+
+**Core answer (assistant's claim).** Validate the **entire search process**, not only the winner. DSR, PBO/CSCV and an anytime-valid funded promotion test answer different questions and must not be collapsed into one score. "Rejected by a gate" is not "proven false". No universal "true winners lost vs false strategies caught" rate exists outside injected-truth simulations. Count independent opportunities, not bars: for AR(1) returns N_eff ~ N (1 - rho)/(1 + rho), so rho = 0.9 leaves about 5% of the nominal count.
+
+**Pipeline it gave (in order).** Artifact and point-in-time audit -> realistic instrument-specific execution replay -> purged temporal robustness splits -> DSR and PBO diagnostics on the full search ledger -> funded sequential (or online) family gate -> untouched forward confirmation -> human authorisation -> shadow or capped live ramp -> live decay and risk monitoring. A re-tuned strategy family is one family with one budget; each re-tune is a new, counted trial.
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| The Deflated Sharpe Ratio (Bailey, Lopez de Prado) | https://doi.org/10.3905/jpm.2014.40.5.094 | 2014 | Sharpe threshold expected from selecting the best of N trials given trial Sharpe variance, skew, kurtosis and length; needs an honest trial count; no correlation matrix input. | X5 |
+| The Probability of Backtest Overfitting (Bailey et al., CSCV) | https://doi.org/10.21314/JCF.2016.322 | 2016/2017 | Rank-instability diagnostic across combinatorial splits; coarse with ~20 candidates; low PBO did not mean a good absolute Sharpe (0.01 PBO, OOS Sharpe 0.18). | X5 |
+| Can We Stop the Backtest Yet? (Promote) | https://www.alphaxiv.org/abs/2611.03384 | 2026 | Null: 0% crossings in 3,000 paths (vs 94.5% for repeated unadjusted tests); power: 70.1% at a 15 bp injected edge, ~none at 5 bp. The price of strictness in numbers. | X5 |
+| On the Boundary of Admission Gates: An Injected-Truth Study of Falsification-First Selection | https://www.alphaxiv.org/abs/2610.07701 | 2026 | Injected-truth evaluation of admission gates (the only way to count winners discarded). | X5 |
+| How Execution Assumptions Change Short-Horizon Sharpe Rankings | https://www.alphaxiv.org/abs/2610.05077 | 2026 | Execution assumptions reorder short-horizon strategy rankings: costs belong inside validation. | X1, X5 |
+| A Backtesting Protocol in the Era of Machine Learning (Arnott, Harvey, Markowitz) | https://doi.org/10.3905/jfds.2019.1.064 | 2019 | Protocol checklist. | X5 |
+| Safe Testing (Grunwald, de Heide, Koolen); E-backtesting | https://doi.org/10.1093/jrsssb/qkae011 ; https://doi.org/10.1287/mnsc.2023.01659 | 2024 | E-values for optional continuation; e-backtests of risk forecasts. | X5, X3 |
+| Understanding Alpha Decay | https://doi.org/10.1287/mnsc.2022.4353 | 2022 | Decay of published or discovered alphas. | X3 |
+| Also: Harvey-Liu-Zhu (2016), What survives honest evaluation? (2026), Propose, Don't Judge (2026), Auditing LLM Alpha-Factor Mining (2026), Certified Alpha Capacity (2026) | see chats 02, 18, 01 | | | X5 |
+
+**Growth vs survival (assistant's claim).** Strict gates lose weak real edges and delay strong ones (Promote misses most 5 bp edges; Propose, Don't Judge waited ~500 trading days), but repeated unadjusted looks promote noise almost surely. Keep "not enough evidence yet" separate from "evidence against".
+
+**Per asset class (assistant's claim).** No universal minimum history: set it from target net edge, turnover, dependence and the error budget, then check regime coverage. Use HAC errors, block bootstrap or sequential tests. Watch survivorship (single stocks, crypto tokens), roll construction (futures, energy, metals), cost assumptions per venue (FX, crypto), and overlapping intraday trades that shrink effective evidence.
+
+## Technique 16 - Trading costs for retail-access FX and crypto (chat 16)
+
+Asked without any budget figure.
+
+**Core answer (assistant's claim).** One versioned cost ledger read by both the backtester and the live monitor, calibrated by **instrument, venue, account type and order type**; never one "bps per trade" across futures, CFDs and cash stocks (some costs hit at entry, some accrue while holding, some only at roll or borrow). Use the account's own executable quotes and fills, not interbank or ECN data. Estimate spread **distributions** (not means) by venue, symbol, UTC hour, weekday, session overlap, news window, holiday and rollover. Model each order type as it executes (market: spread + slippage; limit: fill probability + post-fill markout; stop: gap-through slippage). Charge swap and funding at the right timestamp and sign. Per order or position interval log: decision quote, requested and filled size, fill price, fee, spread cost, slippage, impact estimate, reject or partial status, swap or funding, net P&L; alert when realised costs drift from the model.
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| AutoQuant: Auditable Expert-System Framework for Execution-Constrained Auto-Tuning in Crypto Perpetuals | https://www.alphaxiv.org/abs/2512.22476 | 2025 | Next-bar delay, turnover-based fees and slippage, funding at the funding timestamp, per-bar ledger. BTC 4h: CAGR 522.5% zero-cost -> 430.8% fee-only -> 272.6% fully costed (Sharpe 2.71 -> 2.51 -> 2.05). | X1, X6 |
+| The Market Maker's Dilemma: Fill Probability vs Post-Fill Returns | https://www.alphaxiv.org/abs/2502.18625 | 2025 | 232,897 live minimum-size Binance BTC-perp maker orders: filled orders averaged -0.8 bp (-0.3 bp after rebate); naive market making lost ~60% in ~3 days; a reversal-filtered setup made +0.71 bp per round trip. Fill probability is adverse selection. | X1, seed |
+| Foreign Exchange Markets with Last Look | https://www.alphaxiv.org/abs/1806.04460 | 2018 | Last look tightens quoted spreads while rejecting trades that moved in the client's favour: a tighter displayed spread can mean a worse effective cost. | X1 |
+| Dynamic slippage control and rejection feedback in spot FX market making | https://www.alphaxiv.org/abs/2603.07752 | 2026 | Slippage tolerance and rejection-feedback state (theory). | X1 |
+| How Execution Assumptions Change Short-Horizon Sharpe Rankings | https://www.alphaxiv.org/abs/2610.05077 | 2026 | Execution assumptions reorder strategy rankings. | X5 |
+| Model-Free Passive Execution via Order-Level Shadowing | https://www.alphaxiv.org/abs/2609.18019 | 2026 | Passive execution by shadowing observed orders. | X1 |
+| Funding-Aware Optimal Market Making for Perpetual DEXs | https://www.alphaxiv.org/abs/2605.06405 | 2026 | Funding inside execution decisions. | X1, seed |
+| Optimal Trading Filters and the Value of Predictive Signals | https://www.alphaxiv.org/abs/2610.24558 | 2026 | When a signal is worth trading after costs (no-trade filters). | X2, X5 |
+| Slippage-at-Risk | https://www.alphaxiv.org/abs/2603.09164 | 2026 | A tail measure for slippage; feeds a slippage kill switch. | X3, X6 |
+| Also: ML Bitcoin trading under costs (2606.00060), OHLCV momentum on MNQ (2605.04004), Strategic OTC market making with reputation feedback (2607.11328) | see chat 24 | | | |
+
+**Growth vs survival (assistant's claim).** Costs are the first-order performance variable at short horizons: realistic costs halved one BTC perpetual strategy's CAGR; fixed 10 bp per position change turned naive sign strategies sharply negative. Cost-aware filters (trade only when forecast > cost) recover part of it.
+
+**Per asset class (assistant's claim).** Index futures: spread in ticks, per-contract commissions, tick value, depth, roll execution; index CFDs: broker spread and overnight financing. Metals and energy: contract tick values, roll costs, event-window spreads; CFD financing. Futures: exchange and clearing fees, roll, margin. Single stocks: per-share fees, spread by name and hour, auctions, borrow for shorts. FX: markup vs raw-plus-commission accounts, last look, rejects, swap triple days. Crypto: maker/taker tiers, funding, venue-specific depth. Scalping is dominated by spread and slippage; intraday adds session and event gaps; overnight adds financing.
+
 ---
 
 ## Asset-class differences across topics (running table)
