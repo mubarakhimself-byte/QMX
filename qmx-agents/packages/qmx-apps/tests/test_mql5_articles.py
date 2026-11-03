@@ -182,9 +182,8 @@ def saved(store: Store, *ids: int) -> None:
         store.save(article_id, b"<html></html>", markdown, {"title": f"Article {article_id}"})
 
 
-def answered(outputs: object) -> list[str]:
-    assert isinstance(outputs, list)
-    return [item["data"]["source_url"].rsplit("/", 1)[1] for item in outputs]
+def answered(outputs: list[dict[str, Any]]) -> list[str]:
+    return [str(item["data"]["source_url"]).rsplit("/", 1)[1] for item in outputs]
 
 
 def test_the_daily_job_answers_unlanded_articles_until_the_host_stored_them(

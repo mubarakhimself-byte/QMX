@@ -139,9 +139,16 @@ def started(tmp_path: Path, supervisor: Supervisor, extra: str) -> None:
     supervisor.start(APP)
 
 
-def answer(supervisor: Supervisor, value: JsonValue, **kwargs: object) -> Document:
-    inputs = cast(Document, {**cast(Document, kwargs.pop("inputs", {})), "answer": value})
-    return supervisor.run_job(APP, "job.py", inputs=inputs, **kwargs)  # pyright: ignore[reportArgumentType]
+def answer(
+    supervisor: Supervisor,
+    value: object,
+    *,
+    inputs: Document | None = None,
+    principal: str | None = None,
+) -> Document:
+    """Run the job once, answering `value`."""
+    asked: Document = {**(inputs or {}), "answer": cast(JsonValue, value)}
+    return supervisor.run_job(APP, "job.py", inputs=asked, principal=principal)
 
 
 def outputs_of(ran: Document) -> list[str]:
@@ -198,15 +205,16 @@ def test_a_refused_output_lands_none_of_its_batch(
     started(tmp_path, supervisor, "")
 
     codes: list[tuple[str, str]] = []
-    for bad in (
+    refused_answers: list[object] = [
         {"outputs": [note(1), {"output": "note", "data": {"n": "two"}}]},
         {"outputs": [note(1), {"output": "nowhere", "data": {}}]},
         {"outputs": [note(1), {"output": "note"}]},
         {"outputs": note(1)},
         {"outputs": [note(1)], **note(2)},
-    ):
+    ]
+    for bad in refused_answers:
         with pytest.raises(AppError) as refused:
-            answer(supervisor, cast(JsonValue, bad))
+            answer(supervisor, bad)
         codes.append((refused.value.code, str(refused.value)))
 
     assert codes == [
@@ -225,7 +233,7 @@ def test_a_batch_cut_between_two_landings_lands_each_output_once_when_sent_again
 ) -> None:
     started(tmp_path, supervisor, "")
     plain.failing = {2}
-    batch: JsonValue = {"outputs": [note(1), note(2), note(3)]}
+    batch = {"outputs": [note(1), note(2), note(3)]}
 
     with pytest.raises(RuntimeError, match="the sink died mid-batch"):
         answer(supervisor, batch)
