@@ -208,6 +208,11 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - **QML dictionary expansion is a downstream deliverable.** The component catalogue (sizers, brakes, detectors, exits, readings, cost models) maps onto dictionary entries in the A11/A12 format. After the architecture, a slice set turns the chosen components into dictionary entries and blocks. Ideas for the trading node may also come in.
     - **Brakes and accelerators get their own deeper research.** Accelerators are the thinnest part (house money and grow-back untested; win clustering unmeasured). **R9 started** (Opus, alphaXiv MCP, MQL5 corpus, built-in browser), covering every accelerator, return clustering, the brake-accelerator pair (one signal, asymmetric speeds, hysteresis), deeper brakes (money-based, frequency-scaled, FI-aware) and analogues from other fields → `research/R9-accelerators-and-brake-pairs.md`. It enters with the Stage A top-up.
 
+36. **M39.**
+    - **Firecrawl:** never mention it again; agents don't use it (memory saved).
+    - **Brake and accelerator are working words with no definitions.** They must be defined, along with a taxonomy. These concepts came from pattern recognition and linking logic: house money was seen; **reverse house money was his own idea**. R9 now defines both, including reverse house money from the old system, and may propose new kinds. Stage B and the funnel use those definitions and may extend them.
+    - R8 done and committed: stops help only under momentum (Kaminski-Lo); no study tests breakeven moves or fractional early cuts after costs, so the cut size is set per strategy from its own trades; volatility models pooled across classes beat per-instrument fits; accumulation is modelled per shared dependency.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.

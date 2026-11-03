@@ -622,6 +622,61 @@ Asked without any budget figure.
 
 **Per asset class (assistant's claim).** Index futures: spread in ticks, per-contract commissions, tick value, depth, roll execution; index CFDs: broker spread and overnight financing. Metals and energy: contract tick values, roll costs, event-window spreads; CFD financing. Futures: exchange and clearing fees, roll, margin. Single stocks: per-share fees, spread by name and hour, auctions, borrow for shorts. FX: markup vs raw-plus-commission accounts, last look, rejects, swap triple days. Crypto: maker/taker tiers, funding, venue-specific depth. Scalping is dominated by spread and slippage; intraday adds session and event gaps; overnight adds financing.
 
+## Technique 7 - Coordinating layered limits and avoiding alarm fatigue (chat 07)
+
+Asked without any budget figure. Mostly standards and cross-field sources rather than arXiv papers.
+
+**Core answer (assistant's claim).** Selective, staged intervention for ordinary breaches, plus an independent account-level kill switch that never waits. Borrow **protection selectivity** from power grids: the nearest layer (strategy) trips first, with time grading so the cluster, asset-class and account layers act as backup only if the nearer one fails to clear. Define one small shared set of risk measures (stressed loss or drawdown contribution, gross and net exposure, leverage, liquidity, factor concentration) computed consistently at every scope. From alarm management: every alert must name a specific human action and deadline, or it is a dashboard metric, log line or digest item; rationalise each alert (cause, scope, priority, response, owner); shelve and flood-suppress; group pages by incident.
+
+**Loss-budget burn alert (SRE pattern, a starting point, not a validated financial threshold).** Burn rate = observed loss-budget consumption rate / planned rate (B/T). Page only when an elevated burn persists in **both** a long and a short window (Google example: 14.4x over 1 hour and 5 minutes, which spends 2% of a monthly budget in an hour); send slower, lower-severity notices for sustained lesser burn. Keep the immediate hard-loss trip separate. Suppress duplicate pages while the state is unchanged; escalate if it worsens or stays unacknowledged.
+
+| Source | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| IEEE C37.112: inverse-time characteristic equations for overcurrent relays | https://standards.ieee.org/standard/C37_112-2018.html | 2018 | Inverse-time grading: nearer protection acts first; remote protection is backup. | X3 |
+| ANSI/ISA-18.2: Management of Alarm Systems for the Process Industries | https://www.isa.org/standards-and-publications/isa-standards/isa-18-series-of-standards | 2016 | Alarm lifecycle, rationalisation, priorities, shelving, flood handling, performance monitoring. | X6 |
+| EEMUA Publication 191 (Edition 4) | https://www.eemua.org/products/publications/digital/eemua-publication-191 | 2024 | Human-centred alarm load and flood guidance. | X6 |
+| Google SRE book and workbook: Alerting on SLOs | https://sre.google/workbook/alerting-on-slos/ | 2016/2018 | Multi-window, multi-burn-rate alerts; error budgets. | X6 |
+| Drew et al.: alarm fatigue with physiologic monitors (ICU) | https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0110274 | 2014 | Measure alarms by whether they were actionable, not by threshold crossings. | X6 |
+| CME Globex Kill Switch | https://www.cmegroup.com/tools-information/webhelp/globex-credit-controls/Content/Kill-Switch.html | - | Exchange-side kill switch as a design reference. | X3 |
+| Characterizing Cross-Relay Generalization Failure in ML-Based Power System Protection | https://www.alphaxiv.org/abs/2610.28348 | 2026 | Learned protection fails to generalise across relays: keep deterministic trips. | X3 |
+| E-values: Calibration, Combination, and Applications (Vovk, Wang) | https://doi.org/10.1214/20-AOS2020 | 2021 | Combine evidence from several monitors validly. | X3, X6 |
+
+**Growth vs survival (assistant's claim).** Nuisance trips cost production and teach operators to ignore alarms; no source gives a validated trading-book false-trip rate, so measure it: log every trip with whether it was actionable and what the strategy would have done.
+
+**Per asset class (assistant's claim).** Same account-level emergency protection everywhere; local thresholds and alert timing aware of liquidity, sessions, venue rules and whether the planned response (cancel, reduce, hedge, pause) can execute. FX: sessions, rollover and releases are separate liquidity regimes; a calendar window may tighten controls but never silently loosen hard limits. Crypto: no quiet hours, so digest non-urgent alerts and page only actionable ones. Exchange products: halts and limit moves mean "cannot act"; escalate rather than retry. Session opens: expect bursts; group by incident.
+
+## Technique 9 - News and event risk for automated short-horizon trading (chat 09)
+
+Asked without any budget figure.
+
+**Core answer (assistant's claim).** Estimate event **risk** separately from event **alpha**; a volatility forecast is not a direction forecast. For scalpers the safe default is **flat through the release and the first post-event liquidity reset**; "widen the stop" is not a default (it raises money at risk exactly when execution is least predictable). If a strategy deliberately trades an event, size it against a stressed gap and define a maximum loss that does not depend on a stop fill. Unscheduled news has no pre-window: treat it like a circuit breaker on a trustworthy signal (block entries, cancel stale orders, cut exposure if spreads, gaps or vol breach limits). Gate re-entry on observed liquidity (spread, depth, price impact), not only on a timer. Session opens and closes are liquidity transitions, handled per instrument calendar.
+
+**Event-window starting controls (minutes before / after; the assistant's conservative starting values, not paper optima).**
+
+| Class | Event | Window |
+|---|---|---|
+| FX | High-impact release | 5-10 / 15-30 |
+| FX | Central-bank statement (press conference as a second event) | 10-15 / 30 |
+| FX | London 4 pm fix and other fixes | 15-30 / 10-15 |
+| Stock indices | Open and close | 5-15 / 10-15 |
+| Stock indices | CPI or jobs | 5-10 / 15-20 |
+| Stock indices | FOMC (plus press conference) | 10-15 / 30 |
+| Gold and metals | Macro release; central bank; session transitions | 5-10 / 15-30; 10-15 / 30; 5-10 / 10-15 |
+| Energy | Inventory report; OPEC announcement | 5-10 / 10-20; 15-30 / 30-60 |
+| Crypto | Macro release; scheduled upgrade or unlock; incident | 5-10 / 15-30; 30-60 / 30-60; none before / at least 30-60 after verified stabilisation |
+| Futures | Macro; roll, first notice, expiry | 5-10 / 15-30; 30-60 / 30-60 |
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| What Events Matter for Exchange Rate Volatility? (Martins, Lopes) | https://www.alphaxiv.org/abs/2411.16244 | 2024 | Sparse event-volatility model on 24-hour AUD 5-minute returns with 117 releases: nine releases matter (FOMC decision and minutes, US CPI, payrolls, retail sales, RBA, AU employment, GDP, retail sales); effects decay within ~30 minutes. Learn which events matter and how long. | X4, seed |
+| Returns and Order Flow Imbalances: Intraday Dynamics and Macroeconomic News Effects | https://www.alphaxiv.org/abs/2508.06788 | 2025 | Index futures: price impact rises and liquidity withdraws before releases; volatility spikes in the first 5 minutes after. Gate on liquidity, not only the clock. | X3, X4 |
+| Warp speed price moves: Jumps after earnings announcements | https://www.alphaxiv.org/abs/2601.08962 | 2026 | The stock jumped in >90% of after-hours earnings sessions vs ~3% otherwise; a surprise rule earned 1.80% per trade before frictions (much less after). | X4, seed |
+| Fast Numbers, Slow Language: Quantitative and Qualitative Earnings Signals | https://www.alphaxiv.org/abs/2606.29734 | 2026 | Numbers move prices fast, language slower: two-speed earnings signals. | seed |
+| Forecasting Intraday USD/CAD with News-Derived Monetary-Policy Signals | https://www.alphaxiv.org/abs/2609.32773 | 2026 | Monetary-policy news signals for intraday FX. | seed |
+| Classics: Andersen, Bollerslev, Diebold, Vega (2003, real-time FX price discovery); Fleming, Remolona (Treasury response to public information); Patell, Wolfson (1984, intraday speed of adjustment to earnings); Lee, Mucklow, Ready (1993, spreads and depth around earnings) | in chat 09 | | Surprises, not the event itself, move prices; liquidity thins around news. | X4 |
+
+**Growth vs survival (assistant's claim).** Evidence is strongest for FX volatility around major releases, index-futures liquidity around macro news, and equity price discovery around earnings; thin for oil inventory, gold, fixes, unlocks, crypto incidents and roll days, so those windows are conservative placeholders to be measured. Flattening gives up event alpha that short-horizon strategies mostly cannot capture net of costs; strategies built for events should be separate, tested units.
+
 ---
 
 ## Asset-class differences across topics (running table)

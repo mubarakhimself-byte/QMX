@@ -144,3 +144,57 @@ I’d use **AlphaAgent-style regularisation to control what enters the candidate
 For signals, start by testing AlphaAgent’s named OHLCV families—intraday return, range, and relative volume—at the horizons and instruments where the data are actually available. Treat MASS consensus/disagreement as a possible *confidence or crowding feature* over your strategies, not as an entry signal already shown to work for short-horizon, multi-asset trading. The papers do not identify a specific mined formula or MASS persona that can be claimed to survive your execution costs.
 
 
+## Turn 3 (follow-up b: combinations and what to build first, model: Smart) - question
+
+Follow-up 2: Combinations. What would AlphaAgent and MASS each combine with from other areas of this system: post-selection Sharpe shrinkage and deflated Sharpe, anytime-valid promotion tests, live alpha-decay detection with e-values, risk-parity or hierarchical allocation across strategies, drawdown control, stress scenario generators, multi-agent market simulation, LLM research harnesses with search ledgers? Name concrete pairs or triples of papers with links, what the combined method or workflow would do for sizing, validation or monitoring, and why. Then say which single idea from each paper is most worth building first.
+
+## Turn 3 (follow-up b: combinations and what to build first, model: Smart) - answer
+
+**Build AlphaAgent-style candidate screening plus a frozen, anytime-valid promotion gate first; use MASS-style agent disagreement only as a portfolio or stress input, never as a sizing authority.** The most useful combinations keep proposal, statistical judgment, allocation, and hard risk controls separate.
+
+### Concrete combinations
+
+1. **AlphaAgent + an anytime-valid promotion ledger + live decay retirement**  
+   **[AlphaAgent](https://www.alphaxiv.org/abs/2502.16789) + [Can We Stop the Backtest Yet?](https://www.alphaxiv.org/abs/2611.03384) + [Propose, Don’t Judge](https://www.alphaxiv.org/abs/2609.27051)**
+
+   AlphaAgent proposes formulaic candidates and screens them for structural novelty, hypothesis–formula consistency, and complexity. A separate, frozen referee then tests each *frozen executable version* only on returns revealed after registration, using the declared costs and traded horizon. Promote handles adaptive candidate arrival and repeated monitoring with a funded evidence ledger; *Propose, Don’t Judge* adds the useful distinction between admitting a factor and retiring one whose edge no longer covers a predeclared viability threshold. A new regime check or restart should require fresh evidence, not a reset of the old test. [Factor Controls](https://www.alphaxiv.org/abs/2502.16789?page=4)[Consistency Score](https://www.alphaxiv.org/abs/2502.16789?page=5)[Promotion Ledger](https://www.alphaxiv.org/abs/2611.03384?page=3)[Retirement Detector](https://www.alphaxiv.org/abs/2609.27051?page=10)
+
+   **What it does:** reduces formula-level redundancy and complexity, controls false promotions from repeated search, and provides a separate signal-decay retirement process. It does **not** determine position size or certify that a promoted edge will persist. The 2026 promotion study explicitly reports a material delay for weak signals—about 2,327 sessions to median crossing for its 15-basis-point injected effect—and says historical certification is not proof of current profitability. [Power and Delay](https://www.alphaxiv.org/abs/2611.03384?page=5)[Certificate Limits](https://www.alphaxiv.org/abs/2611.03384?page=8)
+
+2. **AlphaAgent + portfolio-aware, post-selection evaluation**  
+   **[AlphaAgent](https://www.alphaxiv.org/abs/2502.16789) + [FactorBench](https://www.alphaxiv.org/abs/2610.06947) + [Propose, Don’t Judge](https://www.alphaxiv.org/abs/2609.27051)**
+
+   Keep AlphaAgent’s generation constraints, but evaluate candidates under a shared portfolio contract: distinctness within the full signal pool, temporal generalization, incremental value after measured exposures, and after-cost portfolio performance. Then report post-selection Sharpe diagnostics on the *strategy or portfolio actually selected*, not just the best standalone factor. *Propose, Don’t Judge* reports using the deflated Sharpe ratio to account for 108 book-level groups in its study; that is a useful diagnostic for selection, but it is not an anytime-valid replacement for the promotion gate. [Portfolio Evaluation](https://www.alphaxiv.org/abs/2609.27051?page=15)
+
+   **What it does:** reduces the risk of promoting a factor that looks good alone but adds little to an already crowded strategy set, and makes comparisons across candidate generators more consistent. It helps detect selection optimism; it does not by itself control repeated adaptive testing or provide live sizing.
+
+3. **MASS + risk-parity allocation + hard drawdown controls**  
+   **[MASS](https://www.alphaxiv.org/abs/2505.10278) + [Agnostic Risk Parity](https://www.alphaxiv.org/abs/1610.08818) + [FARSIGHT](https://www.alphaxiv.org/abs/2609.19705)**
+
+   Let a MASS-like population provide *strategy views*—for example, trend, carry, liquidity, event, or volatility-aware—and aggregate their support and disagreement. Pass the resulting strategy-level expected-return or confidence inputs to a separate risk allocator that budgets risk across strategies or correlated clusters. Apply drawdown limits, exposure caps, and emergency halts outside the agents. MASS’s tested construction is a weekly equal-weight stock portfolio; its consensus score is not a volatility estimate or a sizing rule. [Signal Aggregation](https://www.alphaxiv.org/abs/2505.10278?page=5)[Portfolio Backtest](https://www.alphaxiv.org/abs/2505.10278?page=20)
+
+   **What it does:** uses heterogeneous views to help decide *which* strategies deserve attention, risk parity to constrain their portfolio contributions, and hard controls to limit loss escalation. The FARSIGHT audit is a useful warning: it reports missing external stop-loss or position-limit enforcement in the trading systems it examined and describes simulated failures from manipulated headlines and cascading sell decisions. Those findings support keeping risk limits outside the LLM; they do not demonstrate that this particular triple will improve returns. [FARSIGHT](https://www.alphaxiv.org/abs/2609.19705)
+
+4. **MASS + scenario analysis as a fragility monitor**  
+   **[MASS](https://www.alphaxiv.org/abs/2505.10278) + [When Stress Tests Miss the Risk](https://www.alphaxiv.org/abs/2609.37273)**
+
+   Use agent disagreement and concentration as *scenario inputs*: perturb macro releases, spreads, correlations, liquidity, and agent availability, then test how portfolio rankings and exposures change. Report loss distributions and sensitivity to assumptions, not only average backtest returns. A sharp jump in consensus or dependence on one agent type can trigger a human review or a risk cap.
+
+   **What it does:** turns simulated heterogeneity into a stress *diagnostic*. It does not make the simulated agents a realistic market model, and the MASS paper does not itself validate scenario-based drawdown control. Treat scenario results as conditional “what if” evidence, not forecasts.
+
+5. **AlphaAgent + a search ledger and auditable agent handoffs**  
+   **[AlphaAgent](https://www.alphaxiv.org/abs/2502.16789) + [VST: Verifiable Structured Transport](https://www.alphaxiv.org/abs/2609.07065) + [Can We Stop the Backtest Yet?](https://www.alphaxiv.org/abs/2611.03384)**
+
+   Record every proposal—accepted or rejected—with its canonical code and parameter hash, data vintage, feature timestamps, cost model, test window, parent candidates, and evaluator outputs. Use typed, replayable handoffs between generator and evaluator; register the candidate before its evidence stream begins. This makes it easier to detect duplicate exploration, look-ahead joins, hidden restarts, and changes to candidate definitions. The promotion paper emphasizes that evidence must start after registration and that rule changes or revalidation require separately funded tests. [Registration Rules](https://www.alphaxiv.org/abs/2611.03384?page=2)[Ledger Fields](https://www.alphaxiv.org/abs/2611.03384?page=3)
+
+   **What it does:** improves provenance and test integrity, not alpha quality or Sharpe. A ledger cannot make a weak signal profitable, and structured communication is not a substitute for independent execution and risk checks.
+
+### Which idea to build first
+
+- **From AlphaAgent:** build **AST-based complexity and duplicate screening tied to a research ledger**. It is comparatively straightforward to run in a human-supervised sandbox, produces interpretable reasons to reject or group candidates, and helps prevent the strategy library filling with near-copies. Do not initially make an LLM’s semantic-alignment score a hard gate: treat it as a review aid, and check that its scoring direction and implementation match the intended objective. This is the best low-regret first lift; it protects search quality, not capital.
+
+- **From MASS:** build **strategy-level disagreement and concentration reporting**, not a 512-agent live allocation engine. For each instrument and horizon, show how many independent candidate strategies agree, which families dominate the vote, and whether the aggregate changes under reasonable perturbations. That is a useful portfolio and stress diagnostic before delegating any allocation decision; the paper’s agent-weight optimizer is fitted to a short recent performance window and its core portfolio test is Chinese equities with weekly rebalancing, so it is not yet a sizing method for your multi-asset short-horizon book. [Weight Learning](https://www.alphaxiv.org/abs/2505.10278?page=5)[Rebalance Rule](https://www.alphaxiv.org/abs/2505.10278?page=20)
+
+The shared principle is **separation of duties**: AlphaAgent-style tools help generate and structure candidates; MASS-style aggregation summarizes competing views; statistical gates decide whether evidence supports promotion; and deterministic portfolio and drawdown controls decide what risk, if any, can be taken.
+
+
