@@ -147,7 +147,48 @@ def obf_alpha_spent():
         print(f"information fraction {t:.1f}: alpha spent so far {spent:.5f}")
 
 
+def check_constants(seed=5, paths=200000):
+    block("8. Check the published 5-look constants by simulation (two-sided 0.05)")
+    rng = random.Random(seed)
+    obf_hits = poc_hits = 0
+    for _ in range(paths):
+        s = 0.0
+        obf = poc = False
+        for k in range(1, 6):
+            s += rng.gauss(0, 1)
+            z = s / math.sqrt(k)
+            if abs(z) >= 2.04 * math.sqrt(5 / k):
+                obf = True
+            if abs(z) >= 2.41:
+                poc = True
+        obf_hits += obf
+        poc_hits += poc
+    print(f"O'Brien-Fleming 2.04*sqrt(5/k): overall false-positive rate {obf_hits/paths:.4f} (target 0.05)")
+    print(f"Pocock flat 2.41:               overall false-positive rate {poc_hits/paths:.4f} (target 0.05)")
+    print(f"Naive 1.96 at every look would give about {5*0.05:.2f} as an upper bound; simulate:")
+    rng = random.Random(seed + 1)
+    naive = 0
+    for _ in range(paths // 4):
+        s = 0.0
+        hit = False
+        for k in range(1, 6):
+            s += rng.gauss(0, 1)
+            if abs(s / math.sqrt(k)) >= 1.96:
+                hit = True
+        naive += hit
+    print(f"Naive 1.96 at 5 looks: false-positive rate {naive/(paths//4):.4f}")
+
+
+def boin_bounds(phi=0.30, phi1=0.18, phi2=0.42):
+    block("9. BOIN escalation and de-escalation boundaries (Liu and Yuan 2015 formulas)")
+    lam_e = math.log((1 - phi1) / (1 - phi)) / math.log(phi * (1 - phi1) / (phi1 * (1 - phi)))
+    lam_d = math.log((1 - phi) / (1 - phi2)) / math.log(phi2 * (1 - phi) / (phi * (1 - phi2)))
+    print(f"target {phi}: escalate if observed rate <= {lam_e:.3f}; de-escalate if >= {lam_d:.3f}; else stay")
+
+
 if __name__ == "__main__":
+    check_constants()
+    boin_bounds()
     rows = trades_needed()
     calendar_time(rows)
     group_sequential()
