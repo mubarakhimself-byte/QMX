@@ -215,6 +215,14 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 37. **M40: definitions come from the transcript too.** Brake and accelerator definitions must rest on how they were discussed (1 Nov and 3 Nov): his backstory, accepted and refused ideas, his corrections. R9 told to read SEEDS.md and the verbatim word files for this. The alphaXiv chats may also add brake and accelerator ideas; Stage A top-up and the funnel catch them.
 
+38. **R9 and R4 done and committed. Research is complete.**
+    - R9 defines brake, accelerator, restore and clamp against a declared baseline, with a taxonomy and seven proposed new kinds. House money and reverse house money become one same-ledger rule; the anchor decides accelerate or brake.
+    - R9 findings: no accelerator beats a fixed size when trades are independent, while regime persistence pays; the Topstep tiers are the best tested pair; a money brake at a unit's own 1% worst day fires 1-3% of days at any frequency.
+    - R4: 32 deep chats; 35 Markdown exports with equations (alphaXiv has no file export); bookmarks: qmx-risk-sizing 145, qmx-agents 30, qmx-unit-seeds 1. Chats B and C bent around the $500 framing.
+    - **A5 top-up dissector started** (late R4 chats, R8, R9, R4's ~60 combinations and 15 workflows) → `linking/components/A5-topup.yaml`; it also merges every unit seed into `linking/UNIT-IDEA-BANK.md`.
+    - **Papers to disk:** 304 cited arXiv ids fetched politely (3 s apart) as PDFs into `research/papers/pdf/` (gitignored) and text into `research/papers/text/` (committed); failures go to `FAILED.tsv`.
+    - Next: Stage B linking.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
