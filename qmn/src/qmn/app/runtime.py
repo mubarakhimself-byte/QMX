@@ -383,7 +383,7 @@ class BoardFeed:
         self.path = path
         self.clock_ns = clock_ns
         self._seen: tuple[int, int] | None = None
-        self._boards: dict[str, _TierBoard] | tuple[str, str] = ("missing", "")
+        self._boards: dict[str, _TierBoard] | tuple[str, str] = {}
 
     def _load(self) -> tuple[int, dict[str, _TierBoard] | tuple[str, str]]:
         try:
@@ -393,8 +393,13 @@ class BoardFeed:
             return 0, ("missing", "no board has been relayed to this node")
         if self._seen != (stat.st_mtime_ns, stat.st_size):
             try:
-                raw: object = json.loads(self.path.read_bytes())
-            except (OSError, ValueError):
+                text = self.path.read_bytes()
+            except OSError:
+                # Caught mid-replace on Windows: it is read again on the next tick.
+                return stat.st_mtime_ns, ("unreadable", "the board feed could not be read")
+            try:
+                raw: object = json.loads(text)
+            except ValueError:
                 raw = None
             self._boards = _tier_boards(raw)
             self._seen = (stat.st_mtime_ns, stat.st_size)
