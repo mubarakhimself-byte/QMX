@@ -154,6 +154,8 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
       - CUSUM thresholds per instrument (23103);
       - the trap that any brake looks good on a losing strategy because it trades less.
 
+26. **M32, clarifying M31.** "Overhaul" was his one word for "nothing is off limits", not a request to overhaul. Read his words for the meaning, not the single word. QMA (the agent system) may be the one exception: he said it "may be off limits... but okay. No.", which is ambiguous. So this session flags QMA changes instead of designing them. Ideas may also produce **new mini apps** or restructure the **pod** idea. alphaXiv upgrade done; R4 and R6 resumed.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
