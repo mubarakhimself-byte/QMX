@@ -10,7 +10,11 @@ from pathlib import Path
 
 import pytest
 from qma.harness import QmxHome
-from qmx_host.host import Role, control_for  # pyright: ignore[reportMissingTypeStubs]
+from qmx_host.host import (  # pyright: ignore[reportMissingTypeStubs]
+    Role,
+    control_for,
+    vault_secrets,
+)
 
 from qmx_apps.errors import AppError
 from qmx_apps.manifest import Definition
@@ -81,6 +85,16 @@ def refusal(tmp_path: Path, service: str) -> tuple[str, str, list[object]]:
         (
             "qmx/openobserve-agent",
             "qmx/openobserve-agent is the host's own deep-logs sign-in; no app may declare it.",
+        ),
+        (
+            "qmx/ctrader-client-id",
+            "qmx/ctrader-client-id is the host's own cTrader app Client ID, which can sign in to "
+            "his broker; no app may declare it.",
+        ),
+        (
+            "qmx/CTrader-Client-Secret",
+            "qmx/CTrader-Client-Secret is the host's own cTrader app Client secret, which can "
+            "sign in to his broker; no app may declare it.",
         ),
     ],
 )
@@ -154,3 +168,43 @@ def test_an_apps_own_key_beside_a_host_name_still_loads(tmp_path: Path, service:
     loaded = Definition.load(app_naming(tmp_path, service))
 
     assert loaded.manifest.capabilities.secrets == {"ASKED": service}
+
+
+def test_the_trading_node_is_refused_the_ctrader_app_keys_but_keeps_its_own_entry(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(AppError) as refused:
+        Definition.load(
+            app_naming(tmp_path / "keys", "qmx/ctrader-client-secret", app_id="trading-node")
+        )
+    own = Definition.load(
+        app_naming(tmp_path / "own", "qmx/node-ctrader-app-secret", app_id="trading-node")
+    )
+
+    assert (str(refused.value), own.manifest.capabilities.secrets) == (
+        "qmx/ctrader-client-secret is the host's own cTrader app Client secret, which can sign in "
+        "to his broker; no app may declare it.",
+        {"ASKED": "qmx/node-ctrader-app-secret"},
+    )
+
+
+@pytest.mark.parametrize(
+    "service", ["qmx/ctrader-client-id", "qmx/CTrader-Client-Secret", "qmx/rclone-config"]
+)
+def test_the_servers_vault_refuses_every_host_name_even_when_its_file_is_there(
+    tmp_path: Path, service: str
+) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / service.removeprefix("qmx/").casefold()).write_text("held", encoding="utf-8")
+    (vault / "trading-node-keys").write_text("node keys", encoding="utf-8")
+    read = vault_secrets(vault)
+
+    with pytest.raises(AppError) as refused:
+        read(service, service.removeprefix("qmx/"))
+
+    assert (refused.value.code, str(refused.value), read("qmx/trading-node-keys", "")) == (
+        "vault_refused",
+        f"{service!r} is not a secret an app may declare.",
+        "node keys",
+    )

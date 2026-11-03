@@ -74,16 +74,20 @@ HOST_SECRETS: Final[Mapping[str, str]] = MappingProxyType(
         "qmx/openobserve-root": "deep-logs root password",
         "qmx/openobserve-ingest": "deep-logs sign-in",
         "qmx/openobserve-agent": "deep-logs sign-in",
+        "qmx/ctrader-client-id": "cTrader app Client ID, which can sign in to his broker",
+        "qmx/ctrader-client-secret": "cTrader app Client secret, which can sign in to his broker",
     }
 )
 HOST_SECRET_PREFIXES: Final[Mapping[str, str]] = MappingProxyType(
     {"qmx/chatgpt-": "ChatGPT sign-in"}
 )
-"""The entries QMX makes for itself, which no app may declare on any role: the bearer
+"""The entries the host holds for itself, which no app may declare on any role: the bearer
 (`qmx_control.server`), the chat sign-ins `qmx/chatgpt` and `qmx/chatgpt-<n>`
 (`qmx_router.gpt.siwc`), the backup password (`qmx_home.rclone`), the vault files a home signs
-passes with (`qmx_host.host.HOST_VAULT`) and the deep-logs sign-in (`qmx_host.connect_logs`).
-Compared case-folded, because Credential Manager and NTFS ignore case."""
+passes with, the deep-logs sign-in (`qmx_host.connect_logs`) and the cTrader app keys he types
+(`qmx_broker.credentials`). The server's vault reader (`qmx_host.host.HOST_VAULT`) reads this
+table, so a new host name is refused in both places. Compared case-folded, because Credential
+Manager and NTFS ignore case."""
 RETIRED: Final = frozenset({"emits", "accepts"})
 """`app.<id>.<event>` and webhook routes are gone: the app's landing is the event (AD-64)."""
 
