@@ -1066,6 +1066,11 @@ type Secret = Callable[[str], str | None]
 """Reads one `qmx/*` Credential Manager entry, or None when it holds nothing."""
 
 
+WIRED_CREDENTIALS: Final = frozenset({"qmx/ctrader-mcp"})
+"""The stored credentials a server row may send as its Bearer. Any other ref, `qmx/firecrawl`
+among them, stays refused, so no other key of his leaves Credential Manager for a row's url."""
+
+
 def stored_secret(ref: str) -> str | None:
     return keyring.get_password(ref, ref.removeprefix("qmx/"))
 
@@ -1084,11 +1089,11 @@ def server_config(
             "a server name takes letters, digits, - and single _ between them, so its tools "
             "read as mcp__<server>__<tool>"
         )
-    venue, ref = row.get("venue"), row.get("credential_ref")
+    venue, ref = row.get("venue"), row.get("credential_ref") or None
     if venue is not None and venue not in VENUES:
         raise ValueError(f"venue {venue!r} is not one QMX checks ({', '.join(sorted(VENUES))})")
-    if ref is not None and not (isinstance(ref, str) and ref.startswith("qmx/")):
-        raise ValueError("credential_ref names a qmx/* Credential Manager entry")
+    if ref is not None and ref not in WIRED_CREDENTIALS:
+        raise ValueError("servers that need a stored credential are not wired yet")
     command, url = row.get("command"), row.get("url")
     if isinstance(command, str) and command and ref is not None:
         raise ValueError("a stored credential reaches only an HTTP server's Authorization header")
