@@ -56,6 +56,7 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - **Method: expand, then funnel.** Don't fold everything into one too early; the problem is the number of variables. Expand the domain layer by layer (technical, trader, DevOps, what QMX has shipped), then funnel, then architecture.
     - **The variable ledger is central**, kept across all steps and the simulations, because the variable count has grown well past the FX-only days.
     - Fable for the hardest problems: architecture, questions, scenario-based thinking (his examples; the lead decides).
+    - M14: "after expansion, the ledger might also expand." So the ledger is a living file: v0 before expansion, each expansion agent adds its own ledger file, the funnel merges them into v1, and architecture and simulations read v1.
     - Revised route: G11 + R3 land → **ledger v0** (machine-readable: every variable, level, unit, instrument class, default and how it is derived, couplings to other variables) → **expansion round** per layer, each agent adding variables to its own ledger file → **funnel** (cluster, dedupe, resolve contradictions) → **architecture** (Fable) → review → slices → builders.
 
 ## The unit build is not ours to audit (operator, 2026-11-01)
