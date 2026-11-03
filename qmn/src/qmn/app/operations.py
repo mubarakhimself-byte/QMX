@@ -174,7 +174,8 @@ class Context:
     rekey: Callable[[], None] = lambda: None
     """Builds the alarm senders again from the keys document (``server.py``)."""
     calendar_notes: Callable[[], list[str]] = lambda: []
-    """A ``status`` reason for each market calendar near or past its last day (``alarms.py``)."""
+    """A ``status`` reason for each market calendar the node cannot find, or near or past its
+    last day (``alarms.py``)."""
 
     def standing(self) -> Standing:
         row = self.store.identity()
