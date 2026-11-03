@@ -1557,8 +1557,8 @@ def hub_link(home: Path, control: ControlService) -> HubLink | None:
 
 def vault_key(home: Path, name: str = PAIRING_KEY) -> str | None:
     """One of the host's own vault files, read by `read_key`, or None when it is missing. A link,
-    a hard link or a file another user owns raises `VaultRefused`, which names the file and never
-    its content, so a start stops with that line."""
+    a hard link, a file another user owns and, on POSIX, a file others can read raise
+    `VaultRefused`, which names the file and never its content, so a start stops with that line."""
     try:
         found = read_key(home / VAULT / name)
     except KeyRefused as refused:

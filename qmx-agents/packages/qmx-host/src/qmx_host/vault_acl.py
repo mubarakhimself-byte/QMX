@@ -51,7 +51,9 @@ class KeyRefused(Exception):
 
 def owner_only(vault: Path) -> Outcome:
     """Make `vault` owner-only, or take every other user off it and its files. Running it again
-    changes nothing. A link anywhere in it, or a file another user owns, refuses the start."""
+    changes nothing. A link or hard link anywhere in it refuses the start, and so does a file this
+    user cannot take back: on POSIX one another user owns, on Windows one whose owner or DACL
+    Windows will not change."""
     try:
         vault.mkdir(mode=FOLDER_MODE, parents=True)
         made = True
