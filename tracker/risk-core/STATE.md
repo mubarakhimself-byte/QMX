@@ -81,6 +81,20 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 17. **M18-M20: alphaXiv.** He wants ideas from alphaXiv (his signed-in account in his own browser, Brave, driven through the Claude in Chrome extension): his saved library (36 papers: alpha mining and alpha decay, multi-agent portfolio construction, trading agents, agent memory and skills), his assistant conversations ("AI quant trading design", "Algorithmic trading papers", "Agentic Harness Context and Memory"), and new questions to their assistant across finance, portfolio, risk and other fields, plus the agentic lens (alpha-discovery harnesses as QMX workflows). He authorised "go crazy": many conversations, copying answers, bookmarking all papers to his library. The lead asked the first question (risk and sizing papers across fields) and handed the rest to R4 (Opus, in his Brave browser) → `research/R4-alphaxiv/` (verbatim conversations plus `R4-alphaxiv-synthesis.md` mapping papers to layers X1-X7). Its output feeds the funnel judge alongside the expansion files. Never: upgrade, publish, delete, settings.
 
+18. **M21 (about 12:20 UTC): expansion stopped, research first.** He saw R4 find a large pile of papers from one alphaXiv conversation and asked to stop agents doing double work: research and context-gathering never finished before the expansion began. He wants the papers taken as seeds and mixed into hybrids ("hybrids, tribrids, quads"). The lead agreed: the expansion had broken the "finish grounding before generating" rule once R4 was added.
+    - All seven expansion agents stopped. Ledger v0 and R4 keep running. R4 told to go deeper (follow-ups on the strongest papers, cross-topic conversations, a list of paper groups that could combine).
+    - Drafts kept in `expansion/drafts-stopped/`, written without the alphaXiv input:
+      - X1 template shape, complete, 781 lines;
+      - X5 edge verification, complete without its ledger file, 654 lines;
+      - X4 scenarios, partial, 493 lines.
+      Relaunched agents revise these instead of starting over.
+    - **Route now:**
+      1. R4 harvest (deeper) and ledger v0 finish;
+      2. paper mixer (Fable): hybrids of papers mapped to QMX layers, `expansion/H-hybrids.md`;
+      3. expansion X1-X7 relaunched with R1-R4, the hybrids and the drafts as seeds;
+      4. Fable funnel judge, then an Opus reviewer;
+      5. Fable architecture, review, slices, builders.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
