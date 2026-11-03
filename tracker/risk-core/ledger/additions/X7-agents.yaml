@@ -1,0 +1,674 @@
+# Ledger additions from Stage B layer X7 (where agents come in, for risk and sizing).
+# Source document: expansion/X7-agents.md. Hybrid ids X7-H01..H49 are named in notes.
+# Every default is null: no current design, code or ruling states these values yet.
+
+- id: operation_risk_direction
+  name: Declared risk direction of every agent tool and app operation (read, propose, cut, raise, money)
+  level: system
+  kind: other
+  measure: "other: category"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed rule (X7-H02): each catalog row and app operation declares one direction; agent and workflow principals may call read, propose and cut-through-evidence only; raise and money answer only to the operator; an operation with no direction fails CI"
+  inputs: []
+  affects:
+    - {id: kill_switch_level, direction: either, how: "only an operator principal may call operations that change the kill level; agents can only pre-fill an escalation card"}
+    - {id: agent_autonomy_level, direction: either, how: "the autonomy level decides which directions an agent profile may use"}
+  configurable: false
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qmx-agents/packages/qmx-host/src/qmx_host/host_route.py:91-94", note: "admits: manage operations and money jobs answer only to the operator"}
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qmx-agents/apps/trading-node/app.toml", note: "kill escalates and never lowers; pause, resume, flatten, deploy are manage"}
+    - {gen: research, ref: research/R4-alphaxiv/chat-20-agent-approval-gates-evaluation.md, note: "I-HITL: 9 of 10 models raised their own cap when the gate was reachable"}
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H02"}
+  seed_ids: [D42, D43]
+  notes: "Configurable is false on purpose: the direction of an operation is a fact about it, not a setting. QMA flag: catalog and host change."
+  open_questions:
+    - "Is a reduce-only action (close, cancel, tighter stop) its own direction, given agents cannot send orders anyway?"
+
+- id: agent_risk_scale
+  name: Size scale an agent evidence record proposes, clamped between the unit's floor and 1
+  level: unit
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [intraday, swing], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "applied scale = max(agent_evidence_max_cut floor, min over valid records of the record's proposed scale, 1); a record that is expired, malformed or of a kind the unit does not accept counts as 1 (X7-H03)"
+  inputs: [agent_evidence_max_cut, agent_evidence_ttl, agent_evidence_kinds_accepted, single_item_effect_cap, corroboration_widening_step]
+  affects:
+    - {id: context_size_modifier, direction: up, how: "a higher scale means a smaller cut; the unit's own rule multiplies size by it"}
+    - {id: risk_amount_usd, direction: up, how: "money at risk on the next entry scales with it"}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-28-F-agents-macro-micro-news.md, note: "risk_scale_proposal clamped to [0, 1]; loss of the service means no agent-driven change"}
+    - {gen: research, ref: research/R6-alphaxiv-papers/T-04-agents-macro-micro-news.md, note: "SwingGuard and Fake News, Real Crashes"}
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H03"}
+  seed_ids: [A25, C27]
+  notes: "Styles exclude scalpers by default because LLM latency (about 187 s in one study) exceeds a 1-minute unit's decision time; see agent_evidence_style_scope. Never above 1: agents cannot raise risk."
+  open_questions:
+    - "Does applying it automatically need ruling 2 restated (question 1 in X7)?"
+
+- id: agent_evidence_kinds_accepted
+  name: Agent evidence kinds a unit's (or Book's, or BMS's) own rules may read
+  level: unit
+  kind: other
+  measure: "other: list of kinds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: declared per template in an accepts_evidence section (news, macro, micro label, structure summary, isolation nomination, journal finding); a kind is allowed only if agent_evidence_style_scope passes"
+  inputs: [agent_evidence_style_scope]
+  affects:
+    - {id: agent_risk_scale, direction: down, how: "each accepted kind is one more source that can cut size"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-22c-saved-marketsenseai-evolvetrade.md, note: "per-agent evidence contract with expiry and permitted use"}
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H03, X7-H39"}
+  seed_ids: [D43, C27]
+  notes: "Template section, not a number. Agents may propose adding a kind by card; only he accepts."
+
+- id: agent_evidence_max_cut
+  name: Floor on the size scale one evidence kind may cause (the largest cut)
+  level: unit
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [intraday, swing], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed per kind and per class; should be set so a single kind's cut beats a matched random cut (agent_vs_random_lift) and is smaller for uncorroborated kinds"
+  inputs: [agent_vs_random_lift, evidence_source_independence]
+  affects:
+    - {id: agent_risk_scale, direction: up, how: "a higher floor limits how far evidence can cut"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R6-alphaxiv-papers/T-04-agents-macro-micro-news.md, note: "cap any single unverified item's effect"}
+    - {gen: expansion, ref: linking/stage-b/X7-agents/roundtable.md, note: "round 2: one news record to 0.7, two corroborated perhaps 0.5 (illustration, not a value)"}
+  seed_ids: [A25]
+  open_questions:
+    - "Should the floor differ by class (crypto news authenticity risk) or by style?"
+
+- id: agent_evidence_ttl
+  name: How long an agent evidence record stays valid, per kind
+  level: system
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed by kind: news minutes to hours; macro until the next relevant release; micro label one session; structure summary days; isolation nomination days to weeks; journal finding weeks (X7-H39)"
+  inputs: [decision_freshness_bound]
+  affects:
+    - {id: agent_risk_scale, direction: down, how: "a longer life keeps a cut in force longer"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-22c-saved-marketsenseai-evolvetrade.md, note: "evidence expiry by type"}
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H39"}
+  seed_ids: [C27, C28]
+  aliases: [evidence_expiry_by_type, agent_signal_valid_until]
+  notes: "X1's additions carry the same alias on x1_proposal_expiry (checked together on 3 Nov). The funnel decides whether evidence life and proposal life are one variable; this entry is the life of an evidence record by kind, not of a card."
+
+- id: agent_evidence_style_scope
+  name: Whether a unit's style and holding time allow agent evidence at all
+  level: unit
+  kind: other
+  measure: "other: yes or no per kind"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "a kind is eligible for a unit when agent_evidence_ttl for that kind exceeds the unit's typical holding time times a margin k and the agent's measured decision latency is below the unit's decision interval; k open"
+  inputs: [agent_evidence_ttl, max_hold_time, trade_rate]
+  affects:
+    - {id: agent_evidence_kinds_accepted, direction: either, how: "removes kinds a fast unit cannot use"}
+  configurable: true
+  changed_by: [automatic, operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-28-F-agents-macro-micro-news.md, note: "LLM decisions took about 187 s (agents 523 s) in a crypto paper study"}
+    - {gen: expansion, ref: linking/stage-b/X7-agents/roundtable.md, note: "round 2"}
+  seed_ids: [D6]
+  notes: "Scalpers at 1 minute keep only session-level kinds (session caution, class isolation)."
+
+- id: agent_evidence_fail_mode
+  name: What a unit does when agent evidence is missing, stale or malformed
+  level: unit
+  kind: other
+  measure: "other: neutral, cut or block"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "proposed neutral: missing evidence means no agent-driven change (scale 1), as the de-risk-only designs require; shown beside the MIS board's fail-open and isolation's fail-closed modes on the preflight (X7-H30)"
+  inputs: []
+  affects:
+    - {id: agent_risk_scale, direction: up, how: "neutral returns the scale to 1 when evidence is missing"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-28-F-agents-macro-micro-news.md, note: "failure of the service must mean no agent-driven change, not a default increase"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md, note: "the MIS board fails open by design"}
+  seed_ids: [C27]
+  open_questions:
+    - "Should a unit that depends on one evidence kind (for example an isolation nomination) fail closed instead?"
+
+- id: single_item_effect_cap
+  name: Largest cut one uncorroborated item may cause across all units at once
+  level: portfolio
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed so one fabricated headline cannot move many units together; evidence for the need: fabricated news succeeded 62 % against LLM agents, 100 % with two templates"
+  inputs: [evidence_source_independence]
+  affects:
+    - {id: agent_risk_scale, direction: up, how: "limits how far one item can push the scale down"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R6-alphaxiv-papers/T-04-agents-macro-micro-news.md, note: "Fake News, Real Crashes 2610.26438"}
+  seed_ids: [C28]
+
+- id: corroboration_widening_step
+  name: How much more an evidence record may cut for each independent confirming source
+  level: portfolio
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: each independent source (counted by evidence_source_independence) lowers the allowed floor by a step, never below agent_evidence_max_cut"
+  inputs: [evidence_source_independence]
+  affects:
+    - {id: agent_risk_scale, direction: down, how: "corroborated records may cut more"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-22c-saved-marketsenseai-evolvetrade.md, note: "independent-source confirmation widens what a record may change"}
+  seed_ids: [C28]
+
+- id: evidence_source_independence
+  name: Effective number of independent sources behind an evidence record
+  level: portfolio
+  kind: measure
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "count sources once per feed and once per model family; optionally shrink further by the correlation of the agents' past records"
+  inputs: []
+  affects:
+    - {id: corroboration_widening_step, direction: down, how: "fewer independent sources means less widening"}
+    - {id: single_item_effect_cap, direction: either, how: "decides whether an item counts as uncorroborated"}
+  configurable: true
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-28-F-agents-macro-micro-news.md, note: "many agents reading one feed are one agent"}
+  notes: "Gap in the components: no measure of agent independence exists."
+
+- id: operator_attention_budget
+  name: Cards that may reach him per day
+  level: system
+  kind: limit
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: start from the shipped pp-proposal-pack limit of three cards, then follow his measured accept and ignore behaviour; urgent cuts bypass because they act through unit rules"
+  seen_values:
+    - {value: 3, gen: unit_build, ref: grounding/G8-unit-chassis-and-extensibility.md, note: "pp-proposal-pack: at most three cards (waits for this session)"}
+  inputs: [review_queue_burn, card_ignore_rate]
+  affects:
+    - {id: card_value_floor, direction: up, how: "a smaller budget raises the bar a card must clear"}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-20-agent-approval-gates-evaluation.md, note: "AllPath approval queue telemetry"}
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H15"}
+  seed_ids: [D41, E8]
+  open_questions:
+    - "How many cards a day will he read (question 4 in X7)?"
+
+- id: card_ttl_waking_hours
+  name: How long a card waits before it expires, counted in his waking hours
+  level: system
+  kind: schedule
+  measure: "other: hours"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed so cards filed overnight do not expire unread; needs his waking hours"
+  inputs: []
+  affects:
+    - {id: review_queue_burn, direction: up, how: "longer lives keep more cards waiting"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: linking/stage-b/X7-agents/problem-solving.md, note: "P11"}
+
+- id: card_value_floor
+  name: Least expected money a card must carry to reach him
+  level: system
+  kind: limit
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed as the value of the last card that fits inside operator_attention_budget when cards are ranked by card_expected_value per minute of reading"
+  inputs: [operator_attention_budget, card_expected_value]
+  affects:
+    - {id: review_queue_burn, direction: down, how: "a higher floor lets fewer cards in"}
+  configurable: true
+  changed_by: [automatic, operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H15, X7-H20"}
+
+- id: card_expected_value
+  name: Expected money a card's change would add or save, both ways
+  level: system
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "computed on the run surface, never by the proposing agent: growth gained from a resize replay on the unit's own trades, plus loss avoided, minus trip tax and cost of conservatism; shown also in R"
+  inputs: [brake_precision, effective_tries]
+  affects:
+    - {id: card_value_floor, direction: either, how: "cards are ranked and cut by it"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-07-layered-limits-alarm-fatigue.md, note: "trip tax"}
+    - {gen: research, ref: research/R4-alphaxiv/chat-22c-saved-marketsenseai-evolvetrade.md, note: "cost of conservatism"}
+  seed_ids: [D41]
+
+- id: review_queue_burn
+  name: How fast his card queue fills against the attention budget
+  level: system
+  kind: measure
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "cards waiting divided by operator_attention_budget times card life in days; above 1 the queue grows and agents are throttled"
+  inputs: [operator_attention_budget, card_ttl_waking_hours]
+  affects:
+    - {id: agent_proposal_quota, direction: down, how: "a burning queue throttles every agent"}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-19-llm-agents-risk-monitoring.md, note: "review-queue burn as an operator budget"}
+
+- id: card_ignore_rate
+  name: Share of cards of one type he leaves unanswered until they expire
+  level: system
+  kind: evidence
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "expired unanswered cards of a type divided by cards of that type shown, over a rolling window"
+  inputs: []
+  affects:
+    - {id: operator_attention_budget, direction: down, how: "a high ignore rate suggests a smaller real budget"}
+    - {id: agent_proposal_quota, direction: down, how: "card types he ignores are moved to the digest"}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H16; ignored is not rejected"}
+
+- id: approval_reversal_rate
+  name: Share of approved agent changes he later reverses
+  level: system
+  kind: evidence
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "approved agent cards later reversed divided by approved agent cards, per agent profile and per card type"
+  inputs: []
+  affects:
+    - {id: agent_autonomy_level, direction: down, how: "reversals demote an agent"}
+    - {id: card_graduation_count, direction: up, how: "a type with reversals needs more clean approvals to graduate"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-20-agent-approval-gates-evaluation.md, note: "AllPath: the operator removed 11 of 19 agent-added rules at a median lag of eight days"}
+
+- id: card_graduation_count
+  name: Approvals of one card type with no reversal before it is offered as a rule he approves once
+  level: system
+  kind: other
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed higher for raise types than for cut types; also used as the recurrence count before an agent drafts a detector (X7-H27)"
+  inputs: [approval_reversal_rate]
+  affects:
+    - {id: operator_attention_budget, direction: up, how: "graduated types stop using cards, freeing the budget"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H16, X7-H27"}
+  seed_ids: [D41]
+
+- id: preauthorised_rule_ttl
+  name: How long a rule he approved once stays in force before he must re-confirm it
+  level: system
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed so graduated rules cannot be forgotten (roundtable round 3)"
+  inputs: []
+  affects:
+    - {id: restore_preauthorised, direction: either, how: "an expired approval turns the restore ladder back into cards"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: linking/stage-b/X7-agents/roundtable.md, note: "round 3"}
+
+- id: agent_proposal_quota
+  name: Cards and evidence records one agent profile may file per day
+  level: system
+  kind: limit
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed AIMD: plus one per accepted-and-held card, halved on each reversal, slowest growth for agents whose raise requests follow losses; used to rank, while operator_attention_budget is the hard limit"
+  inputs: [approval_reversal_rate, card_ignore_rate, review_queue_burn, post_loss_raise_window]
+  affects:
+    - {id: review_queue_burn, direction: up, how: "more filing fills the queue"}
+  configurable: true
+  changed_by: [automatic, operator]
+  status: idea
+  sources:
+    - {gen: research, ref: research/R9-accelerators-and-brake-pairs.md, note: "credit-limit lesson: who asks hardest gets the slowest accelerator"}
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H10, X7-H18"}
+  seed_ids: [D42]
+
+- id: agent_autonomy_level
+  name: What an agent profile may do (notes, drafts, evidence in proven classes, wider evidence)
+  level: system
+  kind: other
+  measure: "other: level 0 to 3"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed ladder: 0 notes; 1 drafts cards; 2 evidence in classes where agent_vs_random_lift passed; 3 kinds accepted at a larger cut; demoted by agent-caused signals, frozen by agent_freeze_drawdown, reset only by him; a model change resets to 0"
+  inputs: [agent_precision, agent_vs_random_lift, approval_reversal_rate, agent_freeze_drawdown]
+  affects:
+    - {id: agent_evidence_kinds_accepted, direction: either, how: "lower levels may not file evidence"}
+    - {id: agent_proposal_quota, direction: up, how: "higher levels file more"}
+  configurable: true
+  changed_by: [automatic, operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-22e-saved-quantharness-tradingr1.md, note: "AllPath: drawdown demotes an agent's autonomy until a human resets"}
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H18"}
+  seed_ids: [D41, D42]
+
+- id: agent_precision
+  name: Share of an agent's cuts or cards that were later shown to need action
+  level: system
+  kind: evidence
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "for cuts: share followed by a loss in scope within the record's life; for cards: share accepted and not reversed; per class"
+  inputs: []
+  affects:
+    - {id: agent_autonomy_level, direction: up, how: "precise agents earn room"}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: research, ref: research/R3-edge-verification-and-analogues.md, note: "brake precision; alarm fatigue"}
+
+- id: agent_vs_random_lift
+  name: How much an agent's cuts beat a random cutter firing as often with the same sizes, per class
+  level: system
+  kind: evidence
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "net R with the agent's cuts minus net R with matched random cuts on the same units over the same period, per class; the channel stays open in a class while this is above a margin over a minimum number of fires"
+  inputs: [brake_precision]
+  affects:
+    - {id: agent_autonomy_level, direction: up, how: "beating random opens or keeps the evidence channel"}
+    - {id: agent_evidence_max_cut, direction: down, how: "a proven agent may be allowed deeper cuts"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R5-mql5-corpus-ideas.md, note: "random-control brake test (MQL5 23482)"}
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H11"}
+  seed_ids: [D20]
+
+- id: agent_freeze_drawdown
+  name: Book or BMS drawdown at which new agent autonomy grants and raise cards freeze
+  level: portfolio
+  kind: brake_threshold
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed as a share of the cushion above the floor; freezes grants, does not demote (roundtable round 7)"
+  inputs: [high_water_mark_equity, kill_line_distance]
+  affects:
+    - {id: agent_autonomy_level, direction: down, how: "no new grants while frozen"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-22e-saved-quantharness-tradingr1.md, note: "AllPath drawdown breaker"}
+
+- id: agent_inference_cost
+  name: Model spend per agent job, against the value of what it changed
+  level: system
+  kind: cost
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "measured per run from the call contract (run id, model id); compared with card_expected_value of the cards and cuts the job produced"
+  inputs: []
+  affects:
+    - {id: agent_proposal_quota, direction: down, how: "jobs whose spend buys no changed decisions get fewer runs"}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-28-F-agents-macro-micro-news.md, note: "The Price of Thought: more reasoning did not improve net returns in any of nine comparisons"}
+  notes: "Measured on his subscription, so money is notional; still useful to cut jobs that change nothing."
+
+- id: post_loss_raise_window
+  name: Time after a loss in a scope during which any raise proposal is flagged and slowed
+  level: unit
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed from the get-even evidence (traders traded more and bigger after morning losses); counted in the scope's trading time"
+  inputs: [session_result_r, loss_streak]
+  affects:
+    - {id: agent_proposal_quota, direction: down, how: "agents whose raises cluster after losses grow quota slowest"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R8-gap-topup.md, note: "Garvey, Murphy, Wu 2005"}
+  aliases: [post_loss_raise_flag]
+
+- id: risk_profile_tries
+  name: Trials counted for risk-parameter and profile search in a unit family
+  level: unit
+  kind: evidence
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "count every agent or learner trial on risk numbers, derivations, windows, isolation thresholds and scenario-tuned limits in the search ledger; a risk-profile promotion is deflated by the family's effective count"
+  inputs: []
+  affects:
+    - {id: deflated_sharpe_min, direction: up, how: "more tries raise the bar a profile change must clear"}
+    - {id: effective_tries, direction: up, how: "risk search counts beside strategy search"}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-18-agent-harness-alpha-discovery.md, note: "append-only search ledger; honest evaluation"}
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H09"}
+  seed_ids: [D48]
+
+- id: isolation_nomination_window_days
+  name: Days of readings and journals an agent reads before nominating an isolation
+  level: portfolio
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: his words name about 20 days as an example; proposed to derive from how many independent observations per class the two-tell check needs"
+  seen_values:
+    - {value: 20, gen: operator_words, ref: seeds/operator-words-2026-11-03.md, note: "analysis over 20 days, as an example, not a ruling"}
+  inputs: []
+  affects:
+    - {id: market_isolation_trigger, direction: either, how: "longer windows see slower bleeds and react later"}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: idea
+  sources:
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H21"}
+  seed_ids: [C27]
+
+- id: isolation_confirm_mode
+  name: Whether a confirmed agent isolation nomination applies by itself or waits for his click
+  level: portfolio
+  kind: other
+  measure: "other: click or auto when confirmed"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: stage 1 is click only (no class scope exists in the node); stage 2 may apply automatically when a deterministic two-tell check confirms the nomination, if he allows it"
+  inputs: [isolation_nomination_window_days]
+  affects:
+    - {id: isolation_scope, direction: either, how: "auto mode switches the scope off without waiting"}
+    - {id: market_isolation_trigger, direction: either, how: "names who may pull the trigger"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: operator_words, ref: seeds/operator-words-2026-11-03.md, note: "it should kick in with the evidence"}
+    - {gen: grounding, ref: grounding/G9-runtime-brakes-isolation-evidence.md, note: "no class or region scope exists"}
+  seed_ids: [C27, C28]
+  open_questions:
+    - "Question 2 in X7: automatic on confirmation, or always his click?"
+
+- id: restore_preauthorised
+  name: Whether a unit's restore ladder runs its steps without a click each time
+  level: unit
+  kind: other
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed yes once he approves the template's restore rule (e-value on post-cut trades plus a minimum time; fast regrowth below the trip level, slow near it); no raise while any brake is active"
+  inputs: [sequential_evidence_pass, preauthorised_rule_ttl]
+  affects:
+    - {id: grow_back_rule, direction: up, how: "steps back up run automatically when the evidence gate passes"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: research, ref: research/R9-accelerators-and-brake-pairs.md, note: "memory ceiling, AIMD day pair"}
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H05"}
+  seed_ids: [A25, C19]
+  open_questions:
+    - "Question 3 in X7; collides with ruling 2 as written."
+
+- id: hidden_scenario_share
+  name: Share of the scenario battery kept hidden from agents and rotated
+  level: system
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed so limits tuned on agent-written scenarios are judged on scenarios the agents never saw"
+  inputs: []
+  affects:
+    - {id: risk_profile_tries, direction: down, how: "hidden scenarios cannot be tuned against, so judging on them adds no search tries"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: research, ref: research/R8-gap-topup.md, note: "Cai, Haugh, Li 2026: a book built to look safe under named factors carried unnamed risk"}
+  seed_ids: [C32]
+
+- id: agent_requalify_rule
+  name: What an agent must pass again after its model, prompt or procedure changes
+  level: system
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: proposed: a changed agent is a new version at autonomy level 0 until it passes post-cutoff replay and the random-control test again"
+  inputs: []
+  affects:
+    - {id: agent_autonomy_level, direction: down, how: "resets to level 0 on a change"}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-18-agent-harness-alpha-discovery.md, note: "pinned model snapshots and logged cutoffs"}
+  notes: "Gap in the components: nothing says how a new model earns trust again."
+
+- id: approval_ttl
+  name: How long his approval of a card stays usable before the effect must be re-checked
+  level: system
+  kind: schedule
+  measure: "other: hours"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open: approvals are single use and expire; at use time the stored effect is re-checked against the current base version, and any change sends the card back to the queue"
+  inputs: []
+  affects:
+    - {id: review_queue_burn, direction: down, how: "a longer approval life sends fewer approved cards back to the queue"}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: research/R4-alphaxiv/chat-20-agent-approval-gates-evaluation.md, note: "Approve What, Exactly?: effect-bound, single-use, expiring approvals"}
+    - {gen: expansion, ref: expansion/X7-agents.md, note: "X7-H04"}
+  seed_ids: [D43]
