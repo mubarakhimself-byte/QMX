@@ -95,6 +95,10 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
       4. Fable funnel judge, then an Opus reviewer;
       5. Fable architecture, review, slices, builders.
 
+19. **M22-M23.** The first R4 run was shallow and dwelt on his old conversations, and the lead's own first question packed seven topics into one chat. Stopped and relaunched as **R4 deep**: new chats only, one narrow topic each (22 topics), newest papers first, two follow-ups per chat (top three papers in depth; combinations), up to four tabs at once, bookmarks allowed → `research/R4-alphaxiv/chat-NN-*.md` and `R4-alphaxiv-synthesis.md` (with "Papers that could combine"). Saved old conversations stay as `conv-01`..`conv-03`.
+    - **R5 started**: the local MQL5 corpus (3,128 articles at `C:/Users/Mubarak/Desktop/QMX/.worktrees/mql5-library/data/mql5-library/`) mined by topic for ideas → `research/R5-mql5-corpus-ideas.md` (with "Ideas that could combine" and "Traps"). R1 had only searched it for risk-manager designs.
+    - The paper mixer then takes R1-R5 together.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
