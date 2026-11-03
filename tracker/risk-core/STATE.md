@@ -23,6 +23,24 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 6e. **Grounding round 2 complete at about 22:00 on 1 Nov. Stopped as he asked.** Next session: he reads, then we agree the route (item 7).
 7. Research is not started. Drop prop-firm buffers from the research list; he only used them to explain. The proposed route (seed register → grounding → research → wayfinder → generative round → funnel → maths → architecture → review) waits for his reading.
 
+8. **3 Nov, 13:46 local: he is back (M10, verbatim in `seeds/operator-words-2026-11-03.md`).** He read the 1 Nov answer and replied point by point. Rulings and asks:
+   - Two lenses. **Technical lens first**, owned by the lead: a malleable, self-configuring, extensible risk-and-sizing template on the shipped unit system (his comparisons: n8n, white-label software, mini apps). How agents and the copilot reach it, schemas, outside code, QML additions, UI needs logged for the UI session. **Numbers lens later**: budget, allocation, values, simulations with Fable agents, worst/realistic/best cases "all factors considered".
+   - Don't confine anything yet: several brakes, 3-5-7 / 10-5-3, unit-vs-BMS daily brakes are all "circumstantial".
+   - Use the circuit breaker (old CB, WF3 decay) and improve it; he proposes a BMS-level breaker and a market isolation protocol (class, region, news, SQS, on evidence).
+   - Live drift from backtest must not mean pulling out on one bad day; size down slowly; bring solutions, not just issues.
+   - He reads two contradictions in the 1 Nov answer (10 units "split" vs frequency; "twice the edge, twice the size" vs not leaning on edge). The first is a misreading (each unit keeps its full size); the second is a fair push. Scratch sim: one unit $10/trade touches $300 1.4 %, ten independent units at $10 touch it 1.5 % with ten times the growth, ten at $1 0 %, ten half-correlated at $10 32 %.
+   - Research asks: StrategyQuant, QuantConnect, MT5 articles, Bloomberg; what traders mean by sniping windows.
+   - Fable agents wanted where smartness matters; usage is not a limit here.
+   - The unit stack (75 PRs, tip `build/us-c13` d02af358, list `D:/QMX-worktrees/unit-ship/STACK-LIST.md`) is not merged yet; he merges when the last two land.
+9. **Grounding round 3 started 3 Nov about 14:20 local**, six background agents:
+   - G8 unit chassis and extensibility (Opus) → `grounding/G8-unit-chassis-and-extensibility.md`
+   - G9 runtime brakes, isolation and evidence at the stack tip (Opus) → `grounding/G9-runtime-brakes-isolation-evidence.md`
+   - G10 circuit breaker, WF1-3, news, BMS slots, decay across generations (Opus) → `grounding/G10-brakes-decay-slots-all-generations.md`
+   - R1 platforms: QuantConnect, StrategyQuant, MQL5, n8n, Bloomberg, open-source engines (Opus) → `research/R1-platforms-risk-sizing-extensibility.md`
+   - R2 trader practice: sniping windows, live drift, isolation, breadth, sweeps (Opus) → `research/R2-trader-practice-windows-drift-isolation-breadth.md`
+   - Seed update with M10, lens tags T/N, "what the technical lens must hold" (**Fable, his ask**) → `seeds/SEEDS.md`
+   Proposed route after grounding: wayfinder map → generative round on Fable (bmad-brainstorming, bmad-party-mode, bmad-cis-problem-solving, bmad-forge-idea) → architecture (bmad-architecture, codebase-design for the seams) → review (bmad-review, grill-with-docs) → slices built by Opus poteto-agent builders with one reviewer per PR → numbers lens. Waits for his go.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
