@@ -716,6 +716,9 @@ def test_a_restart_binds_again_the_account_he_bound(tmp_path: Path) -> None:
     tick_quotes(again)
 
     assert sorted(runtime(again).venues) == [ACCOUNT]
+    assert (
+        runtime(again).venues[ACCOUNT].client.account == runtime(rig).venues[ACCOUNT].client.account
+    )
     assert ctrader_row(again)["session"] == "ready"
     runtime(again).stop()
 
@@ -774,7 +777,12 @@ def test_under_the_shadow_stage_the_node_reads_no_grant_and_binds_nothing(
         answers = [
             node.call("sign_in_begin", {"op_id": "s", "venue": "ctrader"}),
             node.call(
-                "bind", {"op_id": "b", "account": {"id": ACCOUNT, "ctid": CTID}, "action": "add"}
+                "bind",
+                {
+                    "op_id": "b",
+                    "account": {"id": ACCOUNT, "ctid": CTID, "venue": "icmarkets-ctrader"},
+                    "action": "add",
+                },
             ),
             node.call("self_test", {"op_id": "t", "account": ACCOUNT}),
         ]
@@ -814,7 +822,12 @@ def test_at_the_live_stage_the_node_opens_its_door_with_its_own_grant_store(
             },
         )
         refused = node.call(
-            "bind", {"op_id": "b", "account": {"id": ACCOUNT, "ctid": CTID}, "action": "add"}
+            "bind",
+            {
+                "op_id": "b",
+                "account": {"id": ACCOUNT, "ctid": CTID, "venue": "icmarkets-ctrader"},
+                "action": "add",
+            },
         )
         session = ctrader_session(node)
     finally:

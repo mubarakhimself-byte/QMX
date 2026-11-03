@@ -454,13 +454,18 @@ def _apply_flatten(step: Applying) -> Answer:
 
 def _bind(arguments: Mapping[str, Json], _: Context) -> Request:
     """The account record snapshot names the account by ``id``, as a deployment's ``account``
-    does; a cTrader account also carries its ``ctid`` when ``id`` is not that number."""
+    does, and its ``venue`` as the instrument records name it; a cTrader account also carries
+    its ``ctid`` when ``id`` is not that number. All three are kept, so a restart binds the
+    same account again."""
     account = _table(arguments, "account")
     action = arguments.get("action")
     if action not in {"add", "remove"}:
         raise BadArgumentError('action is "add" or "remove"')
     account_id = _text(account, "id")
     kept: dict[str, Json] = {"account": account_id, "action": action}
+    venue = _text(account, "venue", required=False)
+    if venue is not None:
+        kept["venue"] = venue
     ctid = account.get("ctid")
     if ctid is not None:
         if not isinstance(ctid, int) or isinstance(ctid, bool) or ctid < 1:

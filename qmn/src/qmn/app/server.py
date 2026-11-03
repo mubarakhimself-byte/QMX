@@ -485,6 +485,11 @@ class CTraderDoor:
         )
         if ctid is None:
             return refused("bad_argument", "bind: account.ctid names the cTrader account number")
+        venue_name = account.get("venue")
+        if not isinstance(venue_name, str) or not venue_name:
+            return refused(
+                "bad_argument", "bind: account.venue names the venue as its instrument records do"
+            )
         grant = self.grants.held()
         if grant is None:
             return refused(
@@ -512,12 +517,7 @@ class CTraderDoor:
             )
         if runtime is None or journal is None:
             return refused("not_available", "the node's runtime is not running")
-        venue_name = account.get("venue")
-        bound_account = Account(
-            account_id,
-            VenueId(venue_name if isinstance(venue_name, str) else "ctrader"),
-            AccountRole.DEMO,
-        )
+        bound_account = Account(account_id, VenueId(venue_name), AccountRole.DEMO)
         venue = CTraderVenue(
             account=bound_account,
             ctid=ctid,
@@ -740,7 +740,7 @@ class CTraderDoor:
             if change.kind == "bind":
                 latest[str(change.args["account"])] = change.args
         return [
-            {"id": account, **({"ctid": args["ctid"]} if "ctid" in args else {})}
+            {"id": account, **{key: args[key] for key in ("ctid", "venue") if key in args}}
             for account, args in latest.items()
             if args.get("action") == "add"
         ]

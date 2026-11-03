@@ -710,7 +710,10 @@ class CTraderVenue:
         if is_refusal(trader):
             return trader
         found = _map(trader.value.body.get("trader"))
-        digits = _int(found.get("moneyDigits")) or 2
+        digits = _int(found.get("moneyDigits"))
+        if digits is None:
+            # Open API answers without moneyDigits are in cents.
+            digits = 2
         self.money_digits = digits
         self.balance = Decimal(_int(found.get("balance")) or 0).scaleb(-digits)
         self.position_model = "netting" if found.get("accountType") == "NETTED" else "hedging"
@@ -736,20 +739,28 @@ class CTraderVenue:
         rows = {_int(row.get("symbolId")): row for row in _rows(detail.value.body.get("symbol"))}
         self.symbols = {}
         for market, ident in wanted.items():
-            row = rows.get(ident)
-            if row is None:
+            row = rows.get(ident) or {}
+            facts = [
+                _int(row.get(key))
+                for key in ("digits", "pipPosition", "lotSize", "stepVolume", "minVolume")
+            ]
+            if any(fact is None for fact in facts) or not all(facts[2:]):
+                # A size crosses into cTrader volume through these, so none is ever guessed.
                 return _refused(
-                    "unknown_symbol", f"no facts for {self.markets[market]}", retry=False
+                    "symbol_facts_missing",
+                    f"cTrader did not state {self.markets[market]}'s digits and volumes",
+                    retry=False,
                 )
+            digits, pip, lot, step, least = cast("list[int]", facts)
             self.symbols[market] = SymbolFacts(
                 market,
                 self.markets[market],
                 cast("int", ident),
-                _int(row.get("digits")) or 5,
-                _int(row.get("pipPosition")) or 4,
-                _int(row.get("lotSize")) or 10_000_000,
-                _int(row.get("stepVolume")) or 100_000,
-                _int(row.get("minVolume")) or 100_000,
+                digits,
+                pip,
+                lot,
+                step,
+                least,
                 Instrument(self.venue_account.venue, self.markets[market]),
             )
         return Ok(None)
