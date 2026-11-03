@@ -3,7 +3,8 @@
 Its inputs are the read step's output and, when a model wrote the note, the `receipts-grader`
 child's output, nested as `outputs.deliver.main.note`. The read step's output carries `note` (the
 script's own note when nothing needed a model), `note_kind`, `about`, `window`, `cards`, the
-receipts of the findings it landed, and optionally `examples`, which the note carries.
+receipts of the findings it landed, and optionally `examples`, which the note carries, and
+`note_title`, a title a script made, which replaces the model's.
 
 It lands one `note` artifact and one `proposal-card` artifact per card, on the run's own ref and
 as the run, each marked `proposal: true`. A note a model wrote lands only after the grader passed
@@ -49,7 +50,7 @@ template = json.loads((code / "definition.json").read_text("utf-8"))["id"]
 bodies = Path(os.environ["QMX_WORK"]) / "library"
 bodies.mkdir(parents=True, exist_ok=True)
 landed = {
-    "title": str(note.get("title") or ""),
+    "title": str(read.get("note_title") or note.get("title") or ""),
     "text": str(note["text"]),
     "note_kind": read["note_kind"],
     "receipts": [str(r) for r in note.get("receipts", [])],

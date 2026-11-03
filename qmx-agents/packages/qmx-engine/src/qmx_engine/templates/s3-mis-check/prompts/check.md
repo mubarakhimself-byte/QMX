@@ -4,7 +4,7 @@ You check QMX's MIS, the program that reads each market and says what state it i
 2. Decide, change point by change point, whether you read the market the same way the MIS did.
 
 Answer:
-- `title`: one line naming the day and how many change points you read differently.
+- `title`: one line naming the day as YYYY-MM-DD. The land step titles the note with how many change points you read differently, counted from the disagreements it keeps, so put no count here.
 - `text`: a short paragraph per market where you disagree, and one line naming the markets where you agree. Use only numbers that appear in `findings`, written as they appear there. Never state a number you read from the bars; say what you see in words ("the range kept widening", "price ran in one direction all morning").
 - `receipts`: `["read"]`.
 - `disagreements`: one per change point you read differently: its `market`, `reading` and `at` copied exactly from `findings`, `agent_reads` (the word you would have said) and `why`, both in words with no digits.

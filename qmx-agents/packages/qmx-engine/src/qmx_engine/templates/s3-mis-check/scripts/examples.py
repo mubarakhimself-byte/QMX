@@ -10,8 +10,9 @@ holds a digit fails the step: the agent read bars through its tools, which leave
 says what it sees in words and every number in what lands comes from a script.
 
 It prints the read step's output with `about` set to one link per kept example
-(`rel: reading`, `ref: <reading>|<market>|<at>`) and the kept examples under `examples`, for the
-land step. On a quiet day it hands the read step's output on unchanged.
+(`rel: reading`, `ref: <reading>|<market>|<at>`), the kept examples under `examples`, and
+`note_title`, which names the day and counts the kept examples, for the land step. The count is
+this step's, so no model wrote it. On a quiet day it hands the read step's output on unchanged.
 """
 
 import json
@@ -47,4 +48,10 @@ for place, example in enumerate((graded or {}).get("disagreements", []), start=1
         continue
     kept.append({**example, "mis_said": points[key]})
 about = [{"rel": "reading", "ref": f"{e['reading']}|{e['market']}|{e['at']}"} for e in kept]
-print(json.dumps(read | {"about": about, "examples": kept, "dropped": dropped}))
+points_word = "change point" if len(kept) == 1 else "change points"
+title = f"MIS check for {read['findings']['day']}: {len(kept)} {points_word} read differently"
+print(
+    json.dumps(
+        read | {"about": about, "examples": kept, "dropped": dropped, "note_title": title}
+    )
+)

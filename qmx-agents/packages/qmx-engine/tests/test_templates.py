@@ -1606,7 +1606,7 @@ def test_the_mis_check_lands_each_disagreement_linked_to_its_reading_row(home: P
     }
     nowhere = afternoon | {"at": "2025-01-02T10:00:00.000Z"}
     answer = {
-        "title": "MIS check for 2025-01-02: one change read differently",
+        "title": "MIS check for 2025-01-02",
         "text": "The MIS published 3 efficiency-ratio rows for fx.eurusd. I read its turn to "
         "efficient at midday as still choppy.",
         "receipts": ["read"],
@@ -1628,6 +1628,7 @@ def test_the_mis_check_lands_each_disagreement_linked_to_its_reading_row(home: P
     ]
     [note] = [m for t, m in landed(home) if t == "note"]
     assert note["note_kind"] == "disagreement"
+    assert note["title"] == "MIS check for 2025-01-02: 1 change point read differently"
     assert note["about"] == [
         {"rel": "reading", "ref": "efficiency-ratio|fx.eurusd|2025-01-02T12:00:00.000Z"}
     ]

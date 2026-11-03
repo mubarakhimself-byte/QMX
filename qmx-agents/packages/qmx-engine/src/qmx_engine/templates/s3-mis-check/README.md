@@ -8,7 +8,7 @@ The slow lane's MIS check (STATE midday rulings 44 and 50, Part B `workflows.md`
 2. `No reading history?` lands the script's own note on a day with none: zero tokens.
 3. `Read the market beside the MIS` (an `agent` step, role `reviewer`, toolset `data`) reads the bars around each change point with `data_bars` and `data_features` and names each change point it reads differently. Its numbers come only from the read step; what it reads from the bars it says in words.
 4. `Check every number's receipt` (the shared `receipts-grader` block, carried in `receipts-grader/`) fails the run on any number in the note the read step did not print.
-5. `Keep the examples that point at a change point` (`scripts/examples.py`) drops a disagreement that names no change point the read step printed, and fails the step on one that states a number, since the agent's tool reads leave no receipt.
+5. `Keep the examples that point at a change point` (`scripts/examples.py`) drops a disagreement that names no change point the read step printed, and fails the step on one that states a number, since the agent's tool reads leave no receipt. It titles the note with the day and how many examples it kept, so that count comes from a script.
 6. `Land the disagreements for him` (`scripts/land.py`) lands one `note` of kind `disagreement`, marked `proposal: true`, linking each example to its reading row (`reading|market|at`).
 
 ## Settings
