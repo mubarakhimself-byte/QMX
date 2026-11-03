@@ -27,7 +27,8 @@ the call that sends it.
 
 from __future__ import annotations
 
-import asyncio
+import contextlib
+import socket
 import ssl
 import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -262,74 +263,74 @@ class Codec:
 
 
 class FramedWire:
-    """The TLS socket to cTrader's Open API on its own event loop, driven by the one thread that
-    owns the binding. A wait that ends early never cuts a frame: a read consumes a frame only once
-    it has arrived whole."""
+    """The TLS socket to cTrader's Open API, a plain blocking socket driven by the one thread
+    that owns the binding; the node keeps its one event loop (DEC-0243). Bytes are kept until a
+    frame has arrived whole, so a wait that ends early never cuts one."""
 
-    def __init__(
-        self,
-        loop: asyncio.AbstractEventLoop,
-        reader: asyncio.StreamReader,
-        writer: asyncio.StreamWriter,
-    ) -> None:
-        self._loop = loop
-        self._reader = reader
-        self._writer = writer
+    def __init__(self, sock: socket.socket) -> None:
+        self._sock = sock
+        self._buffer = bytearray()
 
     @classmethod
     def open(
         cls, host: str, *, port: int = OPEN_API_PORT, tls: bool = True, timeout_s: float = 10.0
     ) -> Result[Wire]:
         """``tls`` is off only for a fake cTrader on this machine (``server.endpoints``)."""
-        loop = asyncio.new_event_loop()
-        context = ssl.create_default_context() if tls else None
         try:
-            reader, writer = loop.run_until_complete(
-                asyncio.wait_for(asyncio.open_connection(host, port, ssl=context), timeout_s)
-            )
-        except (OSError, TimeoutError) as error:
-            loop.close()
+            raw = socket.create_connection((host, port), timeout=timeout_s)
+            if not tls:
+                return Ok(cls(raw))
+            try:
+                return Ok(cls(ssl.create_default_context().wrap_socket(raw, server_hostname=host)))
+            except OSError:
+                raw.close()
+                raise
+        except OSError as error:
             return _refused("venue_unreachable", f"{host}:{port} {type(error).__name__}")
-        return Ok(cls(loop, reader, writer))
 
     def send(self, envelope: bytes, /) -> Result[None]:
         framed = encode_framed_payload(envelope)
         if is_refusal(framed):
             return framed
         try:
-            self._writer.write(framed.value)
-            self._loop.run_until_complete(self._writer.drain())
+            self._sock.settimeout(ANSWER_WAIT_S)
+            self._sock.sendall(framed.value)
         except OSError as error:
             return _refused("venue_write_failed", type(error).__name__)
         return Ok(None)
 
     def receive(self, wait_s: float, /) -> Result[bytes | None]:
-        try:
-            return self._loop.run_until_complete(self._read(wait_s))
-        except (OSError, asyncio.IncompleteReadError) as error:
-            return _refused("venue_read_failed", type(error).__name__)
+        while True:
+            whole = self._whole()
+            if whole is not None:
+                return whole
+            try:
+                self._sock.settimeout(max(wait_s, 0.001))
+                chunk = self._sock.recv(65536)
+            except TimeoutError:
+                return Ok(None)
+            except OSError as error:
+                return _refused("venue_read_failed", type(error).__name__)
+            if not chunk:
+                return _refused("venue_closed", "cTrader closed the connection")
+            self._buffer += chunk
 
-    async def _read(self, wait_s: float) -> Result[bytes | None]:
-        try:
-            header = await asyncio.wait_for(self._reader.readexactly(4), max(wait_s, 0.001))
-        except TimeoutError:
-            return Ok(None)
-        body = await asyncio.wait_for(
-            self._reader.readexactly(int.from_bytes(header, "big")), ANSWER_WAIT_S
-        )
-        decoded = decode_framed_payload(header + body)
+    def _whole(self) -> Result[bytes | None] | None:
+        if len(self._buffer) < 4:
+            return None
+        end = 4 + int.from_bytes(self._buffer[:4], "big")
+        if len(self._buffer) < end:
+            return None
+        frame = bytes(self._buffer[:end])
+        del self._buffer[:end]
+        decoded = decode_framed_payload(frame)
         if is_refusal(decoded):
             return decoded
         return Ok(decoded.value)
 
     def close(self) -> None:
-        try:
-            self._writer.close()
-            self._loop.run_until_complete(self._writer.wait_closed())
-        except OSError:
-            pass
-        finally:
-            self._loop.close()
+        with contextlib.suppress(OSError):
+            self._sock.close()
 
 
 @dataclass
