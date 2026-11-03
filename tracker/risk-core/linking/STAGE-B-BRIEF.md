@@ -94,7 +94,7 @@ Run these yourself, non-interactively. No human is available, so play every role
 
 - Read-only everywhere except your outputs and your `doc_workspace`. Never commit. Never touch other worktrees' files.
 - Do not spawn subagents of your own.
-- No Firecrawl.
+- No Firecrawl. For any web lookup, use the Exa tools (`web_search_exa`, `web_fetch_exa`; load them with ToolSearch "exa"), or the alphaXiv MCP for papers.
 - Plain words, short sentences. Mark opinions **[judgment]**.
 - Time-limit every command.
 

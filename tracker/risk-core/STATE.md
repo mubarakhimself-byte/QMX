@@ -223,6 +223,8 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - **Papers to disk:** 304 cited arXiv ids fetched politely (3 s apart) as PDFs into `research/papers/pdf/` (gitignored) and text into `research/papers/text/` (committed); failures go to `FAILED.tsv`.
     - Next: Stage B linking.
 
+39. **Papers on disk:** 302 arXiv full texts in `research/papers/text/` (committed, 18 MB). The 663 MB of PDFs stay local in `research/papers/pdf/` (gitignored). The one id that 404'd was a false match. **Exa is now connected** in this session (`web_search_exa`, `web_fetch_exa`), and the Stage B brief tells agents to use it for web lookups.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
