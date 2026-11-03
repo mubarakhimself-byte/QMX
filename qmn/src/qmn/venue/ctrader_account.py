@@ -1182,16 +1182,14 @@ class CTraderVenue:
             return Ok(Sent(SubmissionOutcome.UNKNOWN))
         msg_id = encoded.value.client_msg_id
         while True:
-            found = api.wait(
-                lambda frame: frame.name in _TRADES and _answers(frame, msg_id, name)
-            )
+            found = api.wait(lambda frame: frame.name in _TRADES and _answers(frame, msg_id, name))
             if is_refusal(found) or found.value is None:
                 return Ok(Sent(SubmissionOutcome.UNKNOWN))
             frame = found.value
             kind = frame.body.get("executionType")
             if kind == "ORDER_ACCEPTED":
                 continue
-            del self._unanswered[name]
+            self._unanswered.pop(name, None)
             if frame.name == "ProtoOAOrderErrorEvent" or kind != "ORDER_FILLED":
                 self._orders.append(VenueOrder(name, tags.label, ticket.market_id, OrderState.GONE))
                 code = (
