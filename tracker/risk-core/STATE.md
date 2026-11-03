@@ -129,6 +129,18 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - costs never reach the sizer.
     Schema extras: `basis` (formula, reasoned, stated, open), `seen_values`, statuses "built not running" and "dropped". Expansion agents add `ledger/additions/<id>.yaml` and run `check.py` with them.
 
+24. **M30: how Stage B links ideas.** He suggests BMad brainstorming with CIS and party mode ("patching" = party mode). The brainstorming skill has a headless mode for agents (topic, goal, techniques, context, doc_workspace; writes a memlog, `brainstorm.html` and `brainstorm-intent.md`). It also has the composer page he remembers (`assets/brain-selector.html`, for a human picking techniques); he said he is not needed, so agents run headless.
+    - Stage B technique set, per layer agent:
+      - Morphological Analysis: components as parameters, options per parameter, combined across them;
+      - Concept Blending;
+      - Forced Relationships;
+      - Cross-Pollination;
+      - Trait Transfer;
+      - Evolutionary Pressure: breed hybrid variants under a selection rule;
+      - Solution Matrix: problems against components, which shows the empty gaps.
+    - Then `bmad-cis-problem-solving` on the layer's open problems, and a `bmad-party-mode` roundtable to stress the hybrids.
+    - Each agent's `brainstorm.html` doubles as a page he can look at.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
