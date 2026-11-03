@@ -54,6 +54,7 @@ __all__ = [
     "PUSH_PASS_S",
     "SEND_TIMEOUT_S",
     "SHORT_LIST",
+    "WAITING_MAX",
     "Destinations",
     "HealthchecksSink",
     "LivenessSender",
@@ -65,6 +66,7 @@ __all__ = [
     "View",
     "Wake",
     "attach",
+    "no_calendar",
     "raised",
 ]
 
@@ -83,6 +85,9 @@ OPEN_SETTLE_NS: Final = 120_000_000_000
 """`[node] alarm_open_settle_s`, starting at 120 s: how long a market must have been open before
 a push that follows its calendar fires, so feeds and sessions coming back after a closure do
 not wake him."""
+WAITING_MAX: Final = 100
+"""`[node] alarm_waiting_max`, starting at 100: how many failed pushes wait to be tried again;
+past it the oldest is dropped and counted."""
 PING_REFERENCE: Final = "qmx/trading-node-keys#alarms.healthchecks_ping_url"
 """Where the ping URL is kept, by name; the heartbeat never holds the URL itself."""
 LOOPBACK: Final = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -295,7 +300,7 @@ class NtfyChannel:
     """The kept publisher's ``NotificationChannel`` for ntfy: one POST to his topic with a
     title, the priority and the summary as the body (Part C CONTRACTS section 10)."""
 
-    url: str
+    url: str = field(repr=False)
     node_tag: str
     send: Send = https_send
     timeout_s: float = SEND_TIMEOUT_S
@@ -318,7 +323,7 @@ class HealthchecksSink:
     URL with no body. The URL is held here; the heartbeat carries only a label and a key
     reference."""
 
-    url: str
+    url: str = field(repr=False)
     send: Send = https_send
     timeout_s: float = SEND_TIMEOUT_S
 
@@ -341,7 +346,9 @@ class PushSender:
 
     ``open_at(market_id, utc_ns)`` answers whether that market is open on its calendar; a push
     that follows the calendar waits until a market it concerns has been open ``settle_ns``. A
-    push that fails stays waiting and is tried again on every pass, in the order it arose."""
+    market whose calendar raises reads shut and is named once on stderr. A push that fails stays
+    waiting and is tried again on every pass, in the order it arose; past ``waiting_max`` the
+    oldest is dropped and counted in ``dropped``."""
 
     def __init__(
         self,
@@ -353,6 +360,7 @@ class PushSender:
         pass_s: float = PUSH_PASS_S,
         halt_after_ns: int = HALT_BAND_ALARM_AFTER_NS,
         settle_ns: int = OPEN_SETTLE_NS,
+        waiting_max: int = WAITING_MAX,
     ) -> None:
         self.read = read
         self.publisher = publisher
@@ -361,17 +369,21 @@ class PushSender:
         self.pass_s = pass_s
         self.halt_after_ns = halt_after_ns
         self.settle_ns = settle_ns
+        self.waiting_max = waiting_max
         self.sent = 0
         self.failed = 0
+        self.dropped = 0
         self.waiting: list[Raised] = []
         self._seen: set[str] = set()
+        self._uncalendared: set[str] = set()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
         """Take what the store already shows as known, then pass on a thread. Called before the
         runtime starts, so a restart does not push the last run's alarms again."""
-        self._seen.update(item.key for item in raised(self.read(), self.clock_ns()))
+        known = raised(self.read(), self.clock_ns(), halt_after_ns=self.halt_after_ns)
+        self._seen.update(item.key for item in known)
         self._thread = threading.Thread(target=self._run, name="node-alarms-push", daemon=True)
         self._thread.start()
 
@@ -380,17 +392,32 @@ class PushSender:
         if self._thread is not None:
             self._thread.join(timeout=self.pass_s + SEND_TIMEOUT_S)
 
+    def _settled(self, market: str, now: int) -> bool:
+        try:
+            return self.open_at(market, now) and self.open_at(market, now - self.settle_ns)
+        except Exception as error:  # one market's calendar never holds the other pushes
+            if market not in self._uncalendared:
+                self._uncalendared.add(market)
+                note = {"event": "alarm_calendar_failed", "market_id": market}
+                print(json.dumps({**note, "error": type(error).__name__}), file=sys.stderr)
+            return False
+
     def pass_once(self) -> None:
         now = self.clock_ns()
         for item in raised(self.read(), now, halt_after_ns=self.halt_after_ns):
             if item.key in self._seen:
                 continue
             if not SHORT_LIST[item.wake].any_hours and not any(
-                self.open_at(m, now) and self.open_at(m, now - self.settle_ns) for m in item.markets
+                self._settled(m, now) for m in sorted(item.markets)
             ):
                 continue
             self._seen.add(item.key)
             self.waiting.append(item)
+        while len(self.waiting) > self.waiting_max:
+            oldest = self.waiting.pop(0)
+            self.dropped += 1
+            note = {"event": "alarm_dropped", "wake": oldest.wake.value, "dropped": self.dropped}
+            print(json.dumps(note), file=sys.stderr)
         for item in list(self.waiting):
             published = self.publisher.publish(
                 failure_id=SHORT_LIST[item.wake].failure_id, summary=item.summary
@@ -445,6 +472,13 @@ class LivenessSender:
 
 
 # --- the destinations and the composition -----------------------------------------------------
+
+
+def no_calendar(market_id: str, at_ns: int) -> bool:
+    """Every market reads shut: the node has no calendar reader yet. Pushes that follow the
+    calendar stay quiet; protection escalation and the clock halt still go."""
+    del market_id, at_ns
+    return False
 
 
 @dataclass(frozen=True, slots=True)

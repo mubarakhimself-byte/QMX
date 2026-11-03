@@ -27,8 +27,10 @@ from qmn.app.alarms import (
     View,
     attach,
     https_send,
+    no_calendar,
 )
 from qmn.app.alarms import Position as Held
+from qmn.app.server import from_environment
 from qmn.app.store import Store
 from qmn.observability.alerts import (
     PUSH_ALERT_CLASSES,
@@ -264,26 +266,89 @@ def test_a_weekend_stale_feed_sends_nothing_even_at_the_open_and_a_weekday_one_w
     ]
 
 
-def test_a_stale_feed_with_no_open_trade_and_a_short_clock_hold_send_nothing(
+def clock_hold(since: str) -> dict[str, object]:
+    return {
+        "stand_down": "clock_band",
+        "scope": "all",
+        "cause": "clock offset 700000000 ns",
+        "since_ns": at(since),
+    }
+
+
+def risk_stop(market: str) -> dict[str, object]:
+    return {
+        "stand_down": "risk_stop",
+        "scope": f"instrument:{market}",
+        "cause": "the daily loss limit is reached",
+        "since_ns": at("2026-11-04T11:58:00"),
+    }
+
+
+def test_a_risk_stop_and_failing_healing_wake_him_and_a_tradeless_feed_or_short_hold_do_not(
     tmp_path: Path, fake: Fake
 ) -> None:
-    quiet = View(
+    mixed = View(
         stand_downs=(
             {**STALE.stand_downs[0], "since_ns": at("2026-11-04T11:50:00")},
+            clock_hold("2026-11-04T11:56:00"),
+            risk_stop("fx.gbpusd"),
             {
-                "stand_down": "clock_band",
+                "stand_down": "repeated_fault",
                 "scope": "all",
-                "cause": "clock offset 700000000 ns",
-                "since_ns": at("2026-11-04T11:56:00"),
+                "cause": "the feed restarted 3 times in 10 minutes",
+                "since_ns": at("2026-11-04T11:59:00"),
             },
         ),
-        traded=frozenset({"fx.eurusd"}),
+        positions=(Held("dep-1", "fx.gbpusd"),),
+        accounts={"dep-1": "demo-1"},
+        traded=frozenset({"fx.eurusd", "fx.gbpusd"}),
     )
     sender = PushSender(
-        lambda: quiet, publisher_to(fake, tmp_path), forex_week, lambda: at("2026-11-04T12:00:00")
+        lambda: mixed, publisher_to(fake, tmp_path), forex_week, lambda: at("2026-11-04T12:00:00")
     )
     sender.pass_once()
+    title = "QMX node a4dqobyh: protection-escalation"
+    assert fake.tried == [
+        (
+            "POST",
+            "/qmx-c18-topic",
+            title,
+            "4",
+            "Risk stop with open trades on fx.gbpusd: the daily loss limit is reached.",
+        ),
+        (
+            "POST",
+            "/qmx-c18-topic",
+            title,
+            "4",
+            "Healing keeps failing and the node stood down: the feed restarted 3 times in "
+            "10 minutes.",
+        ),
+    ]
+
+
+def test_a_clock_hold_wakes_him_once_it_passes_five_minutes_while_every_market_is_shut(
+    tmp_path: Path, fake: Fake
+) -> None:
+    now = [at("2026-11-07T12:04:59")]
+    held = View(stand_downs=(clock_hold("2026-11-07T12:00:00"),), traded=frozenset({"fx.eurusd"}))
+    sender = PushSender(lambda: held, publisher_to(fake, tmp_path), no_calendar, lambda: now[0])
+
+    sender.pass_once()
     assert fake.tried == []
+
+    now[0] = at("2026-11-07T12:05:00")
+    sender.pass_once()
+    sender.pass_once()
+    assert fake.landed == [
+        (
+            "POST",
+            "/qmx-c18-topic",
+            "QMX node a4dqobyh: protection-escalation",
+            "4",
+            "The clock has held new entries for 5 minutes: clock offset 700000000 ns.",
+        )
+    ]
 
 
 EARLY = {
@@ -369,6 +434,111 @@ def test_a_failed_send_is_counted_and_retried_and_trading_and_the_kill_switch_ca
         node.runtime.stop()
 
 
+def test_a_calendar_that_raises_skips_and_names_its_market_and_the_other_pushes_still_go(
+    tmp_path: Path, fake: Fake, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def calendar(market: str, at_ns: int) -> bool:
+        if market == "metal.xauusd":
+            raise LookupError("no calendar for metal.xauusd")
+        return forex_week(market, at_ns)
+
+    view = View(
+        alarms=(EARLY,),
+        stand_downs=(
+            risk_stop("metal.xauusd"),
+            {**STALE.stand_downs[0], "since_ns": at("2026-11-04T11:50:00")},
+        ),
+        positions=(Held("dep-1", "metal.xauusd"), Held("dep-1", "fx.eurusd")),
+        accounts={"dep-1": "demo-1"},
+        traded=frozenset({"fx.eurusd", "metal.xauusd"}),
+    )
+    sender = PushSender(
+        lambda: view, publisher_to(fake, tmp_path), calendar, lambda: at("2026-11-04T12:00:00")
+    )
+    capsys.readouterr()
+
+    sender.pass_once()
+    sender.pass_once()
+
+    assert [(got[3], got[4]) for got in fake.landed] == [
+        (
+            "5",
+            "Protection escalation on metal.xauusd: the venue held no stop on qa4dqobyh-EARLY, "
+            "so the node closed it reduce-only.",
+        ),
+        (
+            "4",
+            "The feed is stale with open trades on fx.eurusd (instrument:fx.eurusd): "
+            "last quote 600 s ago.",
+        ),
+    ]
+    assert [json.loads(line) for line in capsys.readouterr().err.splitlines()] == [
+        {"event": "alarm_calendar_failed", "market_id": "metal.xauusd", "error": "LookupError"}
+    ]
+    assert (sender.sent, sender.waiting) == (2, [])
+
+
+def test_past_the_waiting_bound_the_oldest_failed_push_is_dropped_and_counted(
+    tmp_path: Path, fake: Fake, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake.mode = "refuses"
+    escalations = tuple({**EARLY, "position": f"qa4dqobyh-{n}"} for n in (1, 2, 3))
+    sender = PushSender(
+        lambda: View(alarms=escalations),
+        publisher_to(fake, tmp_path),
+        no_calendar,
+        lambda: 0,
+        waiting_max=2,
+    )
+    capsys.readouterr()
+
+    sender.pass_once()
+
+    assert [item.summary for item in sender.waiting] == [
+        "Protection escalation on metal.xauusd: the venue held no stop on qa4dqobyh-2, so the "
+        "node closed it reduce-only.",
+        "Protection escalation on metal.xauusd: the venue held no stop on qa4dqobyh-3, so the "
+        "node closed it reduce-only.",
+    ]
+    assert (sender.dropped, sender.failed, sender.sent, len(fake.tried)) == (1, 2, 0, 2)
+    assert json.loads(capsys.readouterr().err) == {
+        "event": "alarm_dropped",
+        "wake": "protection escalation",
+        "dropped": 1,
+    }
+
+
+def test_a_node_started_from_its_environment_pushes_an_escalation_and_pings_liveness(
+    tmp_path: Path, fake: Fake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "data").mkdir()
+    monkeypatch.setenv("QMX_VOLUME", str(tmp_path))
+    monkeypatch.setenv("QMX_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("NODE_KEYS", keys(fake))
+    node = from_environment()
+    try:
+        wait_for(lambda: ("GET", "/ping/c18-check", None, None, "") in fake.landed)
+        assert node.runtime is not None
+        node.runtime.alarms.append(EARLY)
+        node.runtime.wake()
+        wait_for(lambda: any(got[0] == "POST" for got in fake.landed), 30)
+        tag = node.context.standing().tag
+        assert [got for got in fake.landed if got[0] == "POST"] == [
+            (
+                "POST",
+                "/qmx-c18-topic",
+                f"QMX node {tag}: protection-escalation",
+                "5",
+                "Protection escalation on metal.xauusd: the venue held no stop on "
+                "qa4dqobyh-EARLY, so the node closed it reduce-only.",
+            )
+        ]
+    finally:
+        node.stop()
+        if node.journal is not None:
+            node.journal.close()
+
+
 def test_liveness_pings_reach_the_watcher_on_cadence_and_stop_with_the_node(
     tmp_path: Path, fake: Fake
 ) -> None:
@@ -421,6 +591,20 @@ def test_the_keys_document_turns_each_sender_on_and_a_bad_one_turns_them_off_uns
 
     plain = "http://198.51.100.7/qmx-plain-topic"
     assert made(keys(fake)) == (True, True)
+    on = attach(
+        Store(tmp_path / "node.sqlite"),
+        "a4dqobyh",
+        keys(fake),
+        open_at=never_open,
+        clock_ns=lambda: 0,
+        steady_ns=lambda: 0,
+    )
+    shown = repr(cast("PushSender", on.push).publisher) + repr(
+        cast("LivenessSender", on.liveness).heartbeat
+    )
+    assert "NtfyChannel(node_tag='a4dqobyh'" in shown
+    assert "HealthchecksSink(send=" in shown
+    assert fake.url("") not in shown
     assert made(json.dumps({"schema_version": "qmx.node.keys/1"})) == (False, False)
     assert made(None) == (False, False)
     capsys.readouterr()
