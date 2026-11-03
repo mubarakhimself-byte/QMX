@@ -114,3 +114,15 @@ Okay, this is a simple nudge. You don't have to respond. It's not about only oth
 ## M20, sent 2026-11-03T12:03:47Z UTC (mid-turn), verbatim
 
 Oh yeah, the agentic lens I think might also be interesting, because if you saw in the papers I served, yeah, there are so many papers touching agentic lasers, you know, alpha discovery harnesses and so on and so forth. Those can be interesting workflows to have in QMX, eh? Man, but just go crazy with this. Like, the response can be copied. I hope you know that. And you can bookmark all papers, the library, so that you don't forget. But yeah, that's that. Go crazy with this. Like, I'm not limiting you. Seriously, I'm watching because I have two monitors. I'm watching. You can start as many conversations as you want. You can ask, so on and so forth. Mm-hmm.
+
+---
+
+## M22, sent 2026-11-03 about 12:25 UTC, verbatim
+
+And I hope you remember that I requested for more than one chat session. So the other session you did alone, you know, it's like, think of this like a sub agent. If you give it so many things in one prompt, it will do them, but without any depth. Okay. So the prompt you sent the agent was good, but the problem is, I don't think it had depth. That's the issue. I don't know. Anyway, like, this chat session is interesting to watch. That's the thing. It's just that I haven't seen a new one, and you're using very old sessions, dude. Like, these papers are old, by the way. These sessions are old. The ones you're looking at are very old. That's all I'm going to say. Like, very old. It's not even funny. Okay, not that old. Just that in the agentic world, man, you know how fast agents have made the world move, yeah? And the depth thing is an issue. Because me, I think if you give this thing we are talking at from alpha axiv, like one topic alone, it will give you depth. Because it's using, I think, GPT 5.6 Terra in the backend or DeepSeek, one of the two.
+
+---
+
+## M23, sent 2026-11-03 about 12:27 UTC (mid-turn), verbatim
+
+Oh my God. And once again, I'm forgetting things. There are also MT5 articles we have on disk. I think those ones were handled by the research files. I think they were looked at earlier. I'm not certain, but they can also provide ideas.
