@@ -4,6 +4,8 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 ## RESUME HERE
 
+**Latest (3 Nov evening): Stage B complete and stopped at his stop line. Read items 41-43 first.**
+
 1. Grounding DONE 2026-11-01: G1-G5 in `grounding/` (G5 is the timeline), sims in `grounding/sims/`. Next: find the clean starting point with him, then design by scenarios.
 2. Grounding files land in `grounding/`:
    - G1 operator sessions ("Risk & sizing QML redesign", "Agent team for MT5 article analysis", plus the 10-05 and 10-13 sessions they carried)
@@ -252,6 +254,36 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - X7: 49 hybrids, 33 variables.
     - X1: 78 hybrids, 90 variables. Its biggest restructure proposal replaces the Book and BMS containers with a unit profile, cluster tags and one portfolio guard config; he must choose the vocabulary. With all additions loaded, the checker reports 5 cross-layer duplicate warnings (X1 against X0, X6 and X7); the funnel merges them.
     **Safety flag for him and the build session (from X7):** the cTrader MCP being shipped was not checked. If it is a separate server with order tools, it could bypass the operator-only guard (agents never touch money; only he deploys or flattens). The build session should confirm that the MCP's order tools sit behind the same guard, or are left out.
+
+43. **STAGE B COMPLETE: stopped here as he asked (3 Nov evening).** All eight layers are committed in `expansion/`, about 510 hybrids in all:
+    - X0 trading lens: 55;
+    - X1 template shape: 78;
+    - X2 sizing and accelerators: 62;
+    - X3 brakes, exits and drift: 72;
+    - X4 scenarios: 99 scenarios plus the harness;
+    - X5 edge verification: 48;
+    - X6 observability: 47, with UI requests for 16 screens;
+    - X7 agents' door: 49.
+    Ledger with all additions: 903 variables and 1,758 couplings. **The funnel's first job is to merge:** 7 duplicate ids (X4 against X0, X2 and X6), plus 5 alias warnings across X1, X7 and the others.
+    **Recurring themes for the funnel and for him:**
+    - money brakes at the unit's own percentile replace count brakes (X0, X3, X4);
+    - the applier with authority modes (X1);
+    - the floor-odds sizer, which survives at zero edge and relaxes with proven edge (X2);
+    - the random-brake control as the proof every brake must pass (X3, X4, X6, X7);
+    - one RiskState from the node read by everything (X1, X4, X6);
+    - the agents' door: read, propose or cut, never raise or touch money (X1, X7);
+    - replacing the Book and BMS with a profile, cluster tags and a portfolio guard (X1, X2).
+    **Biggest open rulings for him, collected from the layers' question sections:**
+    - may units step down and back up without his click;
+    - may the BMS breaker raise the kill switch;
+    - may agent isolation apply without his click;
+    - may a unit go live at level 1 before proof;
+    - the vocabulary (profile, cluster, portfolio against Book and BMS);
+    - how rare "almost never" touching the floor is;
+    - what happens when the floor is hit;
+    - night paging.
+    **Safety flag for the build session:** the cTrader MCP's order tools must sit behind the operator-only guard (see item 42).
+    **On resume** (item 41): Fable funnel judge, Opus reviewer, architecture versions, fold, plain-words explanation, slices.
 
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
