@@ -113,6 +113,12 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 21. **M26: the multi-instrument lens cuts across every layer** (portfolio, styles, structure, agents, techniques). He had to remind the lead; it belongs in every brief from here on. R4 and R5 re-steered. The alphaXiv MCP is now signed in and works. **R6 started** (Opus): reads the papers themselves through the MCP, top-down and multi-instrument, checks the R4 assistant's claims, and saves kept papers to his library folder `qmx-risk-sizing` → `research/R6-alphaxiv-papers/` (`T-NN-*.md`, `R6-synthesis.md`). The relaunched expansion and the mixer must carry the instrument-class lens in every layer.
 
+22. **M29: linking logic is too big for one agent.** Sources must be dissected into components, and components from different papers and articles linked into hybrids; some ideas come out as seeds, some as combinations of seeds. **The single "paper mixer" is replaced, and merged with the expansion, as two stages:**
+    - **Stage A, dissect** (about 4 Opus agents, split by source cluster): sizing and allocation; brakes, drift and exits; structure, regime, news and scenarios; agents, workflows and verification. They break every kept source in R1-R6 into components, written to one component catalogue (`linking/components/*.yaml`). Each component records: id, source, what it does, inputs, outputs, assumptions, instrument classes, evidence, QMX layer and ledger variables touched.
+    - **Stage B, expansion by linking**: X0 trading lens, then X1-X7, one agent per layer (Fable for X0, X1, X4 and X5). Each pulls components from the whole catalogue, links them into hybrids for its layer (seeds, pairs, triples, larger mixes), revises its stopped draft where one exists, and adds variables to the ledger.
+    - Then the Fable funnel judge as before.
+    - Trade-off: the deeper the linking, the later the build starts. Linking stays bounded by layer, and every hybrid must name the QMX need it serves.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
