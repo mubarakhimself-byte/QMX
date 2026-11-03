@@ -14,6 +14,7 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
+from qma.harness.demo_only import NotOffered, demo_account
 from qma.harness.tools import VetCache, vet_mcp_servers
 
 FAKE = Path(__file__).resolve().parents[4] / "tools/lanes/fake_ctrader_mcp.py"
@@ -139,6 +140,50 @@ def test_a_token_swapped_for_a_live_accounts_is_refused_at_the_next_launch(
 def test_a_row_with_no_venue_is_never_checked(fake_url: str) -> None:
     plain = {"url": fake_url, "credential_ref": "qmx/ctrader-mcp"}
     assert vet({"plain": plain}, LIVE) == ({}, {"plain": REMOTE_TOOLS})
+
+
+@pytest.mark.parametrize(
+    ("balance", "listed", "records", "note"),
+    [
+        ({"traderId": 7}, None, ["demo", "live"], "account 7 is recorded as demo and live"),
+        ({"traderId": 7, "isLive": True}, None, ["demo"], "cTrader marks account 7 as live"),
+        (
+            None,
+            {"accounts": [{"ctidTraderAccountId": 7, "isLive": True}]},
+            ["demo"],
+            "cTrader marks account 7 as live",
+        ),
+        (
+            {"traderId": 7},
+            [{"traderId": 7, "isLive": True}, {"traderId": 8, "isLive": False}],
+            ["demo"],
+            "cTrader marks account 7 as live",
+        ),
+    ],
+)
+def test_a_live_mark_from_the_records_or_from_ctrader_refuses(
+    balance: object, listed: object, records: list[str], note: str
+) -> None:
+    answers = {"get_balance": balance, "get_accounts_list": listed}
+
+    async def call(tool: str) -> object:
+        return answers[tool]
+
+    with pytest.raises(NotOffered) as refused:
+        asyncio.run(demo_account(call, frozenset(answers), lambda _: records))
+    assert str(refused.value) == f"{note}, and agents use demo accounts only"
+
+
+def test_a_demo_record_with_ctrader_marking_it_demo_is_offered() -> None:
+    answers = {
+        "get_balance": {"traderId": 7, "isLive": False},
+        "get_accounts_list": [{"traderId": 7, "isLive": False}, {"traderId": 8, "isLive": True}],
+    }
+
+    async def call(tool: str) -> object:
+        return answers[tool]
+
+    assert asyncio.run(demo_account(call, frozenset(answers), lambda _: ["demo", "demo"])) == "7"
 
 
 def test_a_venue_qmx_does_not_check_is_refused_before_any_server_starts() -> None:

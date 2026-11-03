@@ -37,17 +37,19 @@ async def demo_account(
 ) -> str:
     """The id of the account the session is bound to, read from `get_balance`, or from
     `get_accounts_list` when that lists one account. Raises NotOffered unless every account
-    record on main for that id says `world: demo`."""
+    record on main for that id says `world: demo`, and cTrader's own answers never mark it live."""
     if worlds is None:
         raise NotOffered(f"this host reads no account records, and {DEMO_ONLY}")
-    account = _account_id(await call("get_balance")) if "get_balance" in tools else None
+    balance = _rows([await call("get_balance")]) if "get_balance" in tools else []
     rows = _rows(await call("get_accounts_list")) if "get_accounts_list" in tools else []
+    account = _account_id(balance[0]) if balance else None
     if account is None and len(rows) == 1:
         account = _account_id(rows[0])
     if account is None:
         raise NotOffered(f"the server named no account it is bound to, and {DEMO_ONLY}")
-    if any(_account_id(row) == account and row.get("isLive") is True for row in rows):
-        raise NotOffered(f"cTrader lists account {account} as live, and {DEMO_ONLY}")
+    listed = [row for row in rows if _account_id(row) == account]
+    if any(row.get("isLive") is True for row in [*balance, *listed]):
+        raise NotOffered(f"cTrader marks account {account} as live, and {DEMO_ONLY}")
     found = sorted(set(await asyncio.to_thread(worlds, account)))
     if not found:
         raise NotOffered(
