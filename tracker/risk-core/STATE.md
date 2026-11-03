@@ -182,6 +182,11 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - This session's part: the template exposes read access to risk state and a proposal door for agents (X7), so the department plugs in later without touching the money path.
     - Note: the build session (QML/QMB/node) has added MCPs for cTrader and possibly TradingView.
 
+31. **M36: design must adapt now so nothing needs rebuilding later.**
+    - The cTrader MCP is being shipped by the build session. A crypto MCP (Hyperliquid) was missed. It is a build-session item, not this session's; the lead tells him and does not touch the build session's queue.
+    - The QMX **Lab** (designed in `LAB/LLD.md`, unbuilt per G8 §6.2: a seven-slot pod with allocator, caps and guards) and **MCPs** must be able to use the risk template without rework. Simulating it, comparing variants, agents reading risk state and proposing through MCP tools: all of that stays out of the order path.
+    - Stage B briefs must carry this (X1 template shape, X7 agents). The lead may add his own ideas there.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
