@@ -95,3 +95,22 @@ Oh, yeah. Anyway, I think some things you'll figure out on your own, because as 
 ## M15, sent 2026-11-03T11:38:49.259Z UTC, verbatim
 
 Oh yeah, as I was reading through your earlier response, I discovered you had mentioned about the simulation counting the full stops as full stops. Then when you talked about first invalidation, you got that. My point right now is about the dynamic SLNTP system. I don't know if it was talked about, because that right there, I don't think it's standard or standardized. But look it up in the old system or in the new one, because the way the old system worked is like exit methodology is like different. But I'm not technical, so I don't know if you're trying to understand what I'm saying. Man, let me first go take a rest, but just that's a hint, okay? Because the dynamic SLNTP system was like a replacement, sorry, that was replaced by the first invalidation specifically for scalpers. But then for intraday, you now look at that dynamic SLNTP, because I think it was just moving the stop loss to break even, depending on how much you are winning. I don't know, I don't fully recall it, but something like that. Let me leave you seriously for now. And I told you browser base is active. Maybe I'm not certain how, but for browser, the problem is I don't trust websites like the Claude website. Yeah, I don't trust it that much. So I need, that's why we had Firecrawl. But Firecrawl is also browser base is up now. That's the thing. I don't know if it will work for you though. Yeah, I think we also have Eag-Lite. Let me see. Yeah, we have Eagle-Lite, I think. Never mind. This is just wasting my time. First have this. You already know where I'm going with this. For the tools, leave them. We shall sort ourselves out slowly, but use the ones at your disposal. Okay, just that I don't trust that simple website you have. It doesn't seem to bring proper information. I prefer either fire crawl, a third party searching thing, or you know, the normal browser preview with a pan and stuff. Like, you know that browser I'm talking about, the one, your normal browser. Okay, looking at it like a human if you need to look up stuff. The command thing doesn't work that well.
+
+---
+
+## M18, sent 2026-11-03T11:59:41Z UTC, verbatim
+
+Oh, by the way, you can also try maybe picking a few ideas from these. I'm sorry I'm backtracking you. I'm really sorry, but yeah, I forgot.
+[[https://www.alphaxiv.org/]] You know, the cool thing would be using that in my browser, then asking the agent they have for cool ideas, because there are some papers I have saved, there are some I have in conversations. There are so many interesting ideas when you look at multiple sectors, not just finance, that could help us here. You'll see it, but this website is interesting, okay? But this one, I think you might use my browser because you don't have the credentials, but you're already in bypass permissions mode. I don't know anyway, I don't know, but I'm sorry for backtracking because this is messed up.
+
+---
+
+## M19, sent 2026-11-03T12:01:11Z UTC (mid-turn), verbatim
+
+Okay, this is a simple nudge. You don't have to respond. It's not about only other fields, but also this very field. I mean, this thing has so many papers. So there are so many papers in agents. There are so many papers in finance, market analysis, and so on and so forth. And even portfolio, by the way, because most of what you're doing is portfolio and risk management, which is trading. But that's that.
+
+---
+
+## M20, sent 2026-11-03T12:03:47Z UTC (mid-turn), verbatim
+
+Oh yeah, the agentic lens I think might also be interesting, because if you saw in the papers I served, yeah, there are so many papers touching agentic lasers, you know, alpha discovery harnesses and so on and so forth. Those can be interesting workflows to have in QMX, eh? Man, but just go crazy with this. Like, the response can be copied. I hope you know that. And you can bookmark all papers, the library, so that you don't forget. But yeah, that's that. Go crazy with this. Like, I'm not limiting you. Seriously, I'm watching because I have two monitors. I'm watching. You can start as many conversations as you want. You can ask, so on and so forth. Mm-hmm.

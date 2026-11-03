@@ -79,6 +79,8 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
       - X7 where agents come in (Opus)
     - Ledger v0 still running in parallel.
 
+17. **M18-M20: alphaXiv.** He wants ideas from alphaXiv (his signed-in account in his Chrome): his saved library (36 papers: alpha mining and alpha decay, multi-agent portfolio construction, trading agents, agent memory and skills), his assistant conversations ("AI quant trading design", "Algorithmic trading papers", "Agentic Harness Context and Memory"), and new questions to their assistant across finance, portfolio, risk and other fields, plus the agentic lens (alpha-discovery harnesses as QMX workflows). He authorised "go crazy": many conversations, copying answers, bookmarking all papers to his library. The lead asked the first question (risk and sizing papers across fields) and handed the rest to R4 (Opus, in Chrome) → `research/R4-alphaxiv/` (verbatim conversations plus `R4-alphaxiv-synthesis.md` mapping papers to layers X1-X7). Its output feeds the funnel judge alongside the expansion files. Never: upgrade, publish, delete, settings.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
