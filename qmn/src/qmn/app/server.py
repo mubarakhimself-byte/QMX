@@ -782,10 +782,11 @@ def from_environment() -> Node:
     alarm senders follow the keys document in ``NODE_KEYS`` (C-18); with no calendar reader yet,
     every market reads shut to them.
 
-    Only a node at the road's ``live`` stage gets its cTrader door: its trading app from
-    ``NODE_KEYS``, its grant from this machine's store, and each account he bound. Under
-    ``QMX_STAGE=shadow`` (and the tests and sandbox stages) the node reads no grant and binds
-    nothing, so a proof run on a copied volume never opens a venue session."""
+    Only a node whose ``QMX_STAGE`` is the road's ``live`` stage gets its cTrader door: its
+    trading app from ``NODE_KEYS``, its grant from this machine's store, and each account he
+    bound. Under ``QMX_STAGE=shadow`` (and the tests and sandbox stages), or with no stage at
+    all, the node reads no grant and binds nothing, so a proof run on a copied volume never
+    opens a venue session. The supervisor always names the stage."""
     data = Path(os.environ["QMX_DATA_DIR"])
     volume = Path(os.environ.get("QMX_VOLUME") or data.parent)
     machine = "local"
@@ -799,7 +800,7 @@ def from_environment() -> Node:
     except (OSError, ValueError):
         pass
     door: DoorFactory | None = None
-    if os.environ.get("QMX_STAGE", "live") == LIVE_STAGE:
+    if os.environ.get("QMX_STAGE") == LIVE_STAGE:
         initial = os.environ.get("NODE_KEYS")
         door = partial(
             CTraderDoor.compose,

@@ -1076,8 +1076,9 @@ def environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pat
             os.environ[name] = held
 
 
-def test_under_the_shadow_stage_the_node_reads_no_grant_and_binds_nothing(
-    environment: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("stage", ["shadow", None])
+def test_under_the_shadow_stage_or_none_the_node_reads_no_grant_and_binds_nothing(
+    environment: Path, monkeypatch: pytest.MonkeyPatch, stage: str | None
 ) -> None:
     read: list[str] = []
 
@@ -1086,7 +1087,10 @@ def test_under_the_shadow_stage_the_node_reads_no_grant_and_binds_nothing(
         return Memory()
 
     monkeypatch.setattr(server, "grant_store_for", no_store)
-    os.environ["QMX_STAGE"] = "shadow"
+    if stage is None:
+        os.environ.pop("QMX_STAGE", None)
+    else:
+        os.environ["QMX_STAGE"] = stage
     node = server.from_environment()
     try:
         answers = [
