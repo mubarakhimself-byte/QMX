@@ -76,7 +76,7 @@ from qmf.venue.proto import SPOTWARE_PROTO_PACKAGE, CompiledProto, compile_descr
 from qml.protocol.unit import OHLC, QuoteBar
 from qml.unit.model import Side
 
-from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
+from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition, tags_of
 from qmn.app.feed_keeper import Bar, Dropped, FeedEvent, Heartbeat, Quote
 from qmn.app.runtime import Sent, Ticket, VenueClose
 from qmn.venue.conformance import protective_stop_forms_from_verification, submit_not_ready_refusal
@@ -125,6 +125,9 @@ LOOKBACK_NS: Final = 86_400_000_000_000
 """`[node] ctrader_reconcile_lookback_s`: the declared reconcile lookback the client binds."""
 _ERRORS: Final = frozenset({"ProtoOAErrorRes", "ProtoErrorRes"})
 _TRADES: Final = frozenset({"ProtoOAExecutionEvent", "ProtoOAOrderErrorEvent"})
+_FILLS: Final = frozenset({"ORDER_FILLED", "ORDER_PARTIAL_FILL"})
+"""The execution types that open an entry's position: a market order cTrader filled in part
+opens it at the deal's filled volume, and the rest is never chased."""
 
 
 def _refused(code: str, reason: str, *, retry: bool = True) -> TypedRefusal:
@@ -728,6 +731,10 @@ class CTraderVenue:
             None,
         )
         if opening is None:
+            if tags_of(label, None):
+                # The reconcile may find a node-labelled position as an unanswered entry's by
+                # its label, so a close by its cTrader name must reach it.
+                self._open[str(position_id)] = seen
             return Ok(seen.read_back(str(position_id)))
         self._open[opening] = seen
         self._unanswered.pop(opening, None)
@@ -1074,11 +1081,7 @@ class CTraderVenue:
         venue fired, or a close it carried out, closes the position it names."""
         name = str(_map(body.get("order")).get("clientOrderId") or "")
         late = self._unanswered.get(name)
-        if (
-            late is not None
-            and body.get("executionType") == "ORDER_FILLED"
-            and self.client is not None
-        ):
+        if late is not None and body.get("executionType") in _FILLS and self.client is not None:
             del self._unanswered[name]
             self._filled(body, name, late, self.client)
             return
@@ -1190,7 +1193,7 @@ class CTraderVenue:
             if kind == "ORDER_ACCEPTED":
                 continue
             self._unanswered.pop(name, None)
-            if frame.name == "ProtoOAOrderErrorEvent" or kind != "ORDER_FILLED":
+            if frame.name == "ProtoOAOrderErrorEvent" or kind not in _FILLS:
                 self._orders.append(VenueOrder(name, tags.label, ticket.market_id, OrderState.GONE))
                 code = (
                     _error_word(frame.body)
@@ -1198,16 +1201,17 @@ class CTraderVenue:
                     else str(kind).lower()
                 )
                 return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, code))
-            price = self._filled(frame.body, name, entry, client)
-            if price is None:
+            opened = self._filled(frame.body, name, entry, client)
+            if opened is None:
                 return Ok(Sent(SubmissionOutcome.UNKNOWN))
-            return Ok(Sent(SubmissionOutcome.ACCEPTED_BY_VENUE, price))
+            return Ok(Sent(SubmissionOutcome.ACCEPTED_BY_VENUE, opened.entry, quantity=opened.lots))
 
     def _filled(
         self, body: Mapping[str, object], name: str, entry: _Entry, client: LiveCTraderClient
-    ) -> Decimal | None:
-        """Record an entry's fill and open its position; its fill price, or None when the live
-        client refused to record the frame (the reconcile then reads the position)."""
+    ) -> _Open | None:
+        """Record an entry's fill and open its position at the volume the deal filled, which a
+        partial fill leaves short of the order's; None when the live client refused to record
+        the frame (the reconcile then reads the position)."""
         symbol = self.symbols[entry.market_id]
         deal = _map(body.get("deal"))
         position = _map(body.get("position"))
@@ -1227,20 +1231,22 @@ class CTraderVenue:
             return None
         fill = _map(recorded.value.get("fill_price"))
         price = Decimal(cast("int", fill["value"])).scaleb(-cast("int", fill["scale"]))
-        self._open[name] = _Open(
+        volume = cast("int", _int(deal.get("filledVolume")))
+        opened = _Open(
             _int(position.get("positionId")) or 0,
             entry.market_id,
             entry.side,
-            entry.volume,
-            entry.lots,
+            volume,
+            Decimal(volume) / Decimal(symbol.lot_size),
             price,
             self._execution_price(position.get("stopLoss"), entry.market_id),
             entry.label,
         )
+        self._open[name] = opened
         self._orders.append(
             VenueOrder(name, entry.label, entry.market_id, OrderState.FILLED, name, price)
         )
-        return price
+        return opened
 
     def _close(
         self, ticket: Ticket, name: str, held: _Open, api: OpenApi, client: LiveCTraderClient

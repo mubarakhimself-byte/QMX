@@ -113,7 +113,7 @@ from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
 from qmn.app.feed_keeper import Bar, FeedKeeper
 from qmn.app.healing import Healer, StuckWatch
 from qmn.app.operations import Answer, Context, Target, refused
-from qmn.app.reconciler import Ours, Reconciler
+from qmn.app.reconciler import Found, Ours, Reconciler
 from qmn.app.stand_down import (
     REPEATED_FAULT_RESTARTS,
     REPEATED_FAULT_WINDOW_NS,
@@ -541,6 +541,9 @@ class Sent:
     outcome: SubmissionOutcome
     price: Decimal | None = None
     code: str | None = None
+    quantity: Decimal | None = None
+    """On an accepted entry, the quantity the venue filled, which an IOC order may leave short
+    of the ticket's. None when the binding reads only the whole ticket filled."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -606,6 +609,12 @@ class ConformanceAccount:
     starting_equity: Decimal
     holds_stops: bool = True
     lose_answers: int = 0
+    partial_fills: list[Decimal] = field(default_factory=list[Decimal])
+    """The quantity each coming entry fills, first entry first; an entry past the list fills
+    whole. The rest of a partly filled entry is never filled."""
+    lists_fills: bool = True
+    """False: the read-back lists open orders only, as cTrader's reconcile does, so a filled
+    entry shows only as its labelled position."""
     received: list[Ticket] = field(default_factory=list[Ticket])
     _orders: list[VenueOrder] = field(default_factory=list[VenueOrder])
     _positions: dict[str, _Held] = field(default_factory=dict[str, _Held])
@@ -676,16 +685,15 @@ class ConformanceAccount:
                 gap = Decimal(distance.value).scaleb(-distance.scale)
                 stop = price - gap if long else price + gap
             name, label = ticket.tags.client_order_id, ticket.tags.label
-            self._positions[name] = _Held(
-                ticket.market_id, ticket.side, ticket.quantity, price, stop, label
-            )
+            filled = self.partial_fills.pop(0) if self.partial_fills else ticket.quantity
+            self._positions[name] = _Held(ticket.market_id, ticket.side, filled, price, stop, label)
             self._orders.append(
                 VenueOrder(name, label, ticket.market_id, OrderState.FILLED, name, price)
             )
             if self.lose_answers > 0:
                 self.lose_answers -= 1
                 return Ok(Sent(SubmissionOutcome.UNKNOWN))
-            return Ok(Sent(result.outcome, price))
+            return Ok(Sent(result.outcome, price, quantity=filled))
         position = ticket.position
         if position is None or position not in self._positions:
             return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, "no-such-position"))
@@ -726,7 +734,8 @@ class ConformanceAccount:
             )
             for name, held in self._positions.items()
         )
-        return Ok(ReadBack(tuple(self._orders), positions))
+        orders = (o for o in self._orders if self.lists_fills or o.state is OrderState.OPEN)
+        return Ok(ReadBack(tuple(orders), positions))
 
     def opened_elsewhere(self, order: VenueOrder, position: VenuePosition | None = None) -> None:
         """An order, and the position it opened, that reached the account from somewhere other
@@ -764,6 +773,9 @@ class Venue:
 @dataclass(frozen=True, slots=True)
 class Placed:
     price: Decimal
+    partial: Decimal | None = None
+    """On an entry the venue filled only part of, the quantity it filled, which the unit holds
+    and every exit, stop and kill acts on. None when the whole order filled."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -930,9 +942,12 @@ class OrderPath:
         protection = cast("Mapping[str, object]", wire["protection"])
         stop = Decimal(str(protection["stop"]))
         quote = self.venue.feed.quote(market)
-        reference = (
-            (quote.ask if side is Side.LONG else quote.bid) if quote is not None else None
-        ) or stop
+        reference = None if quote is None else quote.ask if side is Side.LONG else quote.bid
+        if reference is None:
+            return Blocked(
+                "no quote from the venue since its feed connected, so the stop distance"
+                " cannot be measured yet"
+            )
         distance = reference - stop if side is Side.LONG else stop - reference
         if distance <= 0:
             return Blocked("the stop is not on the loss side of the venue's price")
@@ -1017,9 +1032,14 @@ class OrderPath:
     ) -> Placed | Blocked:
         match sent.outcome:
             case SubmissionOutcome.ACCEPTED_BY_VENUE if sent.price is not None:
-                self._note(client_order_id, "filled", {"step": "filled", "price": str(sent.price)})
+                filled = ticket.quantity if sent.quantity is None else sent.quantity
+                self._note(
+                    client_order_id,
+                    "filled",
+                    {"step": "filled", "price": str(sent.price), "quantity": str(filled)},
+                )
                 if self._protected(client_order_id, ticket, distance):
-                    return Placed(sent.price)
+                    return Placed(sent.price, None if filled == ticket.quantity else filled)
                 return Unprotected(
                     "the venue cannot hold this order's stop, so the node closes it", sent.price
                 )
@@ -1238,7 +1258,8 @@ class _Journal:
             case Fill():
                 if record.kind is FillKind.ENTRY:
                     named = self._unit.names[record.decision_row_id]
-                    self._unit.venue_ids[record.position_id] = named
+                    at_venue = self._unit.at_venue.get(named, named)
+                    self._unit.venue_ids[record.position_id] = at_venue
                 record = replace(record, position_id=self._unit.venue_name(record.position_id))
             case UnitTrade():
                 record = replace(record, trade_id=self._unit.venue_name(record.trade_id))
@@ -1295,12 +1316,16 @@ class NodeUnit:
         self.warming = True
         self.venue_ids: dict[str, str] = {}
         self.names: dict[str, str] = {}
+        self.at_venue: dict[str, str] = {}
+        """Each entry the reconcile found under another venue name than its client order id,
+        such as a cTrader position id, with that name, which its closes and stop reads use."""
         self.placed: dict[str, tuple[str, Side, Decimal]] = {}
         """Each entry the venue filled, by client order id: market, side and fill price, its
         stop held or not."""
         self._orders: dict[str, Placed | Blocked] = {}
-        self._unknown: dict[str, tuple[str, str, Side]] = {}
-        """Each entry whose outcome is unknown, by client order id: its intent, market, side."""
+        self._unknown: dict[str, tuple[str, str, Side, Decimal]] = {}
+        """Each entry whose outcome is unknown, by client order id: its intent, market, side and
+        the quantity sent."""
         self._done: set[str] = set()
         self._execution = _Execution(self)
         self._port = _Journal(self, journal)
@@ -1467,7 +1492,7 @@ class NodeUnit:
             self._done.add(intent.intent_id)
             return Ok(True)
         self._execution.price = placed.price
-        done = self.handled.execute_resting(intent, observation, frontier)
+        done = self.handled.execute_resting(intent, observation, frontier, filled=placed.partial)
         self._execution.price = None
         if not is_refusal(done):
             self._done.add(intent.intent_id)
@@ -1513,31 +1538,38 @@ class NodeUnit:
             if isinstance(placed, Placed | Unprotected):
                 self.placed[named] = (market, Side(str(wire["direction"])), placed.price)
             if isinstance(placed, Unknown):
-                self._unknown[named] = (intent.intent_id, market, Side(str(wire["direction"])))
+                size = Decimal(sized.value.value).scaleb(-sized.value.scale)
+                side = Side(str(wire["direction"]))
+                self._unknown[named] = (intent.intent_id, market, side, size)
             return placed
         return self._exit(intent.stream_id, wire)
 
-    def resolve(self, client_order_id: str, price: Decimal | None, *, protected: bool) -> bool:
+    def resolve(self, client_order_id: str, found: Found | None, *, protected: bool) -> bool:
         """Settle an entry whose outcome was unknown, from what the reconciler read at the
-        venue: filled at ``price``, so the next closed bar books the fill, or never taken. A
-        fill whose stop the venue does not hold is closed by the node, as any unprotected one."""
+        venue: filled into ``found``'s position, which the unit holds under the venue's name and
+        at the venue's quantity from the next closed bar, or never taken. A fill whose stop the
+        venue does not hold is closed by the node, as any unprotected one."""
         pending = self._unknown.pop(client_order_id, None)
         if pending is None:
             return False
-        intent_id, market, side = pending
+        intent_id, market, side, sent = pending
         self.orders.unknown.pop(client_order_id, None)
-        if price is None:
+        if found is None:
             self._orders[intent_id] = Blocked(
                 "venue answer unknown, and the venue never took the order: not sent again"
             )
             return True
-        self.placed[client_order_id] = (market, side, price)
+        if found.position != client_order_id:
+            self.at_venue[client_order_id] = found.position
+        self.placed[found.position] = (market, side, found.price)
         if protected:
-            self._orders[intent_id] = Placed(price)
+            filled = found.quantity
+            partial = None if filled is None or filled == sent else filled
+            self._orders[intent_id] = Placed(found.price, partial)
         else:
-            self.orders.unprotected.add(client_order_id)
+            self.orders.unprotected.add(found.position)
             self._orders[intent_id] = Unprotected(
-                "the venue does not hold this order's stop", price
+                "the venue does not hold this order's stop", found.price
             )
         return True
 

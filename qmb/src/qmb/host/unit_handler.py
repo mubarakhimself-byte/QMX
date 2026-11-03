@@ -10,9 +10,9 @@ last bar are booked (``scheduled_position_event``); a resting entry or exit fill
 new bar (``execute_resting``); the bar becomes readable and a held position's stop, target or
 liquidation level is checked against it (``update_closed_data``); then the unit steps once for
 the slice's instant and its intents rest for the next bar (``mint_intents``). A fill's quantity
-is the sizer receipt's rounded down to the market's lot step; below the minimum lot the entry is
-skipped with its reason. The handler closes only positions this compiled fingerprint opened. An
-exit acts by its kind: ``close_full`` closes the position, ``close_partial`` closes its
+is the sizer receipt's rounded down to the market's lot step, or what the node's venue filled of
+it; below the minimum lot the entry is skipped with its reason. The handler closes only
+positions this compiled fingerprint opened. An exit acts by its kind: ``close_full`` closes the position, ``close_partial`` closes its
 lot-rounded quantity and keeps the rest held, and ``amend_protection`` moves the held stop and
 target, tightening only.
 
@@ -402,14 +402,21 @@ class UnitSliceHandler:
         self._journal.append(event)
 
     def execute_resting(
-        self, intent: RestingIntent, observation: SliceObservation | None, frontier: Instant
+        self,
+        intent: RestingIntent,
+        observation: SliceObservation | None,
+        frontier: Instant,
+        *,
+        filled: Decimal | None = None,
     ) -> Result[bool]:
+        """Fill a resting intent on the bar. ``filled`` is the quantity a venue filled of an
+        entry it filled only in part, which the position then holds; QMB's replay fills whole."""
         if observation is None or not observation.closed:
             return Ok(False)
         bar = self._bars[intent.stream_id][observation.instant.value_ns]
         wire = cast("Mapping[str, object]", intent.order)
         if wire.get("intent_family") == "entry":
-            self._fill_entry(intent.stream_id, wire, bar, frontier)
+            self._fill_entry(intent.stream_id, wire, bar, frontier, filled)
         else:
             exited = self._fill_exit(intent.stream_id, wire, bar, frontier)
             if is_refusal(exited):
@@ -488,7 +495,12 @@ class UnitSliceHandler:
         )
 
     def _fill_entry(
-        self, market: str, wire: Mapping[str, object], bar: QuoteBar, frontier: Instant
+        self,
+        market: str,
+        wire: Mapping[str, object],
+        bar: QuoteBar,
+        frontier: Instant,
+        filled: Decimal | None,
     ) -> None:
         row_id = cast("str", wire["decision_row_id"])
         stamps = self._entry_stamps.pop(row_id, {})
@@ -502,7 +514,7 @@ class UnitSliceHandler:
             reason = str(sized.context.get("reason"))
             self._journal.append(Skip(frontier, market, row_id, reason, Decimal(1)))
             return
-        quantity = _decimal(sized.value.value, sized.value.scale)
+        quantity = _decimal(sized.value.value, sized.value.scale) if filled is None else filled
         residue_r = ((receipt - quantity) / receipt).quantize(_R_PLACES, rounding=ROUND_HALF_EVEN)
         side = Side(cast("str", wire["direction"]))
         protection = cast("Mapping[str, object]", wire["protection"])
