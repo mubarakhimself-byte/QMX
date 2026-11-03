@@ -1375,6 +1375,52 @@ def test_a_unit_review_with_a_number_no_step_printed_fails_and_lands_no_note(hom
     assert [t for t, _ in landed(home) if t == "note"] == []
 
 
+DM = PACK / "dm-demo-monitor"
+FILL_NOTE: dict[str, Any] = {
+    "title": "Demo fills on 2025-01-02",
+    "text": "demo-1 had 3 fills on fx.eurusd, which left 0.04R of sizing residue. Its 1 trade "
+    "made 1.5R and its stop was gapped through.",
+    "receipts": ["read"],
+}
+
+
+def test_the_demo_monitor_counts_fills_and_residue_and_reads_lot_rounding_as_no_partial_fill(
+    home: Path,
+) -> None:
+    """A fill's `receipt_quantity` is the sizer's ask and its `quantity` that ask rounded to lots,
+    so the gap between them is `residue_r`, never a partial fill."""
+    demo = {"world": "demo", "unit_id": "demo-1"}
+    journal(home, "unit", "demo-1", "fill", [
+        (480, unit_row("fill", 1, "fx.eurusd", {"kind": "entry", "quantity": "1.0",
+                                               "receipt_quantity": "1.00", "residue_r": "0"},
+                       **demo)),
+        (600, unit_row("fill", 2, "fx.eurusd", {"kind": "exit", "quantity": "1.0",
+                                               "residue_r": "0"}, **demo)),
+        (720, unit_row("fill", 3, "fx.eurusd", {"kind": "entry", "quantity": "0.48",
+                                               "receipt_quantity": "0.50", "residue_r": "0.04"},
+                       **demo)),
+    ])  # fmt: skip
+    journal(home, "unit", "demo-1", "trade", [
+        (600, unit_row("trade", 1, "fx.eurusd", {"r": "1.5", "exit_kind": "stop",
+                                                "gap_through_stop": True}, **demo)),
+    ])  # fmt: skip
+
+    report, printed = slow_run(
+        home, DM, {"day": "2025-01-02"}, {"You write QMX's fill-quality note": FILL_NOTE}
+    )
+
+    assert report.status == "passed", report.reason
+    counted = [{"unit": "demo-1", "markets": [{
+        "market": "fx.eurusd", "fills": 3, "residue_r": "0.04", "trades": 1, "r": "1.5",
+        "gaps_through_stop": 1, "exits": {"stop": 1}, "with_market_minute": 0,
+    }]}]  # fmt: skip
+    assert printed["read"]["findings"]["units"] == counted
+    [fill_quality] = [m for t, m in landed(home) if t == "fill-quality"]
+    assert fill_quality["units"] == counted
+    [note] = [m for t, m in landed(home) if t == "note"]
+    assert (note["text"], note["proposal"]) == (FILL_NOTE["text"], True)
+
+
 def test_every_slow_lane_template_reads_and_lands_through_one_copy_of_its_shared_scripts() -> None:
     doors = {
         (PACK / f / "scripts" / "door.py").read_bytes() for f in (*SLOW_LANE, DB.name, RV.name)
