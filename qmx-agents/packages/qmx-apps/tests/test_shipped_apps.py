@@ -592,6 +592,7 @@ EXAMPLES: Mapping[str, Shipped] = {
             Ask("sign_in_begin", {"venue": "ctrader"}, refused("not_set_up")),
             Ask("sign_in_code", {"code": "fixture-code"}, refused("not_set_up")),
             Ask("self_test", {"account": "demo-1"}, refused("not_set_up")),
+            Ask("records", {"account": "demo-1", "symbols": ["EURUSD"]}, refused("not_set_up")),
             Ask("rotate_keys", {}, OK),
         )
     ),
