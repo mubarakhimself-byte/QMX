@@ -503,6 +503,22 @@ class _Open:
     label: str | None
     closing: bool = False
 
+    def read_back(self, name: str) -> VenuePosition:
+        return VenuePosition(
+            name, self.label, self.market_id, self.side.value, self.lots, self.entry, self.stop
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _Entry:
+    """An entry sent whose fill or refusal has not been read yet."""
+
+    market_id: str
+    side: Side
+    volume: int
+    lots: Decimal
+    label: str
+
 
 @dataclass
 class _Building:
@@ -574,6 +590,8 @@ class CTraderVenue:
         self._forms: Mapping[str, str] = {}
         self._lock = threading.RLock()
         self._open: dict[str, _Open] = {}
+        """Each open position by its entry's client order id, the name the runtime closes."""
+        self._unanswered: dict[str, _Entry] = {}
         self._closed: dict[str, VenueClose] = {}
         self._orders: list[VenueOrder] = []
         self._events: list[FeedEvent] = []
@@ -642,35 +660,82 @@ class CTraderVenue:
         return self.balance
 
     def read_back(self) -> Result[ReadBack]:
-        """The account's open positions and orders as cTrader reconciles them, named by the
-        entries this binding saw fill."""
+        """The account's open positions and orders as cTrader reconciles them, each position
+        named by its entry's client order id. Fills that already arrived are read first."""
         with self._lock:
-            if self.api is None:
+            if self.api is None or not self._pump():
                 return submit_not_ready_refusal()
-            answered = self.api.ask("ProtoOAReconcileReq", {"ctidTraderAccountId": self.ctid})
+            api = self.api
+            answered = api.ask("ProtoOAReconcileReq", {"ctidTraderAccountId": self.ctid})
             if is_refusal(answered):
                 return answered
-            by_id = {held.position_id: name for name, held in self._open.items()}
-            names = {symbol.symbol_id: market for market, symbol in self.symbols.items()}
             positions: list[VenuePosition] = []
             for row in _rows(answered.value.body.get("position")):
-                position_id = _int(row.get("positionId")) or 0
-                trade = _map(row.get("tradeData"))
-                market = names.get(_int(trade.get("symbolId")) or 0, "")
-                name = by_id.get(position_id, str(position_id))
-                held = self._open.get(name)
-                positions.append(
-                    VenuePosition(
-                        name,
-                        str(trade.get("label") or "") or None,
-                        market,
-                        "long" if trade.get("tradeSide") == "BUY" else "short",
-                        held.lots if held is not None else Decimal(_int(trade.get("volume")) or 0),
-                        held.entry if held is not None else Decimal(0),
-                        None if held is None else held.stop,
-                    )
-                )
+                read = self._reconciled(api, row)
+                if is_refusal(read):
+                    return read
+                positions.append(read.value)
             return Ok(ReadBack(tuple(self._orders), tuple(positions)))
+
+    def _reconciled(self, api: OpenApi, row: Mapping[str, object]) -> Result[VenuePosition]:
+        """One reconciled position. One this binding does not hold, because an entry's answer
+        was lost or the node restarted, is adopted by its opening order's client order id, so
+        the reconcile reads it as the node's and a close reaches it."""
+        position_id = _int(row.get("positionId")) or 0
+        name = next((n for n, h in self._open.items() if h.position_id == position_id), None)
+        if name is not None:
+            return Ok(self._open[name].read_back(name))
+        trade = _map(row.get("tradeData"))
+        market = next(
+            (m for m, s in self.symbols.items() if s.symbol_id == _int(trade.get("symbolId"))),
+            None,
+        )
+        volume = _int(trade.get("volume"))
+        side = Side.LONG if trade.get("tradeSide") == "BUY" else Side.SHORT
+        label = str(trade.get("label") or "") or None
+        if market is None or volume is None:
+            # A market this binding does not trade: its lots and prices cannot be read here.
+            return Ok(
+                VenuePosition(
+                    str(position_id), label, "", side.value, Decimal(volume or 0), Decimal(0), None
+                )
+            )
+        entry = self._execution_price(row.get("price"), market)
+        if entry is None:
+            return _refused("position_unreadable", f"position {position_id} carries no price")
+        seen = _Open(
+            position_id,
+            market,
+            side,
+            volume,
+            Decimal(volume) / Decimal(self.symbols[market].lot_size),
+            entry,
+            self._execution_price(row.get("stopLoss"), market),
+            label,
+        )
+        listed = api.ask(
+            "ProtoOAOrderListByPositionIdReq",
+            {"ctidTraderAccountId": self.ctid, "positionId": position_id},
+        )
+        if is_refusal(listed):
+            return listed
+        opening = next(
+            (
+                str(order["clientOrderId"])
+                for order in _rows(listed.value.body.get("order"))
+                if order.get("clientOrderId") and order.get("closingOrder") is not True
+            ),
+            None,
+        )
+        if opening is None:
+            return Ok(seen.read_back(str(position_id)))
+        self._open[opening] = seen
+        self._unanswered.pop(opening, None)
+        if all(order.client_order_id != opening for order in self._orders):
+            self._orders.append(
+                VenueOrder(opening, label, market, OrderState.FILLED, opening, entry)
+            )
+        return Ok(seen.read_back(opening))
 
     # --- the feed source the feed keeper drives -----------------------------------------
 
@@ -1005,7 +1070,18 @@ class CTraderVenue:
             building.ask.append(ask)
 
     def _execution(self, body: Mapping[str, object]) -> None:
-        """A stop the venue fired, or a close it carried out, closes the position it names."""
+        """A fill of an entry whose answer came after its wait opens its position. A stop the
+        venue fired, or a close it carried out, closes the position it names."""
+        name = str(_map(body.get("order")).get("clientOrderId") or "")
+        late = self._unanswered.get(name)
+        if (
+            late is not None
+            and body.get("executionType") == "ORDER_FILLED"
+            and self.client is not None
+        ):
+            del self._unanswered[name]
+            self._filled(body, name, late, self.client)
+            return
         position = _map(body.get("position"))
         if position.get("positionStatus") != "POSITION_STATUS_CLOSED":
             return
@@ -1098,47 +1174,48 @@ class CTraderVenue:
         )
         if is_refusal(encoded):
             return encoded
+        name = tags.client_order_id
+        entry = _Entry(ticket.market_id, ticket.side, int(volume), ticket.quantity, tags.label)
+        self._unanswered[name] = entry
         pushed = api.push(encoded.value.envelope)
         if is_refusal(pushed):
             return Ok(Sent(SubmissionOutcome.UNKNOWN))
         msg_id = encoded.value.client_msg_id
         while True:
             found = api.wait(
-                lambda frame: (
-                    frame.name in _TRADES and _answers(frame, msg_id, tags.client_order_id)
-                )
+                lambda frame: frame.name in _TRADES and _answers(frame, msg_id, name)
             )
             if is_refusal(found) or found.value is None:
                 return Ok(Sent(SubmissionOutcome.UNKNOWN))
             frame = found.value
-            if frame.name == "ProtoOAOrderErrorEvent":
-                self._orders.append(
-                    VenueOrder(tags.client_order_id, tags.label, ticket.market_id, OrderState.GONE)
-                )
-                return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, _error_word(frame.body)))
             kind = frame.body.get("executionType")
             if kind == "ORDER_ACCEPTED":
                 continue
-            if kind != "ORDER_FILLED":
-                self._orders.append(
-                    VenueOrder(tags.client_order_id, tags.label, ticket.market_id, OrderState.GONE)
+            del self._unanswered[name]
+            if frame.name == "ProtoOAOrderErrorEvent" or kind != "ORDER_FILLED":
+                self._orders.append(VenueOrder(name, tags.label, ticket.market_id, OrderState.GONE))
+                code = (
+                    _error_word(frame.body)
+                    if frame.name == "ProtoOAOrderErrorEvent"
+                    else str(kind).lower()
                 )
-                return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, str(kind).lower()))
-            return self._filled(frame, ticket, symbol, int(volume), client)
+                return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, code))
+            price = self._filled(frame.body, name, entry, client)
+            if price is None:
+                return Ok(Sent(SubmissionOutcome.UNKNOWN))
+            return Ok(Sent(SubmissionOutcome.ACCEPTED_BY_VENUE, price))
 
     def _filled(
-        self,
-        frame: Frame,
-        ticket: Ticket,
-        symbol: SymbolFacts,
-        volume: int,
-        client: LiveCTraderClient,
-    ) -> Result[Sent]:
-        deal = _map(frame.body.get("deal"))
-        position = _map(frame.body.get("position"))
+        self, body: Mapping[str, object], name: str, entry: _Entry, client: LiveCTraderClient
+    ) -> Decimal | None:
+        """Record an entry's fill and open its position; its fill price, or None when the live
+        client refused to record the frame (the reconcile then reads the position)."""
+        symbol = self.symbols[entry.market_id]
+        deal = _map(body.get("deal"))
+        position = _map(body.get("position"))
         recorded = client.receive(
             WireKind.FILL,
-            dict(frame.body),
+            dict(body),
             native_id=str(_int(deal.get("dealId")) or 0),
             instrument=symbol.instrument,
             venue_time_raw=_int(deal.get("executionTimestamp")),
@@ -1149,25 +1226,23 @@ class CTraderVenue:
             fill_volume_wire=_int(deal.get("filledVolume")),
         )
         if is_refusal(recorded):
-            return Ok(Sent(SubmissionOutcome.UNKNOWN))
+            return None
         fill = _map(recorded.value.get("fill_price"))
         price = Decimal(cast("int", fill["value"])).scaleb(-cast("int", fill["scale"]))
-        name = ticket.tags.client_order_id if ticket.tags is not None else ""
-        label = ticket.tags.label if ticket.tags is not None else None
         self._open[name] = _Open(
             _int(position.get("positionId")) or 0,
-            ticket.market_id,
-            ticket.side,
-            volume,
-            cast("Decimal", ticket.quantity),
+            entry.market_id,
+            entry.side,
+            entry.volume,
+            entry.lots,
             price,
-            self._execution_price(position.get("stopLoss"), ticket.market_id),
-            label,
+            self._execution_price(position.get("stopLoss"), entry.market_id),
+            entry.label,
         )
         self._orders.append(
-            VenueOrder(name, label, ticket.market_id, OrderState.FILLED, name, price)
+            VenueOrder(name, entry.label, entry.market_id, OrderState.FILLED, name, price)
         )
-        return Ok(Sent(SubmissionOutcome.ACCEPTED_BY_VENUE, price))
+        return price
 
     def _close(
         self, ticket: Ticket, name: str, held: _Open, api: OpenApi, client: LiveCTraderClient

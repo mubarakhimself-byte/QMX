@@ -727,7 +727,14 @@ FIRST_ENTRY_ROW: dict[str, Json] = {
     "market_id": "fx.eurusd",
     "side": "short",
     "quantity": "0.04",
+    "fill_price": "1.06858",
+    "venue_stop": "1.08022",
+    "unit_stop": "1.08022",
+    "stop_distance": "0.01164",
+    "node_price": "1.06858",
+    "slippage": "0.00000",
 }
+"""The dummy's first entry as the reconcile reads it: 0.04 lots short, its stop at the venue."""
 
 
 def test_an_entry_whose_answer_is_lost_is_the_node_own_booked_taken_and_killed_flat(
@@ -752,7 +759,7 @@ def test_an_entry_whose_answer_is_lost_is_the_node_own_booked_taken_and_killed_f
     ] == ["send", "unknown"]
     assert [(r["why"], r["resolved"]) for r in reconciled][:2] == [
         ("start", []),
-        ("unknown", [{"client_order_id": name, "outcome": "filled", "price": "PRICE"}]),
+        ("unknown", [{"client_order_id": name, "outcome": "filled", "price": "1.06858"}]),
     ]
     assert cast("list[dict[str, Json]]", reconciled[1]["positions"]) == [
         {**FIRST_ENTRY_ROW, "position": name}
@@ -839,6 +846,7 @@ def test_an_entry_answered_after_its_wait_is_the_node_own_and_closes(tmp_path: P
         Ticket(entry.value, "fx.eurusd", Side.LONG, Decimal("1.08012"), lots, lots, tags.value)
     )
     api.wait_s = 5.0
+    stop = venue.stop_of("e" * 36)
     read = venue.read_back()
     assert not isinstance(read, TypedRefusal)
     claimed = attribute(read.value, tag="a4dqobyh", sent=["e" * 36])
@@ -848,6 +856,7 @@ def test_an_entry_answered_after_its_wait_is_the_node_own_and_closes(tmp_path: P
 
     assert not isinstance(entered, TypedRefusal) and not isinstance(closed, TypedRefusal)
     assert entered.value.outcome is SubmissionOutcome.UNKNOWN
+    assert stop == Decimal("1.07512")
     assert read.value.orders == (
         VenueOrder(
             "e" * 36,
