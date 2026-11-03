@@ -45,7 +45,8 @@ from qmn.venue.port import VenueClientKind, select_venue_client
 T0 = 1_762_000_000_000_000_000
 TAG = "a4dqobyh"
 OTHER_TAG = "b7xkq2mn"
-NAME = f"q{TAG}-{ulid(1_762_000_000_000, 'dep-1/row-1')}"
+DEPLOYMENT = "dep-1"
+NAME = f"q{TAG}-{ulid(1_762_000_000_000, f'{DEPLOYMENT}/row-1')}"
 LABEL = f"qmx:{TAG}:dummy-trend-pullback"
 ETH = "ETH/USDC:USDC"
 VENUE = VenueId("hyperliquid-testnet")
@@ -317,6 +318,7 @@ def enter(node: Rig, name: str = NAME, side: Side = Side.LONG, stop: str = "2475
     quantity = lots(Decimal("0.01"), RECORD)
     assert not isinstance(quantity, TypedRefusal), quantity
     return node.path.entry(
+        deployment_id=DEPLOYMENT,
         client_order_id=name,
         label=LABEL,
         wire={
@@ -582,6 +584,34 @@ def test_a_restarted_client_reads_its_own_foreign_and_untagged_records(tmp_path:
         Decimal("2501.0"),
     )
     assert node.exchange.sent_orders()[0][3:5] == ("sell", "0.01")
+
+
+def test_a_restart_finds_its_open_position_with_the_send_row_naming_its_deployment(
+    tmp_path: Path,
+) -> None:
+    before = rig(tmp_path)
+    enter(before)
+    before.writer.close()
+    sends = journal_sends(tmp_path)
+    assert not isinstance(sends, TypedRefusal), sends
+    after = rig(tmp_path, before.exchange, sent=list(sends.value))
+    after.now[0] = before.now[0] + 1_000_000_000
+    reconciler = Reconciler(
+        after.writer, tmp_path, TAG, lambda: after.now[0], after.alarms.append
+    )
+    reconciler.run("hl-testnet-1", 1, after.client, after.path.unknown, [Units()])
+
+    assert [
+        (o.position.position, o.position.market_id, o.position.side, o.position.quantity,
+         o.position.entry_price, o.position.stop, o.send["deployment_id"], o.send["stop"])
+        for o in reconciler.mine("hl-testnet-1")
+    ] == [
+        (NAME, "crypto.eth", "long", Decimal("0.01"), Decimal("2501.0"), Decimal("2476.0"),
+         "dep-1", "2475.5"),
+    ]  # fmt: skip
+    assert after.client.closed(NAME) is None
+    assert after.client.stop_of(NAME) == Decimal("2476.0")
+    assert after.alarms == []
 
 
 def test_the_agent_wallet_reads_from_the_keys_document_and_never_prints() -> None:
