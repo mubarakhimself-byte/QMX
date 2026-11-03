@@ -168,9 +168,11 @@ from qmx_host.app_logs import AppLogs
 from qmx_host.backups import Backups, Refusal, backups_router
 from qmx_host.bring_in import recheck_at_start
 from qmx_host.clock_probe import (
+    CALENDAR_WARN_DAYS,
     DST_NOTICE_DAYS,
     PROBE_S,
     TZDATA_MAX_AGE_DAYS,
+    calendar_line,
     clock_line,
     mismatch_line,
     probe_from,
@@ -1483,8 +1485,8 @@ async def heartbeats(
 def clock_doctor(
     harness: Harness, home: Path, host_id: str, settings: Mapping[str, object]
 ) -> None:
-    """The doctor's clock, `tzdata` and mismatch week rows. The clock row reads this host's newest
-    row, so opening the doctor never waits on a time source."""
+    """The doctor's clock, `tzdata`, mismatch week and market calendars rows. The clock row reads
+    this host's newest row, so opening the doctor never waits on a time source."""
 
     def today() -> date:
         return datetime.now(UTC).date()
@@ -1495,9 +1497,11 @@ def clock_doctor(
 
     max_age = setting(settings, "clock.tzdata_max_age_days", TZDATA_MAX_AGE_DAYS)
     notice = setting(settings, "clock.dst_mismatch_notice_days", DST_NOTICE_DAYS)
+    warn = setting(settings, "clock.calendar_warn_days", CALENDAR_WARN_DAYS)
     harness.doctor_from(clock)
     harness.doctor_from(lambda: tzdata_line(tzdata_version(), today(), max_age))
     harness.doctor_from(lambda: mismatch_line(today(), notice))
+    harness.doctor_from(lambda: calendar_line(today(), warn))
 
 
 def section(control: ControlService, name: str) -> Document:

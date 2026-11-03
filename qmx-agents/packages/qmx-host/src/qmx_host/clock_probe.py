@@ -5,8 +5,9 @@ the host writes into its heartbeat's `clock` field every `clock.probe_s`. The ma
 service (Windows Time on This PC, chrony on a server) is read beside it, read-only: nothing here
 starts, stops or configures a service, and the doctor line only names the step for him.
 
-The doctor gets three lines from here: the clock, the age of the pinned `tzdata`, and the next
-week London and New York disagree on daylight saving time.
+The doctor gets four lines from here: the clock, the age of the pinned `tzdata`, the next week
+London and New York disagree on daylight saving time, and the shipped market calendars whose
+data ends soon.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from zoneinfo import ZoneInfo
 from qma.harness.home import DoctorLine
 from qmx_engine.admission import setting
 from qmx_engine.heartbeat import ClockBand, ClockFacts, TimeService
+from qmx_engine.triggers.preflight import shipped_calendars
 
 SOURCES: Final = ("0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org", "3.pool.ntp.org")
 """`clock.sources`. One kind of source only: smeared servers are never mixed in (CK-06)."""
@@ -45,6 +47,9 @@ TZDATA_MAX_AGE_DAYS: Final = 180.0
 """`clock.tzdata_max_age_days`."""
 DST_NOTICE_DAYS: Final = 7.0
 """`clock.dst_mismatch_notice_days`, how far ahead the doctor announces a mismatch week."""
+CALENDAR_WARN_DAYS: Final = 30.0
+"""`clock.calendar_warn_days`, how close to the last day its data covers a shipped market calendar
+is flagged."""
 NTP_PORT: Final = 123
 NTP_EPOCH_S: Final = 2_208_988_800
 """Seconds from 1900-01-01, the NTP era start, to the Unix epoch."""
@@ -261,6 +266,43 @@ def tzdata_line(version: str, today: date, max_age_days: float = TZDATA_MAX_AGE_
         least <= max_age_days,
         f"tzdata {version}, released in {year}, at least {least} days old; "
         f"flagged past {max_age_days:g} days",
+    )
+
+
+def calendar_line(today: date, warn_days: float = CALENDAR_WARN_DAYS) -> DoctorLine:
+    """The doctor's market calendars row. A calendar's data covers days up to its `issued` date
+    plus its `max_age_days`; past that day its weekly sessions still hold, but no closure is
+    known."""
+    try:
+        last_days = {
+            ref: calendar.issued + timedelta(days=calendar.max_age_days)
+            for ref, calendar in shipped_calendars().items()
+        }
+    except (OSError, ValueError) as error:
+        return DoctorLine("market calendars", False, f"a shipped calendar did not load: {error}")
+    near = sorted(
+        (last, ref) for ref, last in last_days.items() if (last - today).days <= warn_days
+    )
+    if not near:
+        first = min(last_days.values()).isoformat()
+        return DoctorLine(
+            "market calendars",
+            True,
+            f"{len(last_days)} shipped calendars cover days up to {first} or later; "
+            f"flagged within {warn_days:g} days of the last day",
+        )
+
+    def words(last: date, ref: str) -> str:
+        left = (last - today).days
+        if left < 0:
+            return f"{ref} ended on {last.isoformat()}, {-left} days ago"
+        return f"{ref} covers days up to {last.isoformat()}, {left} days from now"
+
+    return DoctorLine(
+        "market calendars",
+        False,
+        "; ".join(words(last, ref) for last, ref in near)
+        + "; a QMX update with newer calendars brings the later days",
     )
 
 
