@@ -13,7 +13,7 @@ The slow lane's MIS check (STATE midday rulings 44 and 50, Part B `workflows.md`
 
 ## Settings
 
-`readings` defaults to the MIS's default packs' reading ids; `markets` to every market the MIS read. The cron runs at 00:45 UTC, after the day closes for 24/7 markets (WF-04). Missed runs follow the trigger's catch-up setting; reviews catch up once (WF-14).
+`days` (1 by default) widens the check to the days up to `day`, such as a week; `readings` defaults to the MIS's default packs' reading ids; `markets` to every market the MIS read. The cron runs at 00:45 UTC, after the day closes for 24/7 markets (WF-04). Missed runs follow the trigger's catch-up setting; reviews catch up once (WF-14).
 
 ## Left out, and why
 

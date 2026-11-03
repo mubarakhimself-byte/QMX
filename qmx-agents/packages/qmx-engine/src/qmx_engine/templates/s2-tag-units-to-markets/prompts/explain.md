@@ -5,4 +5,4 @@ Write:
 - `text`: one short paragraph per proposed drop: the unit, the market, its trades and expectancy, and the reading words where it earned or lost, from `by_reading`. Then one line on any reading history that was refused, from `readings_refused`, in words.
 - `receipts`: `["read"]`.
 
-Use only numbers that appear in `findings`, written as they appear there. Do not add, average or work out a number of your own. You explain; you change no unit's markets.
+Use only numbers that appear in `findings`, written as they appear there. Do not add, average or work out a number of your own. You explain; you change no unit's markets. Write a date as YYYY-MM-DD and a time as HH:MM, never as words around a bare number.

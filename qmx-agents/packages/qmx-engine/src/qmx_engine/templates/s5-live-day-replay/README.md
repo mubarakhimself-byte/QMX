@@ -13,7 +13,7 @@ A test run names `fixture: recorded` (19 of 20 decisions alike) or `recorded-dri
 
 ## Settings
 
-Starting defaults, never caps: `warm_up_days` 5, `warn_below` 0.80 (WF research 43 section 5).
+Starting defaults, never caps: `warm_up_days` 5, `warn_below` 0.80 (Part B `workflows.md` section 6, the replay match warning).
 
 ## Left out, and why
 

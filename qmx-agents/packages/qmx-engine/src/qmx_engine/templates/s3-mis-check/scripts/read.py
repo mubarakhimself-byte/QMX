@@ -1,9 +1,10 @@
 """What the MIS said about each market over the day, read by script before any agent looks. Zero
 tokens.
 
-Inputs, all optional: `day` (YYYY-MM-DD, UTC; the day before the run's clock by default),
-`readings` (the reading ids to check; the card's default is the MIS's default packs) and `markets`
-(market ids; every market the MIS read by default).
+Inputs, all optional: `day` (YYYY-MM-DD, UTC; the day before the run's clock by default), `days`
+(how many days up to and including `day` to check; the card's default is 1), `readings` (the
+reading ids to check; the card's default is the MIS's default packs) and `markets` (market ids;
+every market the MIS read by default).
 
 It reads the MIS's reading history through `readings_query`, the one door to it, whose holdout
 refuses a held-out window by name: a refused reading is listed under `refused`, never read around.
@@ -18,6 +19,7 @@ import json
 import os
 import sys
 from collections import Counter
+from datetime import datetime, timedelta
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location("door", Path(__file__).with_name("door.py"))
@@ -25,7 +27,9 @@ door = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(door)
 
 asked = door.settings(json.load(sys.stdin).get("in"))
-day, window = door.day_window(asked.get("day"))
+day, last = door.day_window(asked.get("day"))
+first = datetime.fromisoformat(last["start"].replace("Z", "+00:00"))
+window = {"start": door.iso(first - timedelta(days=int(asked["days"]) - 1)), "end": last["end"]}
 qmx_home = door.home()
 markets = asked.get("markets") or None
 said, refused = {}, {}

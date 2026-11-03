@@ -6,4 +6,4 @@ Write:
 - `receipts`: `["read"]`.
 - `forecasts`: one dated call per shortlisted market: its `market`, a `call` with a `direction` of `up` or `down` for the session, and a `confidence` (the chance it holds, above 0 and at most 1, as text such as "0.55"). The script sets each call's horizon and scores it after the session; your calls are measured too.
 
-Use only numbers that appear in `findings`, written as they appear there, in `title` and `text`. Do not add, average or work out a number of your own. You explain and call; you change nothing.
+Use only numbers that appear in `findings`, written as they appear there, in `title` and `text`. Do not add, average or work out a number of your own. You explain and call; you change nothing. Write a date as YYYY-MM-DD and a time as HH:MM, never as words around a bare number.

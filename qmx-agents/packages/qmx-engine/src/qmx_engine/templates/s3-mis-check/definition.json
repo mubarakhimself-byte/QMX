@@ -6,6 +6,7 @@
     "type": "object",
     "properties": {
       "day": {"type": "string", "description": "the UTC day to check, YYYY-MM-DD; the day before the run by default"},
+      "days": {"type": "integer", "minimum": 1, "default": 1, "description": "how many days up to and including day to check, a starting default he changes"},
       "readings": {"type": "array", "items": {"type": "string"}, "default": ["efficiency-ratio", "variance-ratio", "hurst-exponent", "cusum-change-point", "spread_state"], "description": "the MIS readings to check, by reading id; the MIS's default packs by default"},
       "markets": {"type": "array", "items": {"type": "string"}, "description": "the market ids to check; every market the MIS read by default"}
     }

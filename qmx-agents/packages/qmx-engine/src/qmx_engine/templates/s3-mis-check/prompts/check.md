@@ -9,4 +9,4 @@ Answer:
 - `receipts`: `["read"]`.
 - `disagreements`: one per change point you read differently: its `market`, `reading` and `at` copied exactly from `findings`, `agent_reads` (the word you would have said) and `why`, both in words with no digits.
 
-You propose nothing and change nothing. Each disagreement is an example for him to improve the MIS.
+You propose nothing and change nothing. Each disagreement is an example for him to improve the MIS. Write a date as YYYY-MM-DD and a time as HH:MM, never as words around a bare number.

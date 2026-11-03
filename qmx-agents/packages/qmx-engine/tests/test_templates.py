@@ -1330,7 +1330,7 @@ def failure(home: Path, run_id: str) -> str:
         )
 
 
-UNIT_NOTE = {
+UNIT_NOTE: dict[str, Any] = {
     "title": "The units on 2025-01-02",
     "text": "dummy traded 2 of its 4 decisions, skipped 1 for a wide spread and missed 1 at "
     "max positions. Its 3 trades made 3.0R: 1.0R on fx.eurusd and 2.0R on metal.xauusd.",
@@ -1595,7 +1595,7 @@ def test_the_mis_check_never_reads_a_held_out_window_and_says_so(home: Path) -> 
     port = answers()
     with fake_service(home, harness=port) as svc:
         item = svc.drafts.put(S3.name, Bundle.read(S3), 0, caller=OPERATOR).item
-        inputs = {"day": "2025-01-02", "readings": ["efficiency-ratio"]}
+        inputs: Any = {"day": "2025-01-02", "readings": ["efficiency-ratio"]}
         report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
     findings = finished_output(home, report, "read")["findings"]
 

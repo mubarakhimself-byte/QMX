@@ -5,4 +5,4 @@ Write:
 - `text`: one short paragraph per unit whose status is Watch or Alarm, in the order of `findings.units`. Say its status and why, from its `why`: its recent expectancy against its record's, and its losing streak. Say whether that looks like bad luck or a real change only as a question for him, never as a verdict. Each flagged unit gets one tighten card for his click; say so once. A loosening is never proposed.
 - `receipts`: `["read"]`.
 
-Use only numbers that appear in `findings`, written as they appear there. Do not add, average or work out a number of your own. You explain; you change nothing.
+Use only numbers that appear in `findings`, written as they appear there. Do not add, average or work out a number of your own. You explain; you change nothing. Write a date as YYYY-MM-DD and a time as HH:MM, never as words around a bare number.
