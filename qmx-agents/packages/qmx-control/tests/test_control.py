@@ -53,7 +53,10 @@ def test_firecrawl_settings_are_off_by_default_and_persist_only_a_vault_referenc
         assert (
             rest.put("/api/settings/mcp_servers", headers=HEADERS, json=values).status_code == 200
         )
-        assert rest.get("/api/settings/mcp_servers", headers=HEADERS).json() == values
+        assert rest.get("/api/settings/mcp_servers", headers=HEADERS).json() == {
+            **values,
+            "ctrader": CTRADER_OFF,
+        }
         for invalid in (
             {"api_key": "do-not-save"},
             {"auth": "do-not-save"},
@@ -69,7 +72,37 @@ def test_firecrawl_settings_are_off_by_default_and_persist_only_a_vault_referenc
                 ).status_code
                 == 400
             )
-    assert ControlService(tmp_path).settings_get("mcp_servers") == values
+    assert ControlService(tmp_path).settings_get("mcp_servers") == {
+        **values,
+        "ctrader": CTRADER_OFF,
+    }
+    assert "do-not-save" not in (tmp_path / "settings.toml").read_text()
+
+
+CTRADER_OFF = {"enabled": False, "credential_ref": "qmx/ctrader-mcp", "venue": "ctrader"}
+
+
+def test_the_ctrader_mcp_row_ships_off_and_keeps_its_vault_reference_and_venue(
+    tmp_path: Path,
+) -> None:
+    service = ControlService(tmp_path)
+    assert service.settings_get("mcp_servers")["ctrader"] == CTRADER_OFF
+    pasted = {"url": "https://mcp.ctrader.test/remote/mcp", "enabled": True}
+    service.settings_put("mcp_servers", {"ctrader": pasted})
+    assert service.settings_get("mcp_servers")["ctrader"] == {**CTRADER_OFF, **pasted}
+    for invalid, code in (
+        ({"venue": "mt5"}, "invalid_settings"),
+        ({"credential_ref": "qmx/other"}, "invalid_settings"),
+        ({"url": "http://mcp.ctrader.test/mcp"}, "invalid_settings"),
+        ({"url": "https://mcp.ctrader.test/mcp?key=do-not-save"}, "invalid_settings"),
+        ({"enabled": "true"}, "invalid_settings"),
+        ({"token": "do-not-save"}, "secret_ref_required"),
+    ):
+        with pytest.raises(ControlError) as refused:
+            service.settings_put("mcp_servers", {"ctrader": invalid})
+        assert refused.value.code == code
+    service.settings_put("mcp_servers", {"ctrader": {"url": "http://127.0.0.1:8123/mcp"}})
+    assert service.settings_get("mcp_servers")["ctrader"]["url"] == "http://127.0.0.1:8123/mcp"
     assert "do-not-save" not in (tmp_path / "settings.toml").read_text()
 
 
