@@ -360,8 +360,9 @@ def test_server_config_shapes() -> None:
     for name, row, message in [
         ("qmx", {"command": "py"}, "belong to QMX"),
         ("qmx_library", {"command": "py"}, "belong to QMX"),
-        ("f", {"command": "py", "credential_ref": "qmx/f"}, "only an HTTP server"),
-        ("f", {"url": "https://x", "credential_ref": "f"}, "a qmx/\\* Credential Manager"),
+        ("f", {"command": "py", "credential_ref": "qmx/ctrader-mcp"}, "only an HTTP server"),
+        ("f", {"url": "https://x", "credential_ref": "f"}, "not wired yet"),
+        ("f", {"url": "https://x", "credential_ref": "qmx/control-token"}, "not wired yet"),
         ("f", {}, "a command or a url"),
         ("qmx__evil", {"command": "py"}, "belong to QMX"),
         ("evil__x", {"command": "py"}, "single _"),
@@ -370,6 +371,31 @@ def test_server_config_shapes() -> None:
     ]:
         with pytest.raises(ValueError, match=message):
             server_config(name, row)
+
+
+def test_only_the_ctrader_mcp_ref_leaves_the_keyring_as_a_bearer() -> None:
+    vault = {"qmx/firecrawl": "fc-held", "qmx/ctrader-mcp": "demo-held"}
+    read: list[str] = []
+
+    def secret(ref: str) -> str | None:
+        read.append(ref)
+        return vault.get(ref)
+
+    firecrawl = {
+        "url": "https://mcp.firecrawl.dev/v2/mcp",
+        "credential_ref": "qmx/firecrawl",
+        "enabled": True,
+    }
+    with pytest.raises(ValueError, match="not wired yet"):
+        server_config("firecrawl", firecrawl, secret)
+    assert read == []
+    ctrader = {"url": "https://mcp.ctrader.example/mcp", "credential_ref": "qmx/ctrader-mcp"}
+    assert server_config("ctrader", ctrader, secret) == {
+        "type": "http",
+        "url": "https://mcp.ctrader.example/mcp",
+        "headers": {"Authorization": "Bearer demo-held"},
+    }
+    assert read == ["qmx/ctrader-mcp"]
 
 
 SERVER = """\
