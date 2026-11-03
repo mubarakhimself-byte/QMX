@@ -1077,20 +1077,27 @@ class CTraderVenue:
             building.ask.append(ask)
 
     def _execution(self, body: Mapping[str, object]) -> None:
-        """A fill of an entry whose answer came after its wait opens its position. A stop the
-        venue fired, or a close it carried out, closes the position it names."""
+        """A fill of an entry whose answer came after its wait opens its position, and a later
+        deal into a held position sets the volume it holds. A stop the venue fired, or a close
+        it carried out, closes the position it names."""
         name = str(_map(body.get("order")).get("clientOrderId") or "")
         late = self._unanswered.get(name)
-        if late is not None and body.get("executionType") in _FILLS and self.client is not None:
+        fill = body.get("executionType") in _FILLS
+        if late is not None and fill and self.client is not None:
             del self._unanswered[name]
             self._filled(body, name, late, self.client)
             return
         position = _map(body.get("position"))
-        if position.get("positionStatus") != "POSITION_STATUS_CLOSED":
-            return
         position_id = _int(position.get("positionId"))
         name = next((n for n, h in self._open.items() if h.position_id == position_id), None)
         if name is None:
+            return
+        if position.get("positionStatus") != "POSITION_STATUS_CLOSED":
+            volume = _int(_map(position.get("tradeData")).get("volume"))
+            if fill and volume is not None:
+                held = self._open[name]
+                held.volume = volume
+                held.lots = Decimal(volume) / Decimal(self.symbols[held.market_id].lot_size)
             return
         held = self._open.pop(name)
         deal = _map(body.get("deal"))
@@ -1209,9 +1216,9 @@ class CTraderVenue:
     def _filled(
         self, body: Mapping[str, object], name: str, entry: _Entry, client: LiveCTraderClient
     ) -> _Open | None:
-        """Record an entry's fill and open its position at the volume the deal filled, which a
-        partial fill leaves short of the order's; None when the live client refused to record
-        the frame (the reconcile then reads the position)."""
+        """Record an entry's fill and open its position at the volume the position holds, which
+        a partial fill leaves short of the order's until a later deal adds to it; None when the
+        live client refused to record the frame (the reconcile then reads the position)."""
         symbol = self.symbols[entry.market_id]
         deal = _map(body.get("deal"))
         position = _map(body.get("position"))
@@ -1231,7 +1238,9 @@ class CTraderVenue:
             return None
         fill = _map(recorded.value.get("fill_price"))
         price = Decimal(cast("int", fill["value"])).scaleb(-cast("int", fill["scale"]))
-        volume = cast("int", _int(deal.get("filledVolume")))
+        volume = _int(_map(position.get("tradeData")).get("volume")) or cast(
+            "int", _int(deal.get("filledVolume"))
+        )
         opened = _Open(
             _int(position.get("positionId")) or 0,
             entry.market_id,

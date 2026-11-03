@@ -14,7 +14,8 @@ client order id and the positions by their label, and attributes each record
   is dropped. Nothing is ever sent again on an UNKNOWN; an order the venue still shows open
   stays UNKNOWN. A venue that lists no filled order, as cTrader's reconcile lists pending ones
   only, still shows the position: one open position with the order's label, market and side
-  that no other order opened is the order's, under the venue's name. The order reads absent
+  that no other order opened is the order's, under the venue's name, at every later run while
+  it stays open. The order reads absent
   only when no such position is open, and two of them keep it UNKNOWN with an alarm.
 - a twin or a foreign node's record stands the account down: no new entry, with an alarm.
 - a position that is not the node's is never touched and never adopted. It is shown as
@@ -121,6 +122,9 @@ class _Account:
     not_ours: tuple[dict[str, object], ...] = ()
     mine: tuple[Ours, ...] = ()
     """The node's own positions the last run read at the venue."""
+    labelled: dict[str, VenueOrder] = field(default_factory=dict[str, VenueOrder])
+    """The orders read as filled into a position found by their label, by client order id,
+    while that position is open: the venue lists no order for it."""
 
 
 @dataclass
@@ -178,7 +182,19 @@ class Reconciler:
             if held.session != session
             else "unknown"
         )
-        labelled, twice = _by_label(read.value, unknown, sends.value)
+        open_positions = {p.position for p in read.value.positions}
+        listed = {o.client_order_id for o in read.value.orders}
+        carried = {
+            name: order
+            for name, order in held.labelled.items()
+            if order.position in open_positions and name not in listed
+        }
+        found_by_label, twice = _by_label(
+            ReadBack(read.value.orders + tuple(carried.values()), read.value.positions),
+            unknown,
+            sends.value,
+        )
+        labelled = held.labelled = carried | found_by_label
         venue = ReadBack(
             tuple(o for o in read.value.orders if o.client_order_id not in labelled)
             + tuple(labelled.values()),
