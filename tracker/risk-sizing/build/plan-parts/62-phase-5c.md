@@ -107,6 +107,7 @@ Phase 5, the trading node and external connections. Part C slice C-17, Part C `N
 - [ ] The MIS joins `APP_FOLDERS` (`connect_node.py:73`; `qmx-agents/apps/mis` exists).
 - [ ] The keys window writes `<server home>/vault/trading-node-keys` at mode 0600, read by `vault_secrets` (`host.py:1004-1030`). It is written before the node is enabled, because `NODE_KEYS` is read once at start (`server.py:208`).
 - [ ] The round trip runs on the server over SSH. `_round_trip` (`:428`) measures from This PC.
+- [ ] Block source bytes follow checkout line endings, so the dummy's compiled fingerprint differs between a Windows and a Linux checkout. Pin block sources to LF in `.gitattributes`, or fingerprint normalised bytes, so the server compiles the fingerprint This PC promoted (`LOOSE-ENDS.md` L5).
 
 **You see.**
 
@@ -190,6 +191,7 @@ Phase 5, the trading node and external connections. Part C slice C-19, Level 0 A
 **Files.**
 
 - [ ] Create `qmx-agents/packages/qmx-host/src/qmx_host/app_updates.py` and `qmx-agents/packages/qmx-host/tests/test_app_updates.py`.
+- [ ] Edit the node's `safe_to_restart`, which skips "journal synced" and "reconcile clean", so this slice's update step can rely on it, and `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py:335`, where a rerun never upgrades an installed node (`LOOSE-ENDS.md` C2, I12).
 
 **Build.**
 
@@ -275,6 +277,145 @@ Phase 5, the trading node and external connections. Part C slice C-20, Part C AD
 
 @merge
 
+## Decode each Dukascopy symbol at its own price scale (C-31)
+
+Phase 5, the trading node and external connections. Added by the loose-ends pass of 2026-11-03 (`LOOSE-ENDS.md` A1, a MUST before he lands the stack). Built fact. the shipped `download-dukascopy` template decodes every symbol at `PRICE_SCALE = 5` (`qmx-agents/packages/qmx-engine/src/qmx_engine/templates/download-dukascopy/scripts/download.py:59`, used at `:296` and `:368`), though its `source` input names a `price_scale` (`definition.json:11`). Gold sits at 3 decimals on Dukascopy, so XAUUSD lands 100 times too small, and neither the stamp check nor the data-quality check can see it. Real step none. Done when every month is decoded at the scale its source names, a source with no scale is refused, a scale that disagrees with the instrument record's digits is refused, and a month already landed at the wrong scale is reported and never read as good.
+
+**Depends on.** B11.
+
+**Files.**
+
+- [ ] Edit `qmx-agents/packages/qmx-engine/src/qmx_engine/templates/download-dukascopy/scripts/download.py` (`:59` goes; `:296` and `:368` use the source's `price_scale`; a missing scale fails the step; when an `instrument` record for the symbol exists, its `digits` must agree) and `definition.json` (`price_scale` required in `source`).
+- [ ] Edit the template's check step so a landed month whose card's `price_scale` differs from its source's is reported `wrong_scale` and kept out of every QMB read.
+- [ ] Create `qmx-agents/packages/qmx-engine/tests/test_download_dukascopy_scale.py`.
+
+**Build.**
+
+- [ ] Decode at the named scale, refuse a missing or disagreeing one, and report wrong-scale months already on disk. His preference for `dukascopy-node` does not change this fix, because the template ships and runs today.
+
+**You see.**
+
+- [ ] Gold backtests read real gold prices, and a month landed wrong earlier shows "landed at the wrong price scale, download it again".
+
+**Verify, unit.**
+
+- [ ] A fixture bi5 hour for XAUUSD at scale 3 decodes to the fixture's known first price exactly. EURUSD at scale 5 is unchanged. A source with no scale fails. A scale disagreeing with a fixture record's digits fails. A fixture month card at scale 5 for XAUUSD reads `wrong_scale`. Run `uv run --project qmx-agents pytest packages/qmx-engine/tests/test_download_dukascopy_scale.py -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. Download one hour of XAUUSD from Dukascopy on a throwaway folder. Save `c31-gold.log`. Pass when the first tick lies within 1% of that hour's published Dukascopy price.
+- [ ] Lane 3. The same for EURUSD. Save `c31-eurusd.log`. Pass when the prices match the parent's output exactly.
+- [ ] Lane 4. Plant a scale-5 gold month card on the throwaway folder and run the check step. Save `c31-wrong.log`. Pass when it reads `wrong_scale` and a QMB backtest over it is refused.
+- [ ] Lane 5. A source with no `price_scale`. Save `c31-missing.log`. Pass when the step fails with one plain sentence.
+- [ ] Lane 6. USDJPY for one hour. Save `c31-jpy.log`. Pass when its prices sit near the published level at scale 3.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Seconds to decode one month of XAUUSD ticks.
+- [ ] Probe. Lane 2 over a whole day.
+- [ ] Baseline. The parent's EURUSD decode time.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lenses edge-case and verification-gap, on scale and money exactness. The blast-radius fact is that every symbol at scale 5 decodes byte-for-byte as before.
+
+@merge
+
+
+## Make the vault owner-only on every machine (C-32)
+
+Phase 5, the trading node and external connections. Added by the loose-ends pass of 2026-11-03 (`LOOSE-ENDS.md` H1, a MUST before he lands the stack). Built fact. on Windows nothing makes or checks `<home>/vault/` owner-only, so it inherits its drive's ACL, which by default lets Users read. It holds the pairing key that signs every run pass (`qmx-agents/packages/qmx-host/src/qmx_host/host.py:1548, 1592`), the control token and the run pass key (`HOST_VAULT`, `:223`). The reader follows a symlink in the vault and stats before it reads (C-05d review L1, L6). Real step none. Done when the host makes the vault owner-only on Windows and Linux, repairs a loose one at start or refuses to start with a doctor row, and reads no vault file through a link.
+
+**Depends on.** C-05d.
+
+**Files.**
+
+- [ ] Create `qmx-agents/packages/qmx-host/src/qmx_host/vault_acl.py`. On Windows the vault's DACL holds only the current user and SYSTEM, with inheritance off. On Linux the folder is 0700 and each file 0600.
+- [ ] Edit `qmx-agents/packages/qmx-host/src/qmx_host/host.py` (the vault is made through `vault_acl` before any key is written; start checks and repairs it; `vault_secrets` at `:1004-1030` opens each file once by handle, refuses a symlink or junction, and checks the handle's owner, never a path stat before the read).
+- [ ] Create `qmx-agents/packages/qmx-host/tests/test_vault_acl.py`.
+
+**Build.**
+
+- [ ] Write the owner-only rule, the start check with repair, and the link-safe reader. A vault that cannot be repaired stops the host with one plain sentence and a doctor row.
+
+**You see.**
+
+- [ ] Nothing new when the vault is right. A doctor row "your keys folder was readable by other users, fixed" when start repaired it.
+
+**Verify, unit.**
+
+- [ ] A new vault on a throwaway folder lists only the current user and SYSTEM. A vault with a Users read entry is repaired at start. A symlinked vault file is refused. On Linux the modes read 0700 and 0600. Run `uv run --project qmx-agents pytest packages/qmx-host/tests/test_vault_acl.py -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. Start the host on a fresh throwaway folder on This PC and print the vault's ACL with `icacls`. Save `c32-acl.log`. Pass when only the current user and SYSTEM appear and inheritance is off.
+- [ ] Lane 3. Grant Users read on that vault, then restart the host. Save `c32-repair.log`. Pass when the ACL is back to owner-only and the doctor row says so.
+- [ ] Lane 4. Replace a vault file with a symlink to a file outside the vault, then start the host. Save `c32-link.log`. Pass when the read is refused and nothing from the outside file is used.
+- [ ] Lane 5. A second Windows user account reads the vault. Save `c32-other-user.log`. Pass when access is denied.
+- [ ] Lane 6. Start the host on a Linux throwaway folder (WSL is enough). Save `c32-linux.log`. Pass when the modes read 0700 and 0600.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Milliseconds the vault check adds to host start.
+- [ ] Probe. Lane 2.
+- [ ] Baseline. The parent's start time.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lenses adversarial and edge-case, on ACLs, links and races. The blast-radius fact is that every key the host reads today still reads after the change.
+
+@merge
+
+
+## Find and fix the control and engine lock-order hang (C-33)
+
+Phase 5, the trading node and external connections. Added by the loose-ends pass of 2026-11-03 (`LOOSE-ENDS.md` I1, a MUST before he lands the stack). Inferred, not reproduced. `qmx-engine/tests/test_app_op.py::test_enable_creates_one_trigger_whose_test_run_ran_the_job` hangs at random at the head and at its parent `fb9195cf`. The C-06 reviewer read a lock-order cycle between `ControlService._app_event` (`qmx-agents/packages/qmx-control/src/qmx_control/service.py:1942`) calling `workflow_runs_list` (`:2051`) through `EngineDoor._call` (`qmx-agents/packages/qmx-engine/src/qmx_engine/control_door.py:283`), and the engine loop's enable calling `settings_get` (`service.py:966`). Real step none. Done when the hang is reproduced outside the test or shown to live only in the test harness, and then either fixed in product code with a lock-order rule and a test, or fixed in the test, with the finding written in the PR body.
+
+**Depends on.** C-06.
+
+**Files.**
+
+- [ ] Create `tools/lanes/app_enable_hang.py`. It enables a fixture app with a trigger on a real host on a throwaway folder 200 times, each with a 30 s timeout, and dumps every thread's stack on a timeout.
+- [ ] Edit `qmx-agents/packages/qmx-control/src/qmx_control/service.py` (no service lock is held across a call into the engine door; `_app_event` reads what it needs, releases, then calls) or `qmx-agents/packages/qmx-engine/src/qmx_engine/control_door.py` (the door C-06 already edits), whichever the stack dump proves.
+- [ ] Edit `qmx-agents/packages/qmx-engine/tests/test_app_op.py` if the harness alone holds the cycle. Create `qmx-agents/packages/qmx-control/tests/test_lock_order.py`.
+
+**Build.**
+
+- [ ] Reproduce first. If 200 real enables never hang and the stack dump of a test hang shows only test fixtures, fix the test and move I1 to BACKLOG with the dump. If a real enable hangs, fix the order in `service.py` or `control_door.py`.
+- [ ] Do not edit the engine's runner, loop or nodes. If only a change there can fix it, stop and send the planner the stack dump, because the engine is his (ruling 49).
+
+**You see.**
+
+- [ ] Nothing new. Enabling an app with a trigger never hangs his host.
+
+**Verify, unit.**
+
+- [ ] `test_lock_order.py` runs `_app_event` and an engine enable on two threads 500 times with a 10 s bound and never hangs. `test_app_op.py` passes 50 runs in a row. Run `uv run --project qmx-agents pytest packages/qmx-control/tests/test_lock_order.py -q` and `uv run --project qmx-agents pytest packages/qmx-engine/tests/test_app_op.py -q --count 50`, or a loop of 50 runs if `pytest-repeat` is absent.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. `tools/lanes/app_enable_hang.py` at the parent. Save `c33-parent.log`. Pass when it records whether the parent hangs, with any stack dump.
+- [ ] Lane 3. The same at the head. Save `c33-head.log`. Pass when 200 enables finish with no timeout.
+- [ ] Lane 4. The head under load, with a QMB backtest running beside it. Save `c33-load.log`. Pass when no enable times out.
+- [ ] Lane 5. `test_app_op.py` 50 times at the head. Save `c33-test.log`. Pass when all 50 pass.
+- [ ] Lane 6. Enable, disable and re-enable one app 50 times. Save `c33-cycle.log`. Pass when exactly one trigger exists at the end.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Milliseconds per app enable.
+- [ ] Probe. Lane 3.
+- [ ] Baseline. Lane 2's enables that finished.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lenses edge-case and verification-gap, on concurrency. The blast-radius fact is that every control operation that calls the engine door answers as before.
+
+@merge
+
+
 ## Move the two example apps off the host's bearer (C-27a)
 
 Phase 5, the trading node and external connections. Added by the C-27 build of 2026-11-03 (PR 313 at 90253c02), whose refusal turned 12 `qmx-apps` tests red. Built facts. `examples/apps/macro-daily-bias` reads `qmx/control-token` as `QMX_DATA_TOKEN` and calls the data door with it as `operator` (`macro_bias.py:129`), beside an agent it declares. `examples/apps/mql5-articles` reads it as `QMX_CONTROL_TOKEN` and calls `library_search` and `library_save` on the host MCP at `127.0.0.1:8766` (`collector.py:212-260`, `:409`). The host already gives apps both things without a bearer. `data_reads = ["market"]` hands an app the read-only market root (`supervisor.py:711-713`, the MIS's route), and a job result `{output, data}` lands as a Library artifact through the host's sink (`supervisor.py:1302-1312`, `artifacts.py`), but only one output per run. Real step none. Done when neither example declares any host secret, macro-daily-bias reads its bars from the market root, mql5-articles lands each article as its own Library artifact through its job result, and the shipped `qmx-apps` tests pass with C-27's refusal in.
@@ -287,7 +428,8 @@ Phase 5, the trading node and external connections. Added by the C-27 build of 2
 - [ ] Edit `qmx-agents/packages/qmx-apps/src/qmx_apps/artifacts.py` (a ref already in the index with a Library id is not landed again, so a re-sent output adds no second Library item).
 - [ ] Edit `examples/apps/macro-daily-bias/app.toml` (drop `QMX_DATA_TOKEN`, `data_reads = ["market"]`, network keeps only the model route), `macro_bias.py` (bars from `QMX_MARKET_ROOT` through `qmf.data.series.SeriesStore`, M1 rolled up to the configured timeframe the way `qmx-agents/apps/mis/mis_core.py` rolls H1; `data_url` and the `Client` call go) and `config.json` (`data_url` becomes `market`, the store's series key for the symbol).
 - [ ] Edit `examples/apps/mql5-articles/app.toml` (no `secrets`, network `www.mql5.com` only, a `[provides.mql5-article]` contract with title, source URL, sha256, published date, markdown), `collector.py` (`run_daily` answers `outputs` with the pending articles, oldest first, at most `[publish] per_run` (200); the `Client`, the `8766` URL and the `library_search` lookup go; a row is marked landed at the next run's start once its ref reads landed) and `README.md`.
-- [ ] Edit `examples/apps/macro-daily-bias/tests/test_bias.py`, `qmx-agents/packages/qmx-apps/tests/test_shipped_apps.py`, `test_app2a.py`, `test_app2b.py` and `test_mql5_articles.py`. Create `qmx-agents/packages/qmx-apps/tests/test_job_outputs.py`.
+- [ ] Edit `examples/apps/macro-daily-bias/pyproject.toml` and `uv.lock`, and `examples/apps/weekend-watcher/pyproject.toml` and `uv.lock` (`qmx-agents` from the checkout as a path source, not GitHub at e27a5136 and 697b5a09; `httpx` declared in macro). Drop each manifest's dead `agents/*.yaml` entrypoint, which makes the supervisor create `memory.db`. `macro_bias.py` checks `config.json` is an object and words `content: null` as a refusal, not "None" (`LOOSE-ENDS.md` Q1).
+- [ ] Edit `examples/apps/macro-daily-bias/tests/test_bias.py` (it also checks the Authorization header the model fake receives), `qmx-agents/packages/qmx-apps/tests/test_shipped_apps.py`, `test_app2a.py`, `test_app2b.py` and `test_mql5_articles.py`. Create `qmx-agents/packages/qmx-apps/tests/test_job_outputs.py`.
 
 **Build.**
 
@@ -333,7 +475,7 @@ Phase 5, the trading node and external connections. Added by the validation of 2
 
 **Files.**
 
-- [ ] Edit `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py` (`:352-358`, the secret-name check is case-folded and the host's own names are refused).
+- [ ] Edit `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py` (`:352-358`, the secret-name check is case-folded and the host's own names are refused). `qmx/ctrader-client-id` and `qmx/ctrader-client-secret` join the refused names, and `HOST_SECRETS` and `qmx_host/host.py:223 HOST_VAULT` read one list, so a new host key cannot be missed in one of them (`LOOSE-ENDS.md` H6).
 - [ ] Create `qmx-agents/packages/qmx-apps/tests/test_manifest_host_secrets.py`.
 
 **Build.**
@@ -466,6 +608,8 @@ Phase 5, the trading node and external connections. Added by the validation of 2
 **Files.**
 
 - [ ] Edit `qmn/src/qmn/app/server.py` (pass the calendars from `qmn/src/qmn/time/calendars.py`), `qmn/src/qmn/app/alarms.py` (`open_at` reads them) and `qmn/src/qmn/app/operations.py` (`rotate_keys` re-reads the senders, `:477`).
+- [ ] In `alarms.py`, an `open_at` that raises pushes the alarm anyway instead of stalling every waiting push (`:383-392`), and an escalation not yet pushed is kept on the volume, so a restart still sends it (`:374`; `LOOSE-ENDS.md` F6).
+- [ ] The calendars the node's markets read hold 2027's closures, because the shipped data ends on 4 December 2026, and a calendar within 30 days of its end shows on the node's status and the host doctor (`LOOSE-ENDS.md` A3). Edit the `extensions/qmf-calendar-*` data files they read.
 - [ ] Create `qmn/tests/test_app_alarms_calendar.py`.
 
 **Build.**
@@ -501,6 +645,57 @@ Phase 5, the trading node and external connections. Added by the validation of 2
 
 @merge
 
+## Give every agent cTrader's MCP, on demo accounts only (C-36)
+
+Phase 5, the trading node and external connections. Added 2026-11-03 at his ask ("all agents under QMX should have the MCP connections"), narrowed by his correction. Agents get the server's tools as they are, with no read-only filter, order refusal or file-tool guard, and he keeps his accounts apart himself. The one control is that an agent's MCP tools act only on demo accounts. Research `research/46-mcp-connections.md`. Built facts. External MCP servers are already rows in `settings.toml [mcp_servers]` (`qmx-agents/packages/qmx-control/src/qmx_control/service.py:55-57`), vetted before every launch by listing their tools (`qmx-agents/packages/qma-harness/src/qma/harness/tools.py:1106-1145`), and offered to every copilot chat with no declared toolsets (`chat.py:1276-1282`). An engine agent step selects one with `"toolsets": ["mcp:<server>"]` (`qmx_engine/definition/model.py:145-160`). But a row with `credential_ref` is refused ("not wired yet", `tools.py:1053-1054`), an HTTP row gets no `headers` (`:1067-1068`), and an engine step's external tools are stopped by the guard unless `[claude] external_tools_unattended` names them (`guard.py:853-857`) and by the engine policy's name check (`qmx_engine/policy.py:39-45`). cTrader's Remote MCP (Spotware, May 2026) takes one bearer token per trading account and binds the session to that account, and its tools take no account argument. Its Local MCP acts on whatever account cTrader Desktop has open, so it cannot be held to demo and is not offered. Real step his. He copies one demo account's Remote MCP token from cTrader Web into the key row. Done when the Remote MCP is one Settings row whose token sits in Credential Manager, every copilot chat and any engine step naming `mcp:ctrader` gets its tools, and a token whose account is not a demo account on the Library's main is refused before any agent sees the server.
+
+**Depends on.** C-34, C-27.
+
+**Files.**
+
+- [ ] Edit `qmx-agents/packages/qma-harness/src/qma/harness/tools.py`. `server_config` (`:1043-1069`) resolves a row's `credential_ref` from the keyring at launch into an HTTP `Authorization` header, and the value is never written to the chat record (`home.py:495-555` already refuses a literal). Vetting (`:1106-1145`) calls the demo check below for a row with `venue = "ctrader"`.
+- [ ] Create `qmx-agents/packages/qma-harness/src/qma/harness/demo_only.py`. Through the vetting client, it calls the server's read tools (`get_balance`, then `get_accounts_list` where present) for the account id the session is bound to, and asks a reader the host passes in for that account's `world`. The server is offered only when the account is an `account` record on main with `world: demo` (C-34). A reply that names no account, an account with no record, or a live one refuses the server for agents, with a `needs_you` note. It runs at every launch, so a swapped token is caught at the next chat.
+- [ ] Edit `qmx-agents/packages/qmx-host/src/qmx_host/host.py` (pass the account reader over Library main to the harness) and `qmx-agents/packages/qmx-control/src/qmx_control/service.py` (`[mcp_servers]` rows accept `url`, `enabled`, `credential_ref` and `venue`; the shipped default gains a disabled `ctrader` row with `credential_ref = "qmx/ctrader-mcp"`; `[claude] external_tools_unattended` ships `ctrader/*`).
+- [ ] Add `qmx/ctrader-mcp` to C-27's refused host names in `qmx-agents/packages/qmx-apps/src/qmx_apps/manifest.py`, so no app can declare the token.
+- [ ] Create `qmx-agents/packages/qma-harness/tests/test_mcp_credential.py`, `test_demo_only.py` and `tools/lanes/fake_ctrader_mcp.py` (a fixture HTTP MCP server with the Remote tool list and a configurable account).
+
+**Build.**
+
+- [ ] cTrader Remote only. TradingView's official server (OAuth 2.1, no broker tools) and the MT5 servers (Windows, a running terminal, `account_info().trade_mode`) become later Settings rows on the same path. They are in BACKLOG, not here.
+- [ ] Engine steps. First probe whether listing `mcp__ctrader__*` in the step's `parameters.tools` passes `qmx_engine/policy.py:39-45` with no code change. If it does, the template guide says so and nothing in the engine changes. If it does not, the one-line change (the policy accepts the tools of the step's declared `mcp:` toolsets) is engine code, so it waits for his go (ruling 49). Copilot chats get the server either way.
+- [ ] The token expires with his cTrader Web session. A 401 at vetting leaves the server out with a note "copy a fresh cTrader MCP token".
+- [ ] Where it runs. Spotware hosts the server, and the chat or step reaches it from the host that launches it (This PC by default, `runs_on = "pc"`). A host in the trading profile runs no chats or agent steps (C-21).
+
+**You see.**
+
+- [ ] Settings, "cTrader for agents", with one place to paste a demo account's token. Chats and workflows can then read his demo account's prices, bars and positions and act on that demo account. A live token reads "refused, agents use demo accounts only".
+
+**Verify, unit.**
+
+- [ ] A row with `credential_ref` launches with the header and no token in the chat record. The fake bound to a demo account record is offered. The fake bound to a live account record, to an unknown account, or answering no account is refused with its note. A 401 leaves it out with the note. Run `uv run --project qmx-agents pytest packages/qma-harness/tests/test_mcp_credential.py packages/qma-harness/tests/test_demo_only.py -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. A copilot chat on `haiku` on a throwaway folder with the fake bound to a demo account record, asked for EURUSD's last H1 bar. Save `c36-copilot.log`. Pass when the chat calls `mcp__ctrader__get_trendbars` and answers from it.
+- [ ] Lane 3. The same with the fake bound to a live account record. Save `c36-live.log`. Pass when the chat starts without the server and the note says demo only.
+- [ ] Lane 4. An engine workflow with one agent step naming `mcp:ctrader`. Save `c36-engine.log`. Pass when the step calls a read tool, or the log shows the policy refusal the probe found and the PR body names the one engine line.
+- [ ] Lane 5. Swap the stored token to the live fake account between two chats. Save `c36-swap.log`. Pass when the second chat is refused.
+- [ ] Lane 6. Grep every lane log and the chat records for the token value. Save `c36-noleak.log`. Pass when none appears.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Seconds the demo check adds to a chat launch.
+- [ ] Probe. Lane 2.
+- [ ] Baseline. A launch with no external server.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lenses adversarial and edge-case, on the demo-only check and the token's path. The blast-radius fact is that every other `[mcp_servers]` row launches exactly as before, and a row with no `venue` skips the check.
+
+@merge
+
+
 ## Build the deliberate path to bind a live account (C-21)
 
 Phase 5, the trading node and external connections. Part C slice C-21, Part C AD-307, Level 0 AD-45, lead's call LC-X0-08 (two soaks shown, never enforced). Ledger CC-11 and CC-13. No live account is ever bound in this program. Real step none. Done when the connect dialog's "bind a live account" steps turn chats and agent steps off first and set `[host] trading_profile = true`, the node keeps a live-capable grant only then, and the binding card shows the two soaks.
@@ -512,7 +707,7 @@ Phase 5, the trading node and external connections. Part C slice C-21, Part C AD
 - [ ] Edit `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py` (the bind-live steps; today it has only `on_this_pc` at `:568` and the alarms at `:702`).
 - [ ] Create `qmx-agents/packages/qmx-host/src/qmx_host/trading_profile.py` (refusals for chats and agent steps) and `qmx-agents/packages/qmx-host/tests/test_trading_profile.py`.
 - [ ] Edit `qmx-agents/packages/qmx-host/src/qmx_host/host.py`. Chat routes mount unconditionally (`:1150`), and the host facts hard-code `chats` and `agent_steps` to True (`:1672-1673`). This PC's refusal of the profile already exists (`:1666`).
-- [ ] Edit `qmx_host/promote.py`, `qmx_host/host_route.py` and `qmx_host/node_link.py`. The trading-profile check (`host.py:1184-1188`) needs `place == name`, so This PC never sees a server's profile, and every live-world move answers `trading_profile_off` (`promote.py:360-365`). The server's profile must reach This PC through the node link.
+- [ ] Edit `qmx_host/promote.py`, `qmx_host/host_route.py` and `qmx_host/node_link.py`. The trading-profile check (`host.py:1184-1188`) needs `place == name`, so This PC never sees a server's profile, and every live-world move answers `trading_profile_off` (`promote.py:360-365`). The server's profile must reach This PC through the node link. The route trusts the account record's `world` and does not check its venue or owner tag, so the live check also requires the record's venue and owner to match the node it deploys to (`LOOSE-ENDS.md` F2).
 - [ ] Edit `qmx-agents/packages/qmx-control/src/qmx_control/service.py:55-76`, which has no `host` section (BACKLOG C-05c).
 - [ ] Edit `qmn/src/qmn/app/runtime.py` (`:2273-2276, 2283`) and `qmn/src/qmn/app/server.py` (`:50`, WORLD is DEMO). Keeping or discarding a live-capable grant, and reading the host facts on every reconcile tick (AD-307), is node code. First add a test that pins today's demo-only gate (C-12c review L1), then change it.
 - [ ] Edit `qmx-agents/packages/qmx-engine/src/qmx_engine/runner.py` (`placed()`, `:215-242`) so an agent step placed on a home in the trading profile is refused. This is a workflow-engine change, so it waits for his go (ruling 49; see `VALIDATION-2026-11-03.md`).

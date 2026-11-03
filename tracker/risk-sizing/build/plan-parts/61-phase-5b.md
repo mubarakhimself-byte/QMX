@@ -234,6 +234,7 @@ Phase 5, the trading node and external connections. Added by the validation of 2
 
 **Build.**
 
+- [ ] The adapter passes `OrderTags` on every order, because the no-tags path writes the 75-character command fingerprint as cTrader's `clientOrderId`, past cTrader's 50 (`qmn/src/qmn/venue/live.py:931`, `packages/qmf-venue/src/qmf/venue/encode.py:522-528`; `LOOSE-ENDS.md` B1). A test sends a fake order and reads a `clientOrderId` of 50 characters or fewer.
 - [ ] Write the grant store, the adapter and the four operations against a fake cTrader sign-in. No real account is touched. The demo account role stays the only one a live lane accepts (`runtime.py:2273-2276`).
 
 **You see.**
@@ -309,11 +310,197 @@ Phase 5, the trading node and external connections. Added by the validation of 2
 
 @merge
 
+## Make app installs pick up fresh qmf source and deleted files (C-26b)
+
+Phase 5, the trading node and external connections. Added by the loose-ends pass of 2026-11-03 (`LOOSE-ENDS.md` D1, a MUST before the first real trade; C-26 review HIGH). Built facts. the eight `qmf-*` packages (core, data, indicators, readings, registry, risk, structure, venue) keep uv's default cache keys (0 `cache-keys` in their `pyproject.toml`), and the trading-node lock installs them as wheels, so after a qmf edit a reinstalled node runs stale `qmf-risk` and `qmf-venue`, which are on the money path. A file deleted under `qmn`, `qmb` or `qml` stays in a reinstalled env, because the glob key takes the newest mtime. An app's `definition.hash` no longer pins what runs once path sources build the env (`qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py:474`). Real step none. Done when a qmf source edit and a deleted source file both reach a reinstalled app env, and the env's key covers the source it was built from.
+
+**Depends on.** C-26.
+
+**Files.**
+
+- [ ] Edit `packages/qmf-core/pyproject.toml`, `qmf-data`, `qmf-indicators`, `qmf-readings`, `qmf-registry`, `qmf-risk`, `qmf-structure` and `qmf-venue` (`tool.uv.cache-keys` cover `src/**`), and the `qmn`, `qmb` and `qml` keys so a deletion changes the key (a key over the file list, not only the newest mtime).
+- [ ] Edit `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py` (`:474`, the env key folds in a fingerprint of every path source's files, so a changed source builds a new env).
+- [ ] Edit `tools/tests/test_app_env_fresh.py`.
+
+**Build.**
+
+- [ ] Add the keys, the deletion rule and the env fingerprint, with tests.
+
+**You see.**
+
+- [ ] Nothing new. The node runs the risk and venue code that was landed.
+
+**Verify, unit.**
+
+- [ ] Edit a marker under `packages/qmf-risk/src`, reinstall the node env, and read the marker. Delete a fixture module under `qmn/src`, reinstall, and the import fails. An unchanged source reuses the env. Run `uv run pytest tools/tests/test_app_env_fresh.py -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. The trading node on a throwaway folder, a `qmf-venue` edit, a reinstall. Save `c26b-qmf.log`. Pass when the installed node serves the edited code.
+- [ ] Lane 3. A file deleted under `qmn/src`, a reinstall. Save `c26b-deleted.log`. Pass when the env no longer holds it.
+- [ ] Lane 4. A reinstall with no change. Save `c26b-cached.log`. Pass when the env is reused.
+- [ ] Lane 5. A `qmf-risk` edit reaching the QMB app env. Save `c26b-qmb.log`. Pass when the edit reaches it.
+- [ ] Lane 6. The lock file before and after. Save `c26b-lock.log`. Pass when `uv.lock` is unchanged.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Seconds for a reinstall with and without a source change.
+- [ ] Probe. Lanes 2 and 4.
+- [ ] Baseline. C-26's lanes 2 and 3.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lens verification-gap. The blast-radius fact is that `uv sync` at the root still resolves the same lock.
+
+@merge
+
+
+## Keep the node's position exact after partial fills, filled reads and reconnects (C-12e)
+
+Phase 5, the trading node and external connections. Added by the loose-ends pass of 2026-11-03 (`LOOSE-ENDS.md` B2, B3, B4, MUSTs before the first real trade). Built facts. A partly filled entry books the unit's full size, because `Sent` carries no filled quantity (`qmn/src/qmn/app/runtime.py:540-543`), so exits and closes size from a wrong position. The reconciler treats a FILLED order with no price, or an UNKNOWN order missing from the read-back, as absent (`qmn/src/qmn/app/reconciler.py:207-220`), and cTrader's reconcile lists pending orders, not filled ones, so a filled entry outside the read-back leaves a tagged position no unit holds and the kill does not cover. After a feed reconnect the first entry can size from a quote held from before the drop, because `FeedKeeper._drop` resets the books but keeps `_quotes` (`qmn/src/qmn/app/feed_keeper.py:256, 347-352`). Real step none. Done when a partial fill books its filled size, an order resolves as absent only when no venue position carries its label (and a found one keeps the venue's position id), and no entry sizes from a quote older than the last reconnect.
+
+**Depends on.** C-12d.
+
+**Files.**
+
+- [ ] Edit `qmn/src/qmn/app/runtime.py` (`Sent` carries the filled quantity; the unit's position and every later exit read it), `qmn/src/qmn/app/reconciler.py` (`:207-220`, look up positions by the order's label before absent) and `qmn/src/qmn/app/feed_keeper.py` (`_drop` clears `_quotes`; an entry waits for a fresh quote after a reconnect).
+- [ ] Create `qmn/tests/test_app_partial_fill.py`, `qmn/tests/test_app_reconcile_filled.py` and `qmn/tests/test_app_feed_reconnect.py`.
+
+**Build.**
+
+- [ ] Fix all three against the conformance venue and the fake cTrader. A partial fill's rest is not chased; the unit holds what filled.
+
+**You see.**
+
+- [ ] The node's position always matches cTrader's, including after a partial fill or a dropped feed.
+
+**Verify, unit.**
+
+- [ ] A fake that fills 0.03 of a 0.05 entry books 0.03, and the exit closes 0.03. A filled entry missing from the read-back is found by its label and adopted with the venue's position id. An order with no labelled position resolves absent. After a fake reconnect the first entry waits for a new quote. Run `uv run pytest qmn/tests/test_app_partial_fill.py qmn/tests/test_app_reconcile_filled.py qmn/tests/test_app_feed_reconnect.py -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. The dummy unit on a throwaway folder against the fake cTrader with a partial fill. Save `c12e-partial.log`. Pass when the journal, `positions` and the fake's book all read the filled size.
+- [ ] Lane 3. An entry the fake fills and leaves out of its pending list. Save `c12e-filled.log`. Pass when reconcile adopts it by label and the kill closes it.
+- [ ] Lane 4. Drop the fake feed for 30 s while the quote moves 50 points, then restore it. Save `c12e-reconnect.log`. Pass when the first entry's stop distance comes from a quote after the restore.
+- [ ] Lane 5. An UNKNOWN order with no labelled position. Save `c12e-absent.log`. Pass when it resolves absent and the market unblocks.
+- [ ] Lane 6. The C-12a dummy trade, unchanged. Save `c12e-regress.log`. Pass when it trades exactly as at the parent.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Milliseconds for one reconcile pass with 20 orders.
+- [ ] Probe. Lane 3.
+- [ ] Baseline. The parent's reconcile pass.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lenses edge-case and adversarial, on the money path. The blast-radius fact is that one handler serves QMB and the node, so QMB's backtest of the dummy reads exactly as at the parent.
+
+@merge
+
+
+## Make the node's status and kill tell the truth (C-35)
+
+Phase 5, the trading node and external connections. Added by the loose-ends pass of 2026-11-03 (`LOOSE-ENDS.md` C1, a MUST before the first real trade, with B5 and the first part of C3 riding along because they are the same kill he sees). Built facts. The status word can read "Trading" while a risk stop or a narrow kill holds, because `_status` reads `target.level_at("all")` and lists only `repeated_fault` stand-downs (`qmn/src/qmn/app/operations.py:558-600`). A kill or pause at an `account` or `deployment_id` scope the node does not hold is accepted and does nothing. A hold at `instrument:<symbol>` never blocks an entry, because the guard checks `instrument:<market id>`, and a resume naming the symbol does not clear it. The node journals a kill rise but not his resume (`runtime.py:2060-2072`), so the watcher reads Well after 24 h though the kill may hold. Real step none. Done when the status word and reasons name every risk stop and every kill at any scope, a scope the node does not hold is refused with its reason, symbol and market id scopes mean the same market, and every resume is journalled.
+
+**Depends on.** C-12d, C-13.
+
+**Files.**
+
+- [ ] Edit `qmn/src/qmn/app/operations.py` (`_status` reads every scope's level and every stand-down and risk stop; a kill, pause or resume at a scope the node does not hold answers `unknown_scope`), `qmn/src/qmn/app/runtime.py` (the guard and the resume map a symbol to its market id; the resume that lowers a kill is journalled beside the rise).
+- [ ] Create `qmn/tests/test_app_status_truth.py` and `qmn/tests/test_app_kill_scopes.py`.
+
+**Build.**
+
+- [ ] One status word with every reason. A refused scope says which scopes the node holds.
+
+**You see.**
+
+- [ ] The node reads "Paused, risk stop on XAUUSD" or "Killed at EURUSD", never "Trading" while anything holds, and a kill on a market the node does not trade says so.
+
+**Verify, unit.**
+
+- [ ] A risk stop on one market reads in the word and the reasons. A RED at `instrument:XAUUSD` blocks an XAUUSD entry and reads in the word. A resume by symbol clears a hold set by market id. A kill at an unknown account answers `unknown_scope`. A resume journals one row. Run `uv run pytest qmn/tests/test_app_status_truth.py qmn/tests/test_app_kill_scopes.py -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. The dummy on a throwaway folder, a risk stop forced on its market, then `status`. Save `c35-riskstop.log`. Pass when the word is not "Trading" and the reason names the market.
+- [ ] Lane 3. A kill at `instrument:<symbol>`, then the next entry signal. Save `c35-symbol.log`. Pass when the entry is blocked.
+- [ ] Lane 4. A kill at an account the node does not hold. Save `c35-unknown.log`. Pass when it answers `unknown_scope` and nothing changes.
+- [ ] Lane 5. A kill, his resume, then the B21 watcher's read. Save `c35-resume.log`. Pass when the journal holds both rows and the watcher reads Well only after the resume.
+- [ ] Lane 6. A kill at `all`, unchanged. Save `c35-all.log`. Pass when it closes everything as at the parent.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Milliseconds per `status` call with 10 markets.
+- [ ] Probe. Lane 2.
+- [ ] Baseline. The parent's `status`.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lenses adversarial and edge-case, on the kill path. The blast-radius fact is that a kill at `all` acts exactly as at the parent.
+
+@merge
+
+
+## Land the venue, instrument and account records a deploy reads (C-34)
+
+Phase 5, the trading node and external connections. Added by the loose-ends pass of 2026-11-03 (`LOOSE-ENDS.md` E1, the largest MUST before the first real trade). Built facts. promote reads `account`, `venue` and `instrument` items from the Library's main (`qmx-agents/packages/qmx-host/src/qmx_host/promote.py:355`, `:557`, `:606`), and nothing lands them there. The CCXT refresh template writes record files as run artifacts only, and no cTrader record source exists (no `ProtoOASymbolByIdReq` or account-list read in `packages/qmf-venue` or `qmn`). C-14's rehearsal tests seed items, so only his real run would find the gap. Main is moved by the operator, by an agent merge, or by the store's own engine with act `land` (`qmx-agents/packages/qmx-library/src/qmx_library/principal.py:72-74`). Real step none; his own sign-in in C-14's real run lands his real records. Done when, after a bind, the host lands one `account` record, one `venue` record and one `instrument` record per market he names, all read from cTrader by the node, with `world` as cTrader states it, and a promote of the dummy onto that account finds all three.
+
+**Depends on.** C-12d, C-23, C-02.
+
+**Files.**
+
+- [ ] Edit `packages/qmf-venue/src/qmf/venue/ctrader.py` and `encode.py` (the account-list read with each account's live flag, `ProtoOATraderReq` for broker, deposit currency, leverage and position mode, and `ProtoOASymbolByIdReq` for digits, pip position, lot size and volume steps).
+- [ ] Edit `qmn/src/qmn/venue/live.py` (the three reads) and `qmn/src/qmn/app/operations.py` (a `records` read operation answering the bound account's facts and each named symbol's facts, holding no secret).
+- [ ] Create `qmx-agents/packages/qmx-host/src/qmx_host/venue_records.py`. It maps the node's answer to the `account`, `venue` and `instrument` kinds' fields and lands them on main as the store's engine with act `land`, as a new version only when the facts changed. `world` comes from the venue's live flag, never from an argument.
+- [ ] Edit `qmx-agents/packages/qmx-host/src/qmx_host/connect_node.py` (after a passing self-test, land the records) and add a daily refresh job beside the records job.
+- [ ] Create `qmn/tests/test_app_records.py` and `qmx-agents/packages/qmx-host/tests/test_venue_records.py`.
+
+**Build.**
+
+- [ ] cTrader only. The CCXT refresh template's run files are not landed here, because nothing binds a CCXT venue yet (`LOOSE-ENDS.md` G1); that stays in BACKLOG.
+- [ ] A record carries no token, key or password, and the kinds refuse one at put.
+- [ ] A demo account lands with `world: demo`. A live account read lands with `world: live`, and promote's live checks (C-21) still refuse it until his deliberate path.
+
+**You see.**
+
+- [ ] After his sign-in, his account, cTrader and each market he picked appear in the Library with their facts, and the promote card finds them.
+
+**Verify, unit.**
+
+- [ ] A fake cTrader answer lands one account record with `world: demo`, one venue record and one instrument record per named symbol, each passing its kind's checker. A second land with the same facts adds no version. A changed lot step adds one. A promote of the dummy onto the fake account builds its deployment. Run `uv run pytest qmn/tests/test_app_records.py -q` and `uv run --project qmx-agents pytest packages/qmx-host/tests/test_venue_records.py -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. A throwaway folder, the node bound to the fake cTrader, the connect steps. Save `c34-landed.log`. Pass when main holds the three kinds with the fake's facts.
+- [ ] Lane 3. A promote of the dummy onto that account. Save `c34-promote.log`. Pass when the deployment is built and its `snapshots` hold the three records.
+- [ ] Lane 4. The daily refresh twice with no change. Save `c34-refresh.log`. Pass when no new version lands.
+- [ ] Lane 5. The fake answering a live account. Save `c34-live.log`. Pass when it lands `world: live` and a live promote is refused `trading_profile_off`.
+- [ ] Lane 6. Grep the landed records and every lane log for token, key and password values. Save `c34-noleak.log`. Pass when none appears.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Seconds from a passing self-test to the records on main, for five symbols.
+- [ ] Probe. Lane 2.
+- [ ] Baseline. None, first measure.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lenses adversarial and edge-case, on authority over main and on `world`. The blast-radius fact is that no other kind lands on main by this path, and an agent still cannot land one.
+
+@merge
+
+
 ## Write the first real start as a script he runs (C-14)
 
 Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), Level 0 AD-37, R1-B-04. Ruling 37 (the sign-in waits until there is something to use it for, and only this step waits on it). The real step runs on his own folder after G-LAND and G-DEMO. Done when `tools/first_real_start.py` checks each fact and prints PASS or FAIL per line, passes in rehearsal on a throwaway folder against the conformance venue, and is ready for his real run.
 
-**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-13, C-23, C-26, B15.
+**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-34, C-35, B15.
 
 **Files.**
 
