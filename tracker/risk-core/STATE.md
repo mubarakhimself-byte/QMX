@@ -161,8 +161,10 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - **Know who ranks.** Ranking rubric: `linking/RANKING.md`. The Fable judge scores performance, survival (a blocker), evidence, asymmetry, fit and self-configuring, then an Opus reviewer attacks the result.
     - **Efficiency and asymmetry in agent use.** Combine agents where one can do the job; no agent for its own sake.
     - **Research is not anchored** to the Book or to a dollar budget ("in research, that's bias"). Portfolio optimisation is studied at unit, cluster and portfolio level in general. R4 told.
-    - **Papers hold unit and reading seeds** (for example multi-level order flow imbalance for scalping). Two uses: derive units, and build what QMX needs to support them (data, MIS readings, scoping). Captured in `linking/IDEA-BANK.md` by Stage A dissectors; not ranked in the risk funnel.
+    - **Papers hold unit and reading seeds** (for example multi-level order flow imbalance for scalping). Two uses: derive units, and build what QMX needs to support them (data, MIS readings, scoping). Captured in `linking/UNIT-IDEA-BANK.md` by Stage A dissectors; not ranked in the risk funnel.
     - The alphaXiv assistant links logic well when given time. Stage B may use it for the top candidate combinations, through the browser, one agent at a time. Its "auto research" harness is not needed. New paper folders are allowed.
+
+28. **M34: the deliverable is unchanged.** All of this serves the first message of 3 Nov: a malleable, self-configuring, extensible **risk-and-sizing template for the unit** that ships through builders. The idea bank is renamed the **unit idea bank** (`linking/UNIT-IDEA-BANK.md`).
 
 ## The unit build is not ours to audit (operator, 2026-11-01)
 

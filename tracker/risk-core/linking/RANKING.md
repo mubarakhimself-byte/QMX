@@ -29,7 +29,7 @@ For every decision point:
 
 ## What is not ranked here
 
-Some ideas are trading signals or market readings rather than risk and sizing, for example multi-level order flow imbalance for scalping. These go to `linking/IDEA-BANK.md` as unit or reading seeds. Each seed records:
+Some ideas are trading signals or market readings rather than risk and sizing, for example multi-level order flow imbalance for scalping. These go to `linking/UNIT-IDEA-BANK.md` as unit or reading seeds. Each seed records:
 - the source;
 - the signal;
 - the style and instruments it suits;
