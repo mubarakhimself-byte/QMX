@@ -1,0 +1,668 @@
+# Stage A components, cluster A4: template mechanics, versioning, agents and workflows, observability.
+# Brief: linking/STAGE-A-BRIEF.md. Paths are relative to tracker/risk-core unless absolute.
+# Evidence for software patterns is graded for trading: they run in production in their own field,
+# but none was ever tested on a trading unit, so they read "idea" with that note.
+# R4 paper claims are the alphaXiv assistant's unless R6 read the paper (then "R6 read").
+# [judgment] marks this dissector's own opinion. QMA flag = touches the agent system, flagged not designed (M32).
+
+# ---------------------------------------------------------------- A. Control loops and self-tuning
+
+- id: A4-template-agents-telemetry-001
+  name: Learner that publishes a target with low and high bounds (VPA recommender)
+  source: research/R7-software-patterns-self-configuring.md:102-133 (Kubernetes VPA components.md and flags.md, CHECKED)
+  kind: control loop
+  what_it_does: >-
+    A separate learner reads one object's own history as a decaying histogram (a sample loses half its
+    weight after 24 hours) and writes a recommended target (90th percentile plus a 15 % margin) with a
+    lower bound (50th) and an upper bound (95th) into the object's status. It never applies the value
+    itself; it only publishes it where people and other loops can inspect it.
+  inputs:
+    - the object's own past usage samples, decayed by age
+    - the owner's minAllowed and maxAllowed limits
+    - a confidence multiplier over a 24 hour interval
+  outputs:
+    - target value, lower bound, upper bound in the status
+  assumptions:
+    - the history is the object's own and relevant to its next period
+    - a percentile of past use is a fair estimate of what is needed next
+    - there is a separate applier (see 002) so a bad learn does not act at once
+  levels: [unit, position]
+  instrument_classes: [none (software)]
+  class_notes: >-
+    For a unit the history would be its own closed trades in R or money per market; decay half-life
+    would need to differ by trade rate (a scalper with 40 trades a day against an ORB with 2 a week).
+    Crypto 24/7 and FX 24/5 records have different calendar decay; futures need per-contract records.
+  styles_timeframes: any style; the decay window must be set in trades, not hours, for low-frequency units [judgment]
+  evidence: idea (production software in its own field, Kubernetes VPA, CHECKED; never tested on a trading unit)
+  known_failures:
+    - a percentile of a short or regime-shifted record is noise; the source has floors (25 millicores, 250 MB) to stop collapse
+    - the 1.2x bump after an out-of-memory event shows asymmetric reaction is built in, not learned
+  performance_note: >-
+    [judgment] lets risk_fraction or a brake threshold move toward what the unit's own record supports,
+    instead of a placeholder, which is the self-configuring he asked for (A3, D29).
+  survival_note: >-
+    [judgment] safe only because it does not apply; bounds published beside the target let a reader see
+    how unsure the learn is.
+  ledger_ids: [number_motion_mode, calibration_min_trades, calibration_shrink_k, calibration_cadence_trades, risk_fraction]
+  new_variables:
+    - name: recommendation_decay_half_life
+      line: age at which one trade's weight in the learner halves, in trades or days
+    - name: recommendation_bounds
+      line: low and high bound published beside each learned target
+  qmx_layer: [X1, X2]
+  link_hints:
+    - A4-template-agents-telemetry-002, the applier this learner needs; together they are the VPA shape R7 calls the closest match
+    - A4-template-agents-telemetry-080, the shipped motion engine is a learner with no applier
+    - A4-template-agents-telemetry-006, the HotSpot guard decides when a learned value is distrusted
+    - Kelly or house-money sizing rules in A1, which would be one family of learner here
+
+- id: A4-template-agents-telemetry-002
+  name: Applier with owner-chosen authority modes (VPA update modes)
+  source: research/R7-software-patterns-self-configuring.md:117-133 (VPA quickstart and features.md, CHECKED); X1 idea 36 (adopt at next flat)
+  kind: control loop
+  what_it_does: >-
+    A separate updater applies a learned value only in the mode the owner set per object or per field.
+    Off means the value is calculated and shown but nothing changes. Initial means it is applied only when
+    a new pod starts. Recreate and InPlace apply it live, InPlace without restarting.
+  inputs:
+    - the learner's target and bounds
+    - the owner's update mode per object or field
+    - disruption budgets
+  outputs:
+    - the value actually in force
+  assumptions:
+    - the owner can pick a mode per number, not one switch for everything
+    - "at start" has a clean trading meaning (flat, or a new position)
+  levels: [unit, position]
+  instrument_classes: [none (software)]
+  class_notes: >-
+    "Initial" maps to "apply when flat or at a new position"; for units holding overnight (indices, swing
+    FX) flat moments are rare, so Initial may mean next session open. Crypto has no session break.
+  styles_timeframes: all; scalpers go flat often so Initial is cheap for them, swing units rarely [judgment]
+  evidence: idea (production software, Kubernetes VPA, CHECKED)
+  known_failures:
+    - QMX today parses authority and applies_to_open_positions and never reads them (G8 3.10), so a mode field without an applier silently does nothing
+  performance_note: >-
+    [judgment] shadow first then live lets a better tuned value earn its place without a new unit version.
+  survival_note: >-
+    [judgment] Off and Initial keep a bad learned value away from open trades; InPlace on an open
+    position is the risky mode and should be the rarest.
+  ledger_ids: [applies_to_open_positions, number_motion_mode]
+  new_variables:
+    - name: number_authority_mode
+      line: off (shadow), at_flat, at_new_position, live, per number
+  qmx_layer: [X1, X2, X3]
+  link_hints:
+    - A4-template-agents-telemetry-001, the learner it applies
+    - A4-template-agents-telemetry-081, NumberSpec authority is the field it would fill
+    - A4-template-agents-telemetry-030, shadow-mode value rows (would_have) are what Off produces
+
+- id: A4-template-agents-telemetry-003
+  name: Applier safety limits (eviction tolerance, change threshold, infeasible-retry tracking)
+  source: research/R7-software-patterns-self-configuring.md:123-126 (VPA flags.md, CHECKED)
+  kind: control loop
+  what_it_does: >-
+    The VPA updater changes at most 50 % of replicas at once, needs at least 2 replicas, applies in place
+    only when the recommendation differs by more than 10 %, and remembers failed resize attempts so it does
+    not retry them forever.
+  inputs:
+    - learned target, current value
+    - how many objects of the group are being changed now
+    - history of failed applications
+  outputs:
+    - apply or skip, per object
+  assumptions:
+    - small differences are noise and not worth a change
+    - changing many objects at once is a shared risk
+  levels: [unit, cluster, portfolio]
+  instrument_classes: [none (software)]
+  class_notes: >-
+    For many units of one methodology across classes, a cap on how many may retune in one window stops all
+    FX scalpers moving their size the same day on the same shared move.
+  styles_timeframes: all
+  evidence: idea (production software, CHECKED)
+  known_failures:
+    - a dead band that is too wide never applies; one that is too narrow churns
+  performance_note: >-
+    [judgment] avoids churn (tiny resizes that cost spread and break comparability of records).
+  survival_note: >-
+    [judgment] a cap on simultaneous retunes is a hedge against a shared bad learn across units.
+  ledger_ids: [calibration_cadence_trades]
+  new_variables:
+    - name: retune_dead_band
+      line: smallest relative change worth applying to a number
+    - name: retune_share_cap
+      line: most units of one cluster that may change a number in one window
+  qmx_layer: [X1, X2]
+  link_hints:
+    - A4-template-agents-telemetry-002, limits on the applier
+    - discrete size steps (A1 size_levels), the same anti-churn idea in sizing
+
+- id: A4-template-agents-telemetry-004
+  name: Direction-split motion with stabilization window, rate caps and tolerance (HPA behavior)
+  source: research/R7-software-patterns-self-configuring.md:86-100 (Kubernetes HPA docs, CHECKED)
+  kind: control loop
+  what_it_does: >-
+    Scale-up and scale-down have separate settings. Before scaling down, the controller takes the highest
+    recommendation of the last 300 seconds (a rolling maximum), so one low reading does not cut; each
+    direction has a cap on how much can change per period; a ratio within 10 % of target means no change.
+    A select policy picks the most or least cautious of several rules.
+  inputs:
+    - current value, desired value from evidence
+    - per-direction window, per-direction rate cap, tolerance
+  outputs:
+    - the next value
+  assumptions:
+    - the costs of moving too fast differ by direction
+    - recent history of recommendations is stored
+  levels: [unit, cluster, portfolio]
+  instrument_classes: [none (software)]
+  class_notes: >-
+    R7 notes QMX would point the defaults the other way: cut fast, grow slowly. Windows should be in
+    trades for scalpers and in sessions for ORB and swing units.
+  styles_timeframes: all; directly answers "size down, but not quickly" (A25) when the down window is long
+  evidence: idea (production software, CHECKED)
+  known_failures:
+    - a long down window delays a cut that a real decay needs; it must sit beside a fast hard brake
+  performance_note: >-
+    [judgment] stops a good unit being cut by one bad day, keeping its growth.
+  survival_note: >-
+    [judgment] safe only with a separate fast brake; on its own it is a deliberate delay.
+  ledger_ids: [drift_size_down_step, grow_back_rule, size_levels]
+  new_variables:
+    - name: motion_window_down
+      line: span over which the cautious (highest) recommendation is taken before cutting
+    - name: motion_window_up
+      line: span over which evidence must hold before growing
+    - name: motion_rate_cap
+      line: most a number may move per period, per direction
+    - name: motion_tolerance
+      line: band around target inside which nothing moves
+  qmx_layer: [X1, X2, X3]
+  link_hints:
+    - A4-template-agents-telemetry-005, missing-data handling from the same controller
+    - TCP graded cut and AIMD (011, 012), the severity part this lacks
+    - drift handling in A2 (live drift size-down), which needs exactly these knobs
+
+- id: A4-template-agents-telemetry-005
+  name: Missing data treated as no change in the cautious direction (HPA)
+  source: research/R7-software-patterns-self-configuring.md:96 (HPA docs, CHECKED)
+  kind: control loop
+  what_it_does: >-
+    When some metrics are missing, the controller assumes the missing pods use 100 % of target on a
+    scale-down and 0 % on a scale-up. If the result reverses direction or sits inside tolerance, nothing
+    happens. Missing evidence can never push the value in the risky direction.
+  inputs:
+    - which inputs are present, which are missing
+  outputs:
+    - a recommendation computed with cautious fill-ins
+  assumptions:
+    - the cautious direction is known for each number
+  levels: [unit, account]
+  instrument_classes: [none (software)]
+  class_notes: >-
+    Feed gaps differ by class: crypto venue outages, FX weekend, futures session breaks, stock halts.
+    The cautious fill-in for a size number is "no growth", for a brake threshold "no loosening".
+  styles_timeframes: all
+  evidence: idea (production software, CHECKED)
+  known_failures:
+    - if the cautious direction is mislabelled for a number, missing data becomes a ratchet the wrong way
+  performance_note: >-
+    [judgment] neutral; it blocks growth on bad data only.
+  survival_note: >-
+    [judgment] strong; matches the R4 chat-08 rule "bad data is risk state unknown, never calm".
+  ledger_ids: [decision_freshness_bound, board_stale_after]
+  new_variables:
+    - name: cautious_direction
+      line: for each number, which way a missing input must push it (never risky)
+  qmx_layer: [X1, X3]
+  link_hints:
+    - A4-template-agents-telemetry-058, the per-piece fail mode declaration this specialises
+    - A4-template-agents-telemetry-104, the agent risk service maps stale proposals to a conservative default the same way
+
+- id: A4-template-agents-telemetry-006
+  name: Guarded guess with fallback, named reasons and a trip counter that freezes (HotSpot JIT)
+  source: research/R7-software-patterns-self-configuring.md:152-169 (OpenJDK globals.hpp, compiler_globals.hpp, deoptimization.hpp, CHECKED)
+  kind: control loop
+  what_it_does: >-
+    Code runs on a slow, always-correct path first; hot code is compiled with guesses from the profile.
+    When a guess fails, execution falls back with a named reason and a graded action (just interpret,
+    maybe recompile, invalidate and recompile, invalidate and never compile). Counters cap guessing per
+    site (4) and per method (100); after 400 recompiles a method stays on the safe path for good.
+  inputs:
+    - the guess (a tuned value), the guard condition that tests it
+    - per-number counts of failed guesses
+  outputs:
+    - keep, revert to default, revert and freeze
+    - a named reason per revert
+  assumptions:
+    - a safe default exists for every tuned number
+    - a guard condition can be checked cheaply at run time
+  levels: [unit, position]
+  instrument_classes: [none (software)]
+  class_notes: >-
+    The guard for a tuned size or stop would read class-specific facts: spread state for FX and CFDs,
+    funding and venue state for crypto, roll and expiry state for futures, halts for stocks.
+  styles_timeframes: all; scalpers produce guard trips fast, so freezes come sooner for them [judgment]
+  evidence: idea (production software, CHECKED source)
+  known_failures:
+    - a freeze after N trips can lock a number at a default that is itself wrong for a new class
+  performance_note: >-
+    [judgment] lets aggressive tuned values run when their assumption holds, which is the performance case.
+  survival_note: >-
+    [judgment] every tuned value has a way back to the default, and a number that keeps failing stops tuning.
+  ledger_ids: [number_motion_mode, calibration_min_trades]
+  new_variables:
+    - name: tuned_value_guard
+      line: the condition that must hold for a tuned number to stay in force
+    - name: guard_trip_count
+      line: failed guesses counted per number
+    - name: guard_freeze_limit
+      line: trips after which a number freezes at its default and is flagged for him
+  qmx_layer: [X1, X2, X3]
+  link_hints:
+    - A4-template-agents-telemetry-007, Simplex adds a region-wide fallback with dwell time
+    - A4-template-agents-telemetry-009, PID_Compact returns to the previous mode on a failed tune
+    - A4-template-agents-telemetry-031, every revert carries a reason code like OpenFeature
+    - R7 pattern 5 combines 006, 007 and 009
+
+- id: A4-template-agents-telemetry-007
+  name: High-performance controller with a verified fallback and a dwell time (Simplex architecture)
+  source: research/R7-software-patterns-self-configuring.md:471-480 (Jager et al. arXiv 2503.10559 on Sha 2001, CHECKED secondary)
+  kind: control loop
+  what_it_does: >-
+    A complex, adaptive controller runs while the system stays inside a safe region. A decision module
+    predicts one step ahead; if the state would leave the safe region, it switches to a simple controller
+    designed to guarantee safety. It switches back only after a dwell time, to avoid flipping between them.
+  inputs:
+    - predicted next state (open risk, drawdown)
+    - the safe region boundary
+    - dwell time
+  outputs:
+    - which controller is in charge
+  assumptions:
+    - a simple sizer exists that can always recover from inside the safe region
+    - a one-step prediction of open risk and drawdown is reliable
+  levels: [unit, account]
+  instrument_classes: [none (software)]
+  class_notes: >-
+    The one-step worst move differs hugely by class (FX majors small, crypto wicks and index weekend gaps
+    large), so the safe region must be computed per class, as R6 T-06 says for cushion sizing.
+  styles_timeframes: all
+  evidence: idea (control engineering, secondary paper read)
+  known_failures:
+    - gaps beyond the assumed worst move leave the region in one step, before the switch can help
+  performance_note: >-
+    [judgment] lets a tuned or Kelly-style sizer run aggressively most of the time.
+  survival_note: >-
+    [judgment] gives "safe while it tunes itself" a named fallback; strength depends on the gap model.
+  ledger_ids: [risk_fraction, open_risk_at_stop, equity_drawdown_halt, kill_line_distance]
+  new_variables:
+    - name: safe_region_bound
+      line: projected open risk and drawdown past which the fixed sizer takes over
+    - name: fallback_dwell
+      line: time or trades the fixed sizer keeps control before the tuned one may return
+  qmx_layer: [X1, X2, X3]
+  link_hints:
+    - cushion sizing (Hsieh 2026, A1 or A2), which defines the safe region formally
+    - A4-template-agents-telemetry-006, per-number fallback inside the region
+    - A4-template-agents-telemetry-134, SwingGuard four states are the same idea with hysteresis
+
+- id: A4-template-agents-telemetry-008
+  name: Autonomic manager per level over shared knowledge, with the goal-error warning (MAPE-K)
+  source: research/R7-software-patterns-self-configuring.md:458-469 (Kephart and Chess 2003 PDF, CHECKED)
+  kind: control loop
+  what_it_does: >-
+    Each managed element has one manager that monitors, analyses, plans and executes over shared
+    knowledge, acting within policies people set. Managers can stack: each level manages the one below.
+    The authors warn that self-managing systems magnify errors in the goals people specify.
+  inputs:
+    - high-level objectives and policies from the operator
+    - monitored state of the element
+  outputs:
+    - planned and executed adaptations
+  assumptions:
+    - goals are stated correctly and are few
+    - behaviour across many managers stays stable (named as an open problem)
+  levels: [unit, cluster, portfolio, account]
+  instrument_classes: [none (software)]
+  class_notes: no class content; the levels map onto unit, Book, BMS and account
+  styles_timeframes: all
+  evidence: idea (vision paper, no trading test)
+  known_failures:
+    - emergent behaviour across many managers is unsolved in the source; units tuning together can herd
+  performance_note: >-
+    [judgment] vocabulary only; it does not add growth by itself.
+  survival_note: >-
+    [judgment] the goal-error warning argues for few, explicit, range-checked operator inputs.
+  ledger_ids: []
+  new_variables: []
+  qmx_layer: [X1]
+  link_hints:
+    - A4-template-agents-telemetry-018, small loops per level is the Kubernetes form of this
+    - A4-template-agents-telemetry-003, retune share cap is one answer to the herding problem
+
+- id: A4-template-agents-telemetry-009
+  name: Self-tuning as a mode the block enters and leaves, with hard output limits and a chosen error reaction (PID_Compact)
+  source: research/R7-software-patterns-self-configuring.md:438-452 (Siemens TIA V20 docs, CHECKED in part; mode list SNIPPET)
+  kind: control loop
+  what_it_does: >-
+    A controller block tunes its own parameters in a tuning mode, then runs in automatic mode. If tuning
+    fails it cancels and returns to the mode it came from. Absolute output limits clamp the value even in
+    manual mode. The user chooses the reaction to an error: zero, hold the current value, or a substitute.
+  inputs:
+    - process value, set point, tuning request
+    - absolute output limits, chosen error reaction
+  outputs:
+    - output value, mode
+  assumptions:
+    - a previous good parameter set is stored to return to
+  levels: [unit]
+  instrument_classes: [none (software)]
+  class_notes: no class content
+  styles_timeframes: all
+  evidence: idea (industrial controller docs; mode list and LoadBackUp only seen in snippets)
+  known_failures:
+    - Siemens itself warns that "hold" and "substitute" error reactions can break process limits
+  performance_note: >-
+    [judgment] neutral.
+  survival_note: >-
+    [judgment] hard limits that clamp even manual input mean his own override cannot pass an account cap.
+  ledger_ids: [max_position_size_lots, risk_fraction]
+  new_variables:
+    - name: tuning_mode
+      line: inactive, tuning, automatic, manual, per tunable block
+    - name: tuning_failure_reaction
+      line: what a block does when tuning fails (return to previous values by default)
+  qmx_layer: [X1, X2]
+  link_hints:
+    - A4-template-agents-telemetry-006, fallback on failed guess
+    - A4-template-agents-telemetry-043, policy limits above every level are the config form of hard output limits
+    - A4-template-agents-telemetry-058, error reaction choice is a fail mode
+
+- id: A4-template-agents-telemetry-010
+  name: Strategies, tactics and operators with utility and cost (Rainbow and Stitch)
+  source: research/R7-software-patterns-self-configuring.md:482-488 (Vogel and Giese arXiv 1805.08679, CHECKED secondary)
+  kind: control loop
+  what_it_does: >-
+    Adaptation is written as condition-action pairs on three levels: operators (one system command),
+    tactics (one adaptation step) and strategies (which order tactics). Each step carries cost and benefit
+    attributes, and the strategy is picked by utility preferences.
+  inputs:
+    - conditions on monitored state
+    - catalogue of tactics with cost and benefit
+  outputs:
+    - the chosen sequence of adaptation steps
+  assumptions:
+    - costs and benefits of each step can be stated in advance
+  levels: [unit, cluster, portfolio]
+  instrument_classes: [none (software)]
+  class_notes: no class content
+  styles_timeframes: all
+  evidence: idea (research framework, secondary read)
+  known_failures:
+    - the source notes Stitch checks consistency only by watching effects, not beforehand
+  performance_note: >-
+    [judgment] declared costs per brake step (cut half, pause entries, flatten) let a planner pick the
+    cheapest step that works instead of always the biggest.
+  survival_note: >-
+    [judgment] neutral; depends on the tactics catalogue.
+  ledger_ids: [brake_state]
+  new_variables:
+    - name: brake_tactic_cost
+      line: declared expected cost of each brake step (growth given up)
+  qmx_layer: [X1, X3]
+  link_hints:
+    - trading states ACTIVE, REDUCING, HALTED, RESTORE (A4-template-agents-telemetry-063) as the tactics
+    - graded brakes in A2
+
+- id: A4-template-agents-telemetry-011
+  name: Grow on closed evidence, cut by signal severity, restart small after idle (TCP congestion control)
+  source: research/R7-software-patterns-self-configuring.md:48-61 (RFC 5681 sections 3.1, 3.2, 4.1, CHECKED)
+  kind: control loop
+  what_it_does: >-
+    The window grows only on acknowledgements (closed evidence), fast at first then about one segment per
+    round trip. A mild loss signal halves it; a timeout drops it to one segment. A connection idle longer
+    than the timeout restarts at a small window. Growth is counted in bytes acknowledged, so a receiver
+    cannot inflate the window by splitting acknowledgements.
+  inputs:
+    - closed outcomes (acknowledgements), loss signals graded by severity, idle time
+  outputs:
+    - the window (in QMX, a size or budget)
+  assumptions:
+    - the severity of each loss signal can be classified
+  levels: [unit, position]
+  instrument_classes: [none (software)]
+  class_notes: >-
+    Severity classes would differ: a stop-out versus a fast-invalidation cut; a gap through the stop in
+    index CFDs or crypto is a "timeout"-class event; an FX spread spike at rollover is mild.
+  styles_timeframes: all; idle restart matters most for ORB and session units that go quiet between opens [judgment]
+  evidence: idea (production networking standard, CHECKED)
+  known_failures:
+    - counting growth in trade count lets many tiny trades inflate size; the source counts in bytes, QMX would count in R or money
+  performance_note: >-
+    [judgment] fast early growth on proven evidence is an accelerator shape.
+  survival_note: >-
+    [judgment] graded cuts and restart-after-idle stop a stale unit coming back at full size.
+  ledger_ids: [grow_back_rule, size_ramp_to_full, loss_counting_rule, fast_invalidation_cut_r]
+  new_variables:
+    - name: loss_signal_severity_class
+      line: mild or severe class per exit kind, choosing the size of the cut
+    - name: idle_restart_threshold
+      line: quiet time after which a unit restarts below full size
+  qmx_layer: [X2, X3]
+  link_hints:
+    - A4-template-agents-telemetry-012, Netflix AIMD applies the same idea to a service limit
+    - A4-template-agents-telemetry-013, Guava warm-up gives the ramp shape after idle
+    - exit reason codes (A4-template-agents-telemetry-150), severity needs the exit kind on every trade row
+
+- id: A4-template-agents-telemetry-012
+  name: Additive increase only when the limit is in use, multiplicative decrease, clamped (Netflix AIMD limit)
+  source: research/R7-software-patterns-self-configuring.md:63-73 (Netflix concurrency-limits AIMDLimit.java, CHECKED)
+  kind: control loop
+  what_it_does: >-
+    On a drop or a slow response, the limit is multiplied by a backoff ratio (default 0.9; the builder
+    refuses values outside 0.5 to below 1). Otherwise, and only when at least half the limit is in use,
+    the limit grows by one. It is clamped between a minimum (20) and a maximum (200).
+  inputs:
+    - drops and slow responses, current use against the limit
+  outputs:
+    - the current limit
+  assumptions:
+    - unused headroom says nothing about whether more is safe
+  levels: [unit, cluster, portfolio]
+  instrument_classes: [none (software)]
+  class_notes: no class content; floor and ceiling would be per class lot granularity
+  styles_timeframes: all
+  evidence: idea (production library, CHECKED)
+  known_failures:
+    - a backoff outside a validated range turns into a cliff or no brake at all; the builder refuses it
+  performance_note: >-
+    [judgment] growth tied to use stops idle budget being "earned" and then spent at once.
+  survival_note: >-
+    [judgment] validated parameter ranges are a cheap guard against a mistyped setting.
+  ledger_ids: [grow_back_rule, unit_capital_share, max_position_size_lots]
+  new_variables:
+    - name: growth_requires_use_fraction
+      line: share of the current size or budget that must have been used before it may grow
+  qmx_layer: [X2]
+  link_hints:
+    - A4-template-agents-telemetry-011, TCP origin
+    - A4-template-agents-telemetry-047, Nautilus deny_unknown_fields and validated ranges as config hygiene
+
+- id: A4-template-agents-telemetry-013
+  name: Warm-up ramp and return to cold after disuse (Guava SmoothWarmingUp)
+  source: research/R7-software-patterns-self-configuring.md:314-320 (Guava RateLimiter.java and SmoothRateLimiter.java, CHECKED)
+  kind: accelerator
+  what_it_does: >-
+    A rate limiter starts cold and ramps its rate smoothly to the maximum over a warm-up period. If unused
+    for a warm-up period it drifts back to cold. The cold interval is three times the stable one.
+  inputs:
+    - time since last use, warm-up period, cold factor
+  outputs:
+    - current allowed rate (in QMX, a size multiplier)
+  assumptions:
+    - past disuse makes the system less ready (stale caches; for a unit, stale evidence)
+  levels: [unit]
+  instrument_classes: [none (software)]
+  class_notes: no class content
+  styles_timeframes: new versions, newly promoted units and units back from a long pause
+  evidence: idea (production library, CHECKED source)
+  known_failures:
+    - a ramp in calendar time is unfair to low-frequency units; it should ramp in trades [judgment]
+  performance_note: >-
+    [judgment] a declared ramp lets a new unit reach full size on schedule instead of waiting on a click.
+  survival_note: >-
+    [judgment] keeps a new or stale unit small during its riskiest trades.
+  ledger_ids: [size_ramp_to_full, warm_up_window]
+  new_variables:
+    - name: warmup_ramp_length
+      line: trades or days over which a new or idle unit ramps to full size
+    - name: cold_size_factor
+      line: share of full size a cold unit starts at
+  qmx_layer: [X2, X1]
+  link_hints:
+    - A4-template-agents-telemetry-029, the chat-23 starter budget of 10-25 % raised in stages
+    - A4-template-agents-telemetry-011, TCP restart after idle
+
+- id: A4-template-agents-telemetry-014
+  name: Many sizing opinions combined by priority, smallest cap wins within a priority (dash.js ABR rules)
+  source: research/R7-software-patterns-self-configuring.md:76-84 (dash.js ABRRulesCollection.js and settings, CHECKED)
+  kind: config/override pattern
+  what_it_does: >-
+    Each rule casts a switch request with a priority (weak, default, strong). Within one priority the
+    lowest request wins; a strong request beats a default one, which beats a weak one. Safety rules sit
+    beside the main rule, and a history rule penalises qualities recently abandoned. Rules can be switched
+    off one by one and custom rules added.
+  inputs:
+    - requests from every active rule, each with a priority and a reason
+  outputs:
+    - one decision, plus which rule bound it
+  assumptions:
+    - every modifier can express its opinion as a cap
+  levels: [trade, position, unit]
+  instrument_classes: [none (software)]
+  class_notes: no class content
+  styles_timeframes: all
+  evidence: idea (production video player, CHECKED source)
+  known_failures:
+    - smallest-wins stacks every rule's caution; with many weak rules the size can shrink to nothing [judgment]
+  performance_note: >-
+    [judgment] gives the 22 statistics blocks that list sizing_modifier a working role (today a modifier can only gate, G8 1.1).
+  survival_note: >-
+    [judgment] a strong priority (a halt) always beats sizing opinions.
+  ledger_ids: [context_size_modifier, control_rank_table, rvol_multiplier, physics_multiplier, correlation_multiplier]
+  new_variables:
+    - name: modifier_priority
+      line: weak, default or strong class of each sizing opinion
+    - name: binding_cap_reason
+      line: which rule bound the final size, recorded on the receipt
+  qmx_layer: [X1, X2]
+  link_hints:
+    - April binding_clamp audit (A4-template-agents-telemetry-153), the old QMX form of "which rule bound it"
+    - A4-template-agents-telemetry-031, every resolved number carries a reason code
+    - LEAN composite risk chain (A4-template-agents-telemetry-066), an alternative combiner where the newest target wins
+
+- id: A4-template-agents-telemetry-015
+  name: Borrowed priors from the most similar past workload (OtterTune workload mapping)
+  source: research/R7-software-patterns-self-configuring.md:135-150 (Van Aken et al. SIGMOD 2017 PDF, CHECKED)
+  kind: control loop
+  what_it_does: >-
+    Before recommending settings, the tuner maps the new workload to the most similar one it has seen
+    and tuned before, on the same system version and hardware, and starts from what worked there. Data is
+    kept per major version, so settings learned on an old version are not reused on a new one.
+  inputs:
+    - metrics from an observation period of the new workload
+    - library of past workloads with their tuned settings
+  outputs:
+    - a starting point for tuning
+  assumptions:
+    - similarity of observed metrics implies similarity of good settings
+  levels: [unit, methodology]
+  instrument_classes: [none (software)]
+  class_notes: >-
+    For QMX, "similar past units" should be same methodology and same class bucket; a crypto scalper's
+    record is a poor prior for an FX scalper [judgment].
+  styles_timeframes: new units with an empty record
+  evidence: idea (research system with lab evaluation, CHECKED)
+  known_failures:
+    - a wrong match imports another unit's numbers with confidence they have not earned
+  performance_note: >-
+    [judgment] a new unit starts nearer good settings instead of a flat placeholder (G8 5.1-5.2 says QMB edge numbers never reach the sizer).
+  survival_note: >-
+    [judgment] needs shrinkage toward the default and a shadow period before use.
+  ledger_ids: [paper_to_live_carry_rule, edge_range, calibration_shrink_k]
+  new_variables:
+    - name: prior_source_rule
+      line: which past units a new unit may borrow starting values from
+  qmx_layer: [X1, X2]
+  link_hints:
+    - A4-template-agents-telemetry-055, derivation fallback ladder (own record, class default, preset default)
+    - James-Stein pooling (Pav 2026, A1), the statistical form of borrowing strength
+    - A4-template-agents-telemetry-017, try the borrowed values on a copy first
+
+- id: A4-template-agents-telemetry-016
+  name: Explore or exploit recommender that asks the owner when to stop (OtterTune Gaussian process)
+  source: research/R7-software-patterns-self-configuring.md:139-144 (OtterTune sections 3.1, 3.2, 6, CHECKED)
+  kind: control loop
+  what_it_does: >-
+    A Gaussian-process model proposes the next settings, choosing between exploring unknown regions and
+    exploiting near the best so far, always by greatest expected improvement. It reports how much better
+    it expects the new settings to be than the best seen; tuning continues until the DBA is satisfied.
+  inputs:
+    - past settings and their measured results
+  outputs:
+    - next settings to try, with expected improvement
+  assumptions:
+    - each trial is cheap and safe to run (a copy, not production)
+  levels: [unit]
+  instrument_classes: [none (software)]
+  class_notes: no class content
+  styles_timeframes: offline tuning on QMB or paper, not on live money [judgment]
+  evidence: idea (research system, CHECKED)
+  known_failures:
+    - every trial is a counted try in trading; unbounded exploration is a search that inflates false discoveries (R6 T-09)
+  performance_note: >-
+    [judgment] efficient search of a template's dials (stop buffer, brake count) under a budget.
+  survival_note: >-
+    [judgment] safe only off the money path and with every trial counted.
+  ledger_ids: [effective_tries]
+  new_variables: []
+  qmx_layer: [X1, X5]
+  link_hints:
+    - A4-template-agents-telemetry-126, AutoQuant two-stage robust auto-tuning with fixed screening rules
+    - A4-template-agents-telemetry-110, search ledger counts every trial
+
+- id: A4-template-agents-telemetry-017
+  name: Deny-list of numbers that may never self-tune, and trials on a copy (OtterTune safety)
+  source: research/R7-software-patterns-self-configuring.md:144-150 (OtterTune, CHECKED); research/R7-software-patterns-self-configuring.md:499-506 (MT5 sinput, CHECKED)
+  kind: config/override pattern
+  what_it_does: >-
+    A curated per-version black-list names knobs the tuner may never touch, and the owner can add more.
+    Only dynamic knobs (no restart) may be tuned if the owner says so. Trials can run on a second copy
+    with a replayed workload. MT5's sinput marks an input as never optimised in the same spirit.
+  inputs:
+    - list of numbers and their tunable flag, set by the owner
+  outputs:
+    - the set of numbers a tuner may touch
+  assumptions:
+    - the owner can name which numbers are his alone
+  levels: [unit, account, system]
+  instrument_classes: [none (software)]
+  class_notes: no class content
+  styles_timeframes: all
+  evidence: idea (research system and MT5 platform rule, CHECKED)
+  known_failures:
+    - a deny-list kept by habit can freeze numbers that should tune (the old blanked thresholds, D31)
+  performance_note: >-
+    [judgment] neutral.
+  survival_note: >-
+    [judgment] keeps floor, cushion and kill line his alone (C11), never tuned.
+  ledger_ids: [kill_line_floor, portfolio_floor, bms_buffer_before_floor]
+  new_variables:
+    - name: never_self_tune_list
+      line: numbers no learner may move, owned by him, per template
+  qmx_layer: [X1]
+  link_hints:
+    - A4-template-agents-telemetry-052, facts, responses and his limits split (changed_by user rows)
+    - A4-template-agents-telemetry-030, shadow trials are the "second copy" in trading

@@ -176,6 +176,12 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
       - A4 template, agents and telemetry.
     - Each notes the last R4 chat it covered; a small top-up pass dissects the rest of R4 when it lands. Then Stage B.
 
+30. **M35 (13:29 UTC), agent department vision, for a later session.**
+    - Export of the alphaXiv chats is approved (on disk for later agents); R4 told to export and move the files into `research/R4-alphaxiv/exports/`. Papers on disk too: once R4 lands, fetch the PDFs of all kept papers from arXiv into `research/papers/` with a script, converted to text.
+    - His vision (agents as traders with a knowledge base, Hindsight memory and self-improvement; a "Shepherd" supervising many workers; copilot ingestion of videos and channels; methodologies distilled from papers; Library and memory shipping with knowledge; cTrader and TradingView MCPs) is **not this session's to build**, as he said. It is kept in `handoff/AGENT-DEPARTMENT-SEEDS.md` with pointers to the research.
+    - This session's part: the template exposes read access to risk state and a proposal door for agents (X7), so the department plugs in later without touching the money path.
+    - Note: the build session (QML/QMB/node) has added MCPs for cTrader and possibly TradingView.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
