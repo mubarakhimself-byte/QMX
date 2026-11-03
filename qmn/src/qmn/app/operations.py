@@ -623,12 +623,15 @@ def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) ->
             )
     except BadArgumentError as error:
         return refused(error.code, f"{name}: {error}")
-    if spec.preflight is not None and not context.standing().mismatch:
+    # A kept op id is answered from its row by record below: nothing is checked or done again,
+    # so a retried self-test never trades twice.
+    fresh = context.store.change(op_id) is None and not context.standing().mismatch
+    if spec.preflight is not None and fresh:
         stopped = spec.preflight(context, request)
         if stopped is not None:
             return {**stopped, "op_id": op_id}
     acted: Answer | None = None
-    if spec.act is not None and not context.standing().mismatch:
+    if spec.act is not None and fresh:
         newer = request.register is not None and any(
             change.register == request.register and change.issued_at_ns > issued
             for change in context.store.accepted()
