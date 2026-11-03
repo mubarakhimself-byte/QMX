@@ -245,6 +245,13 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     4. Plain-words explanation for him.
     5. Review, slices, builders; QML dictionary expansion slices.
 
+42. **Stage B results so far:** all committed, ledger checker passing:
+    - X0: 55 hybrids, 27 variables;
+    - X6: 47 hybrids, 58 variables, UI requests for 16 screens;
+    - X5: 48 hybrids, 154 variables;
+    - X7: 49 hybrids, 33 variables.
+    **Safety flag for him and the build session (from X7):** the cTrader MCP being shipped was not checked. If it is a separate server with order tools, it could bypass the operator-only guard (agents never touch money; only he deploys or flattens). The build session should confirm that the MCP's order tools sit behind the same guard, or are left out.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
