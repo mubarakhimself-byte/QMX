@@ -1201,7 +1201,9 @@ class Supervisor:
         always was. The job's answer comes back under `result` when it gave one. `principal` is
         the caller, recorded on the app's log line for the job.
 
-        An answer `{"output": name, "data": ...}` is a leave, saved as a tool's is. For an app
+        An answer `{"output": name, "data": ...}` is a leave, saved as a tool's is. An answer with
+        `outputs`, a list of such leaves, lands each in order once every one passes its contract,
+        and its `result` keeps the rest of the answer beside their `artifact_refs`. For an app
         whose provides name a lander (AD-33 change 2), the lander opens the run before the job
         queues and the job's inputs gain its `run_id` and `run_folder`; the job's leave lands
         through the lander's close, and a job that raises, leaves nothing, or whose app stops or
@@ -1333,6 +1335,12 @@ class Supervisor:
                 raise AppError(
                     "lander_once",
                     f"Job {job} answered {len(closes)} results its lander lands; a run lands one.",
+                    422,
+                )
+            if run is not None and not closes:
+                raise AppError(
+                    "result_missing",
+                    f"Job {job} answered without the result {run.name} lands.",
                     422,
                 )
             ran["result"] = {key: value for key, value in answer.items() if key != "outputs"}

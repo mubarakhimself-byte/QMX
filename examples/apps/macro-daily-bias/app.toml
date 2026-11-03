@@ -7,7 +7,6 @@ kind = "both"
 [entrypoints]
 mcp = "server.py"
 jobs = ["daily.py"]
-agents = ["agents/analyst.yaml"]
 ui = "ui"
 
 [suggested_trigger]

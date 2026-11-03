@@ -1,4 +1,8 @@
-"""One instance owns the article catalog, HTTP cache and Library outbox."""
+"""One instance owns the article catalog, HTTP cache and Library outbox.
+
+The daily job answers its articles as job `outputs`, and the host lands each as one
+`mql5-article` artifact. The app holds no host credential and calls no host door.
+"""
 
 from __future__ import annotations
 
@@ -21,12 +25,15 @@ from urllib.robotparser import RobotFileParser
 
 import httpx
 from bs4 import BeautifulSoup, Tag
-from fastmcp import Client
 from markdownify import markdownify
 
 BASE = "https://www.mql5.com"
 AGENT = "QMXMQL5Research/1.0 (+https://github.com/MubarakHimself/QMX)"
 RUN_LOCK = threading.Lock()
+ARTICLE = "mql5-article"
+"""The provides name each article lands under."""
+PER_RUN = 200
+"""`publish.per_run`'s starting default: how many articles one daily job answers."""
 
 
 def article_url(article_id: int) -> str:
@@ -102,11 +109,17 @@ class Store:
                 CREATE TABLE IF NOT EXISTS articles (
                     id INTEGER PRIMARY KEY, url TEXT UNIQUE NOT NULL,
                     metadata TEXT NOT NULL, status TEXT NOT NULL,
-                    raw TEXT, markdown TEXT, library_id TEXT);
+                    raw TEXT, markdown TEXT, landed TEXT, sent TEXT);
                 CREATE TABLE IF NOT EXISTS http (
                     url TEXT PRIMARY KEY, etag TEXT, modified TEXT, body TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value REAL NOT NULL);
             """)
+            columns = {row[1] for row in db.execute("PRAGMA table_info(articles)")}
+            if "library_id" in columns:
+                # A row the old Library door saved stays landed.
+                db.execute("ALTER TABLE articles RENAME COLUMN library_id TO landed")
+            if "sent" not in columns:
+                db.execute("ALTER TABLE articles ADD COLUMN sent TEXT")
             seed = json.loads(Path(__file__).with_name("seed-ids.json").read_text(encoding="utf-8"))
             db.executemany(
                 "INSERT OR IGNORE INTO articles(id,url,metadata,status) VALUES(?,?,?,'seeded')",
@@ -204,68 +217,54 @@ class Store:
                 ),
                 "pending_publication": int(
                     db.execute(
-                        "SELECT count(*) FROM articles WHERE raw IS NOT NULL AND library_id IS NULL"
+                        "SELECT count(*) FROM articles WHERE raw IS NOT NULL AND landed IS NULL"
                     ).fetchone()[0]
                 ),
             }
 
-    async def publish(self, client: Client[Any], limit: int = 1000) -> int:
-        """A durable outbox plus URL/hash lookup handles a lost save acknowledgement."""
+    def confirm(self) -> int:
+        """Mark landed each sent article whose artifact the host stored in this volume, under
+        the sha256 of its canonical JSON; one the host never stored is sent again."""
+        with self.db() as db:
+            sent = db.execute(
+                "SELECT id, sent FROM articles WHERE sent IS NOT NULL AND landed IS NULL"
+            ).fetchall()
+            stored = [
+                (row["sent"], row["id"])
+                for row in sent
+                if (self.root / "blobs" / f"{row['sent']}.json").is_file()
+            ]
+            db.executemany("UPDATE articles SET landed=? WHERE id=?", stored)
+        return len(stored)
+
+    def outbox(self, limit: int) -> list[dict[str, Any]]:
+        """The next `limit` unlanded articles, oldest first, each as one `mql5-article` output,
+        each remembered as sent under the hash the host stores it by."""
         with self.db() as db:
             rows = db.execute(
-                "SELECT * FROM articles WHERE raw IS NOT NULL AND library_id IS NULL "
-                "ORDER BY id LIMIT ?",
+                "SELECT id, url, metadata, markdown FROM articles "
+                "WHERE raw IS NOT NULL AND landed IS NULL ORDER BY id LIMIT ?",
                 (limit,),
             ).fetchall()
-        for row in rows:
-            metadata = json.loads(row["metadata"])
-            previous = (
-                await client.call_tool("library_search", {"query": row["url"], "limit": 1000})
-            ).data
-            item_id: str | None = None
-            if isinstance(previous, list):
-                for item in cast(list[dict[str, Any]], previous):
-                    if isinstance(item.get("content"), dict):
-                        content = cast(dict[str, Any], item["content"])
-                        if (
-                            content.get("source_url") == row["url"]
-                            and content.get("sha256") == metadata["sha256"]
-                        ):
-                            item_id = str(item["id"])
-                            break
-            if item_id is None:
-                result = (
-                    await client.call_tool(
-                        "library_save",
-                        {
-                            "item": {
-                                "title": str(metadata.get("title") or f"MQL5 article {row['id']}")[
-                                    :200
-                                ],
-                                "kind": "article",
-                                "source": row["url"],
-                                "fetched_date": datetime.fromisoformat(metadata["fetched_at"])
-                                .date()
-                                .isoformat(),
-                                "content": {
-                                    **metadata,
-                                    "markdown": (self.root / row["markdown"]).read_text(
-                                        encoding="utf-8"
-                                    ),
-                                },
-                            },
-                        },
-                    )
-                ).data
-                if not isinstance(result, dict):
-                    raise ValueError("Library save did not return an artifact id.")
-                result_data = cast(dict[str, Any], result)
-                if not isinstance(result_data.get("id"), str):
-                    raise ValueError("Library save did not return an artifact id.")
-                item_id = result_data["id"]
-            with self.db() as db:
-                db.execute("UPDATE articles SET library_id=? WHERE id=?", (str(item_id), row["id"]))
-        return len(rows)
+            outputs: list[dict[str, Any]] = []
+            for row in rows:
+                metadata = json.loads(row["metadata"])
+                article = {
+                    "title": str(metadata.get("title") or f"MQL5 article {row['id']}"),
+                    "source_url": row["url"],
+                    "sha256": metadata["sha256"],
+                    "published": str(metadata.get("published") or ""),
+                    "markdown": (self.root / row["markdown"]).read_text(encoding="utf-8"),
+                }
+                canonical = json.dumps(
+                    article, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                ).encode()
+                db.execute(
+                    "UPDATE articles SET sent=? WHERE id=?",
+                    (hashlib.sha256(canonical).hexdigest(), row["id"]),
+                )
+                outputs.append({"output": ARTICLE, "data": article})
+        return outputs
 
 
 class Deferred(Exception):
@@ -399,19 +398,36 @@ def collect(
     return result
 
 
-async def run_daily() -> dict[str, int]:
+def settings(root: Path) -> tuple[bool, int]:
+    """Whether the job crawls www.mql5.com, and `publish.per_run`, from the instance's
+    `data/config.json` over the defaults."""
+    own = root / "data" / "config.json"
+    found = cast(dict[str, Any], json.loads(own.read_text(encoding="utf-8"))) if own.is_file() else {}
+    crawl = found.get("crawl", True)
+    per_run = cast(dict[str, Any], found.get("publish", {})).get("per_run", PER_RUN)
+    if not isinstance(crawl, bool) or not isinstance(per_run, int) or per_run < 1:
+        raise ValueError("data/config.json sets crawl to true or false and publish.per_run to 1 or more.")
+    return crawl, per_run
+
+
+def run_daily() -> dict[str, Any]:
+    """Seed, crawl, then answer the next unlanded articles as `outputs`; the host lands each one
+    as its own Library artifact. A site that cannot be reached still lets the archive land."""
     if not RUN_LOCK.acquire(blocking=False):
         raise RuntimeError("Article work is already running.")
     try:
         store = Store(Path(os.environ["QMX_VOLUME"]))
+        crawl, per_run = settings(store.root)
+        landed = store.confirm()
         seeded = store.seed()
-        async with Client(
-            "http://127.0.0.1:8766/mcp/", auth=os.environ["QMX_CONTROL_TOKEN"]
-        ) as library:
-            published = await store.publish(library)
-            with httpx.Client(timeout=20) as http:
-                result = collect(store, http)
-            published += await store.publish(library, limit=1000 - published)
-        return {**result, "seeded": seeded, "published": published}
+        result: dict[str, Any] = {"discovered": 0, "fetched": 0, "deferred": 0}
+        if crawl:
+            try:
+                with httpx.Client(timeout=20) as http:
+                    result = {**collect(store, http)}
+            except httpx.HTTPError as error:
+                result["crawl_error"] = type(error).__name__
+        outputs = store.outbox(per_run)
+        return {**result, "seeded": seeded, "landed": landed, "outputs": outputs}
     finally:
         RUN_LOCK.release()

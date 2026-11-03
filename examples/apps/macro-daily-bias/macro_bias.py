@@ -26,10 +26,11 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import httpx
-import pyarrow.parquet as pq  # pyright: ignore[reportMissingTypeStubs]
 from fastmcp import FastMCP
 from fastmcp.apps import AppConfig
 from pydantic import BaseModel, ConfigDict, Field
+from qmf.core import is_refusal
+from qmf.data.series import SeriesKey, SeriesStore
 
 ROOT = Path(__file__).parent
 SERIES_KEY = re.compile(r"[A-Za-z0-9_.+-]{1,64}/[A-Za-z0-9_.+-]{1,64}/bar-m1/[A-Za-z0-9_.+-]{1,64}")
@@ -66,7 +67,10 @@ def settings(volume: Path) -> dict[str, Any]:
     found = cast(dict[str, Any], json.loads((ROOT / "config.json").read_text(encoding="utf-8")))
     own = volume / "data" / "config.json"
     if own.is_file():
-        found.update(cast(dict[str, Any], json.loads(own.read_text(encoding="utf-8"))))
+        overlay: object = json.loads(own.read_text(encoding="utf-8"))
+        if not isinstance(overlay, dict):
+            raise ValueError("data/config.json holds one JSON object of settings.")
+        found.update(cast(dict[str, Any], overlay))
     return found
 
 
@@ -101,7 +105,10 @@ def chat_model(config: dict[str, Any]) -> Model:
                 },
             )
         response.raise_for_status()
-        return str(response.json()["choices"][0]["message"]["content"])
+        content = response.json()["choices"][0]["message"]["content"]
+        if not isinstance(content, str):
+            raise ValueError("The model answered with no text content.")
+        return content
 
     return ask
 
@@ -117,17 +124,21 @@ def period_ms(timeframe: str) -> int:
     return int(found[1]) * UNIT_SECONDS[found[2]] * 1_000
 
 
-def months(series: Path) -> list[Path]:
-    """The partition file of each month the series holds, oldest first: the frozen file its
-    `state.json` names, or the open month's `open.parquet`."""
-    found: list[Path] = []
-    for folder in sorted(series.iterdir()) if series.is_dir() else ():
-        state = folder / "state.json"
-        if not MONTH.fullmatch(folder.name) or not state.is_file():
+def months(store: SeriesStore, market: str) -> list[SeriesKey]:
+    """Each month the store holds of `market`, oldest first."""
+    source, symbol, kind, variant = market.split("/")
+    variant = "" if variant == "-" else variant
+    keys: list[SeriesKey] = []
+    folder = store.root / source / symbol / kind / (variant or "-")
+    for state in sorted(folder.glob("*/state.json")) if folder.is_dir() else ():
+        name = state.parent.name
+        if not MONTH.fullmatch(name):
             continue
-        facts = cast(dict[str, Any], json.loads(state.read_text(encoding="utf-8")))
-        found.append(folder / (f"{facts['fingerprint']}.parquet" if facts["frozen"] else "open.parquet"))
-    return found
+        made = SeriesKey.try_create(source, symbol, kind, int(name[:4]), int(name[5:]), variant)
+        if is_refusal(made):
+            raise ValueError(f"Set market to the store's bar series: {made}")
+        keys.append(made.value)
+    return keys
 
 
 def rolled(minutes: Sequence[tuple[int, int]], period: int) -> list[tuple[int, int]]:
@@ -154,14 +165,16 @@ def read_market(config: dict[str, Any], market_root: Path) -> dict[str, Any]:
         or {".", ".."} & set(market.split("/"))
     ):
         raise ValueError("Set market to the store's bar series, source/symbol/bar-m1/variant.")
-    period, wanted, digits = period_ms(str(config["timeframe"])), int(config["bars"]), int(config["digits"])
+    period = period_ms(str(config["timeframe"]))
+    wanted, digits = int(config["bars"]), int(config["digits"])
+    store = SeriesStore(market_root / "series")
     minutes: list[tuple[int, int]] = []
     bars: list[tuple[int, int]] = []
-    for path in reversed(months(market_root / "series" / market)):
-        table = pq.read_table(path, columns=["t", "close"])
-        times = cast(list[int], table.column("t").to_pylist())
-        closes = cast(list[int], table.column("close").to_pylist())
-        minutes[:0] = zip(times, closes, strict=True)
+    for key in reversed(months(store, market)):
+        read = store.read(key)
+        if is_refusal(read):
+            raise ValueError(f"The market store could not read {key.text}: {read}")
+        minutes[:0] = [(int(row["t"]), int(row["close"])) for row in read.value.rows]
         bars = rolled(minutes, period)
         if len(bars) > wanted:
             break

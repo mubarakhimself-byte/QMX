@@ -2,18 +2,30 @@
 
 A first-party T1 laptop app. Install with
 `Supervisor(home).install(path, trust="first_party")`, then `start("mql5-articles")`.
-The control service must listen at `http://127.0.0.1:8766/mcp/`; the supervisor
-injects its `qmx/control-token` Credential Manager secret as `QMX_CONTROL_TOKEN`.
-This example uses laptop loopback and is not configured for a remote Docker node.
+It declares no secret and calls no host door. Its only network is `www.mql5.com`.
 
 Every 86,400 seconds the job imports up to 500 archived articles, discovers
-up to five listing pages, fetches at most 25 new articles, and publishes up to
-1,000 pending Library artifacts. It respects robots.txt, its crawl delay and
-request rate, and a minimum two-second interval. HTTP validators and upstream
-Retry-After windows survive restarts. Successful article bodies are never
-fetched again. Redirects are refused. Raw HTML and clean Markdown are
-content-addressed blobs; metadata, discovery queue, HTTP cache and publication
-outbox live in WAL `app.db`.
+up to five listing pages and fetches at most 25 new articles. It then answers
+the next unlanded articles, oldest first, as its job's `outputs`. The host lands
+each one as its own `mql5-article` Library artifact: title, source URL, Markdown
+sha256, published date and Markdown. The crawl respects robots.txt, its crawl
+delay and request rate, and a minimum two-second interval. HTTP validators and
+upstream Retry-After windows survive restarts. Successful article bodies are
+never fetched again. Redirects are refused. A site that cannot be reached is
+reported as `crawl_error`, and the archive still lands. Raw HTML and clean
+Markdown are content-addressed blobs. Metadata, discovery queue, HTTP cache and
+publication outbox live in WAL `app.db`.
+
+## Settings
+
+The instance's `data/config.json` holds two settings. Each has a default.
+
+```json
+{"crawl": true, "publish": {"per_run": 200}}
+```
+
+`crawl` set to `false` skips the web and only lands what the archive holds.
+`publish.per_run` is how many articles one job answers.
 
 ## Seed the recovered archive offline
 
@@ -27,15 +39,17 @@ Copy **only** `catalog.jsonl`, `md/` and `raw/` from that worktree's
 Do not copy any credential files. The importer validates canonical URLs and
 Markdown checksums, normalizes the old Windows newline conversion, and
 decompresses the saved HTML. Calling `seed_library(limit=50)` repeatedly
-imports all batches without network access. The scheduled job publishes the
-imported articles through the control service's `library_save` MCP tool.
+imports all batches without network access. The scheduled job lands the
+imported articles through its outputs.
 If the archive is absent, bundled successful IDs still prevent refetching;
 their article content becomes available after the archive is supplied.
 
 `status` reports local counts; `article(article_id=623)` reads local content.
-Neither inspection tool fetches anything. A Library save is acknowledged in
-the outbox only after success. On retry, source URL and content hash lookup
-recover an already persisted artifact after a lost response.
+Neither inspection tool fetches anything. An article answered by a job is
+marked sent under the sha256 the host stores its artifact by. At the next
+job's start it is marked landed once that artifact is in the app's volume, and
+sent again otherwise. The host never lands the same artifact twice, so a
+re-sent article adds no second Library item.
 
 ## Optional Firecrawl for the researcher
 

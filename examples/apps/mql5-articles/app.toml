@@ -12,11 +12,22 @@ jobs = ["jobs/daily.py"]
 interval_seconds = 86400
 
 [capabilities]
-network = ["www.mql5.com", "localhost"]
-secrets = { QMX_CONTROL_TOKEN = "qmx/control-token" }
+network = ["www.mql5.com"]
 
 [budget]
 runs = 1000
 cpu_seconds = 3600
 memory_mb = 1024
 cpu_percent = 50
+
+[provides.mql5-article]
+type = "object"
+required = ["title", "source_url", "sha256", "published", "markdown"]
+additionalProperties = false
+
+[provides.mql5-article.properties]
+title = { type = "string", minLength = 1 }
+source_url = { type = "string", pattern = "^https://www[.]mql5[.]com/en/articles/[1-9][0-9]*$" }
+sha256 = { type = "string", pattern = "^[0-9a-f]{64}$" }
+published = { type = "string" }
+markdown = { type = "string" }

@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-import asyncio
 import gzip
 import hashlib
 import json
+import sqlite3
+from contextlib import closing
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
-from collector import BASE, Store, article_url, collect, parse_article
-from fastmcp import Client, FastMCP
+from collector import BASE, Store, article_url, collect, parse_article, run_daily
 
+from qmx_apps.artifacts import Artifacts
 from qmx_apps.manifest import Definition
 
 FIXTURE = Path(__file__).with_name("fixtures") / "mql5-623.html"
@@ -166,45 +167,87 @@ def test_seed_checksum_failure_is_not_silently_marked_ready(tmp_path: Path) -> N
     assert store.status()["available"] == 0
 
 
-def test_real_mcp_library_outbox_recovers_a_lost_acknowledgement(tmp_path: Path) -> None:
-    store = Store(tmp_path)
-    metadata, markdown = parse_article(FIXTURE.read_text(encoding="utf-8"), article_url(1))
-    metadata["title"] = "x" * 300
-    store.save(1, FIXTURE.read_bytes(), markdown, metadata)
-    library = FastMCP("recorded-library")
-    items: list[dict[str, Any]] = []
-    lost = [True]
+def volume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings: dict[str, Any]) -> Store:
+    """The app's volume where the host keeps it, `<home>/apps/mql5-articles`, as the job sees it."""
+    root = tmp_path / "home/apps/mql5-articles"
+    store = Store(root)
+    (root / "data/config.json").write_text(json.dumps(settings), encoding="utf-8")
+    monkeypatch.setenv("QMX_VOLUME", str(root))
+    return store
 
-    @library.tool
-    def library_search(query: str, limit: int = 1000) -> list[dict[str, Any]]:
-        """Search the recorded Library."""
-        return [item for item in items if query in json.dumps(item)][:limit]
 
-    @library.tool
-    def library_save(item: dict[str, Any]) -> dict[str, Any]:
-        """Persist a recorded artifact, then simulate a lost response."""
-        item = {
-            "id": f"artifact-{len(items) + 1}",
-            **item,
-        }
-        items.append(item)
-        if lost[0]:
-            lost[0] = False
-            raise RuntimeError("lost response")
-        return item
+def saved(store: Store, *ids: int) -> None:
+    for article_id in ids:
+        markdown = f"# Article {article_id}\n"
+        store.save(article_id, b"<html></html>", markdown, {"title": f"Article {article_id}"})
 
-    assert callable(library_search) and callable(library_save)
 
-    async def run() -> None:
-        async with Client(library) as client:
-            with pytest.raises(Exception, match="lost response"):
-                await store.publish(client)
-            assert store.status()["pending_publication"] == 1
-            assert await store.publish(client) == 1
-            assert await store.publish(client) == 0
+def answered(outputs: object) -> list[str]:
+    assert isinstance(outputs, list)
+    return [item["data"]["source_url"].rsplit("/", 1)[1] for item in outputs]
 
-    asyncio.run(run())
-    assert len(items) == 1 and len(items[0]["title"]) == 200
-    assert items[0]["content"]["source_url"] == article_url(1)
-    assert items[0]["content"]["markdown"] == markdown
+
+def test_the_daily_job_answers_unlanded_articles_until_the_host_stored_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = volume(tmp_path, monkeypatch, {"crawl": False, "publish": {"per_run": 2}})
+    saved(store, 9, 2, 5)
+    host = Artifacts(tmp_path / "home")
+    definition = Definition.load(APP)
+
+    first = run_daily()
+    again = run_daily()
+    for item in first["outputs"][:1]:
+        host.save(definition, item["output"], item["data"])
+    after = run_daily()
+
+    assert answered(first["outputs"]) == ["2", "5"]
+    assert first["outputs"][0] == {
+        "output": "mql5-article",
+        "data": {
+            "title": "Article 2",
+            "source_url": article_url(2),
+            "sha256": hashlib.sha256(b"# Article 2\n").hexdigest(),
+            "published": "",
+            "markdown": "# Article 2\n",
+        },
+    }
+    assert (first["landed"], answered(again["outputs"])) == (0, ["2", "5"])
+    assert (after["landed"], answered(after["outputs"])) == (1, ["5", "9"])
+    assert store.status()["pending_publication"] == 2
+
+
+def test_one_run_answers_at_most_per_run_articles_and_an_unreachable_site_still_lands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = volume(tmp_path, monkeypatch, {})
+    saved(store, *range(1, 202))
+
+    def offline(*args: Any, **kwargs: Any) -> None:
+        raise httpx.ConnectError("the network is off")
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", offline)
+    ran = run_daily()
+
+    assert (ran["crawl_error"], ran["fetched"]) == ("ConnectError", 0)
+    assert answered(ran["outputs"]) == [str(article_id) for article_id in range(1, 201)]
+
+
+def test_an_article_the_old_library_door_saved_stays_landed(tmp_path: Path) -> None:
+    root = tmp_path / "volume"
+    root.mkdir()
+    with closing(sqlite3.connect(root / "app.db")) as db, db:
+        db.execute(
+            "CREATE TABLE articles (id INTEGER PRIMARY KEY, url TEXT UNIQUE NOT NULL, "
+            "metadata TEXT NOT NULL, status TEXT NOT NULL, raw TEXT, markdown TEXT, "
+            "library_id TEXT)"
+        )
+        db.execute(
+            "INSERT INTO articles VALUES(1, ?, '{}', 'ready', 'blobs/a.html', 'blobs/a.md', 'x')",
+            (article_url(1),),
+        )
+
+    store = Store(root)
+
     assert store.status()["pending_publication"] == 0
+    assert store.outbox(200) == []
