@@ -38,23 +38,21 @@ def bi5(ask: int, bid: int) -> bytes:
     return lzma.compress(struct.pack("!IIIff", 0, ask, bid, 1.0, 2.0), format=lzma.FORMAT_ALONE)
 
 
-def step(
-    tmp_path: Path, given: dict[str, Any], tick: tuple[int, int, int, int] | None = None
-) -> str:
-    """The script on a fresh QMX folder. With `tick` (day, hour, ask, bid) every hour of 2025-03
-    is cached and that one holds the tick."""
+def step(tmp_path: Path, given: dict[str, Any], tick: tuple[int, int, int, int]) -> str:
+    """The script on a fresh QMX folder with every hour of 2025-03 cached, even for a run that
+    should fetch nothing, so no run of this file reaches the provider. The hour `tick` names
+    (day, hour, ask, bid) holds that one tick."""
     folder = resolve(tmp_path / "QMX", create=True, drives=[]).root
     shared = folder / "cache" / "zones" / "run-1" / "work"
     work = tmp_path / "attempt"
     work.mkdir(parents=True)
     hours = shared / "hours" / str(given["source"]["symbol"]) / "2025" / "02"
-    if tick is not None:
-        day, hour, ask, bid = tick
-        for d in range(1, calendar.monthrange(2025, 3)[1] + 1):
-            for h in range(24):
-                cached = hours / f"{d:02d}" / f"{h:02d}.bi5"
-                cached.parent.mkdir(parents=True, exist_ok=True)
-                cached.write_bytes(bi5(ask, bid) if (d, h) == (day, hour) else b"")
+    day, hour, ask, bid = tick
+    for d in range(1, calendar.monthrange(2025, 3)[1] + 1):
+        for h in range(24):
+            cached = hours / f"{d:02d}" / f"{h:02d}.bi5"
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            cached.write_bytes(bi5(ask, bid) if (d, h) == (day, hour) else b"")
     env = {k: v for k, v in os.environ.items() if k in ("PATH", "SYSTEMROOT", "TEMP", "TMP")}
     done = subprocess.run(
         [sys.executable, "-I", str(SCRIPT)],
@@ -173,9 +171,10 @@ def test_a_gold_card_landed_at_scale_five_reads_wrong_scale(tmp_path: Path) -> N
         "partitions": [{"month": "2025-02"}, {"month": "2025-03"}],
     }
 
-    wrong = json.loads(step(tmp_path, {"source": source, "check": card}))
+    tick = (2, 23, 2856475, 2855205)
+    wrong = json.loads(step(tmp_path, {"source": source, "check": card}, tick))
     card["quality"]["price_scale"] = 3
-    right = json.loads(step(tmp_path / "again", {"source": source, "check": card}))
+    right = json.loads(step(tmp_path / "again", {"source": source, "check": card}, tick))
 
     assert wrong == {
         "status": "wrong_scale",
