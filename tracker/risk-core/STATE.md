@@ -51,6 +51,13 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - Round 3b started: G11 variable ledger, exposure/drawdown/P&L, exits and stops, observability (Opus) → `grounding/G11-ledger-exposure-exits-observability.md`; R3 edge verification, clinical-trial and other-industry analogues, cross-instrument normalisation (Opus) → `research/R3-edge-verification-and-analogues.md`.
     - Next, on his go (M11): problem map `PROBLEMS.md` from all grounding and SEEDS, then Fable solver agents, one per cluster (edge verification workflow; brakes x frequency x exits per level; scenario catalogue; variable ledger and dependencies; template shape and agents' access; observability; live drift; windows), then architecture.
 
+12. **M13 (verbatim at the end of `seeds/operator-words-2026-11-03.md`)**, sent as he left again; he will not read the messages sent while he was away. Rulings:
+    - Web: use the built-in browser and web search, not Firecrawl. Browserbase is in his user config but was added after this session started, so this session can't see it; Exa is configured nowhere. Told him.
+    - **Method: expand, then funnel.** Don't fold everything into one too early; the problem is the number of variables. Expand the domain layer by layer (technical, trader, DevOps, what QMX has shipped), then funnel, then architecture.
+    - **The variable ledger is central**, kept across all steps and the simulations, because the variable count has grown well past the FX-only days.
+    - Fable for the hardest problems: architecture, questions, scenario-based thinking (his examples; the lead decides).
+    - Revised route: G11 + R3 land → **ledger v0** (machine-readable: every variable, level, unit, instrument class, default and how it is derived, couplings to other variables) → **expansion round** per layer, each agent adding variables to its own ledger file → **funnel** (cluster, dedupe, resolve contradictions) → **architecture** (Fable) → review → slices → builders.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
