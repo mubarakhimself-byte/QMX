@@ -225,6 +225,18 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 
 39. **Papers on disk:** 302 arXiv full texts in `research/papers/text/` (committed, 18 MB). The 663 MB of PDFs stay local in `research/papers/pdf/` (gitignored). The one id that 404'd was a false match. **Exa is now connected** in this session (`web_search_exa`, `web_fetch_exa`), and the Stage B brief tells agents to use it for web lookups.
 
+40. **Stage A complete: 1,050 components** (A1 174, A2 270, A3 240, A4 203, A5 163). A5 tags every brake and accelerator with R9's taxonomy and carries R9's definitions as components 100-117 and R4's 15 workflows as 149-163. Unit idea bank merged: 78 entries from 112 seeds.
+    **Stage B started** (about 17:00 local), eight agents on `linking/STAGE-B-BRIEF.md`. Each writes `expansion/<id>.md` and `ledger/additions/<id>.yaml`:
+    - X0 trading lens (Fable);
+    - X1 template shape (Fable, revising its draft);
+    - X2 sizing and accelerators (Opus);
+    - X3 brakes, exits and drift (Opus);
+    - X4 scenarios (Fable, finishing its draft and adding a scenario harness);
+    - X5 edge verification (Fable, revising its draft);
+    - X6 observability and UI requests (Opus);
+    - X7 agents' door (Opus).
+    Then the Fable funnel judge (`linking/RANKING.md`).
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
