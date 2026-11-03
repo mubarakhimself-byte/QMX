@@ -51,7 +51,5 @@ about = [{"rel": "reading", "ref": f"{e['reading']}|{e['market']}|{e['at']}"} fo
 points_word = "change point" if len(kept) == 1 else "change points"
 title = f"MIS check for {read['findings']['day']}: {len(kept)} {points_word} read differently"
 print(
-    json.dumps(
-        read | {"about": about, "examples": kept, "dropped": dropped, "note_title": title}
-    )
+    json.dumps(read | {"about": about, "examples": kept, "dropped": dropped, "note_title": title})
 )
