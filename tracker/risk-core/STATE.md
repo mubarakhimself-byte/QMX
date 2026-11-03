@@ -193,6 +193,13 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     Both covered R4 up to chat-29 except chat-02 (breadth, partly) and chat-15 (stress); those go to the top-up pass. Gaps both flagged: fast invalidation has no paper; exits evidence is weak; only 6 brake components rest on a fair control; class isolation is untested; money-based brakes are unsimulated; energy and single stocks are thin; pooling across instruments is unbacked.
     **R8 started** (Opus, alphaXiv MCP plus the built-in browser): stop-loss literature (Kaminski-Lo, trailing stops), fast invalidation and early exits, stress scenarios, energy instruments, pooling across instruments → `research/R8-gap-topup.md`. Its components go in through the top-up pass with R4's remainder.
 
+33. **Stage A first pass done**, all committed. 887 components in `linking/components/` and 83 unit seeds in `linking/unit-ideas/`:
+    - A1: 174 components;
+    - A2: 270 components;
+    - A3: 240 components (32 seeds); its X4 scenario draft stops at scenario 37, so families F to M still need writing in Stage B;
+    - A4: 203 components (22 seeds, 127 new variables proposed); agent-harness pieces are flagged as QMA, not designed.
+    **Top-up pass (one Opus agent) when R4 and R8 land**: the R4 chats not yet dissected (02 in part, 04, 05, 11, 12, 14, any after 29, and the parts of 07 and 17 not taken), plus R8. It writes `linking/components/A5-topup.yaml` with the same schema and adds to the unit idea bank. Then merge the unit seeds into `linking/UNIT-IDEA-BANK.md`, then Stage B.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
