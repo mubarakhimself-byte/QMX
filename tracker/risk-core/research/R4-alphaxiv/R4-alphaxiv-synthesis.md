@@ -4,7 +4,7 @@ Harvested 2026-11-03 from new alphaXiv assistant chats, one topic per chat. Ever
 
 **How to read this file.** Every paper description below is the alphaXiv assistant's claim, copied in condensed form. A title in an answer is not proof of what the paper says, and some arXiv IDs point to 2026 preprints that nobody here has opened. Read the paper before building on it. Where the assistant itself flagged a limit ("not a sizing rule", "simulation only"), that flag is kept.
 
-**Status.** This file is written as the chats finish. The "Coverage" table shows which topics are done.
+**Status.** Complete for this run (2026-11-03). The "Coverage" table lists every topic and its chat file.
 
 ## Layer key
 
@@ -41,10 +41,30 @@ Harvested 2026-11-03 from new alphaXiv assistant chats, one topic per chat. Ever
 | Technique 1 | Sizing with a small, uncertain edge | chat-01-sizing-uncertain-edge.md | done (Pro, then Smart; $500 framing) |
 | Technique 6 | Kill switches and circuit breakers | chat-06-kill-switches-breakers.md | done ($500 framing) |
 | Technique 8 | Risk-off regimes and correlation breakdowns | chat-08-risk-off-regimes.md | done ($500 framing) |
-| Technique 13 | Stops and exits | chat-13-stops-and-exits.md | running |
-| Technique 18 | LLM-agent harnesses for alpha discovery | chat-18-agent-harness-alpha-discovery.md | running |
-| Technique 2 | Breadth and effective number of bets | chat-02-breadth-effective-bets.md | running |
-| Technique 15 | Stress tests and scenario generation | chat-15-stress-scenarios.md | running |
+| Technique 13 | Stops and exits | chat-13-stops-and-exits.md | done |
+| Technique 18 | LLM-agent harnesses for alpha discovery | chat-18-agent-harness-alpha-discovery.md | done |
+| Technique 2 | Breadth and effective number of bets | chat-02-breadth-effective-bets.md | done |
+| Technique 15 | Stress tests and scenario generation | chat-15-stress-scenarios.md | done |
+| Technique 5 | Allocating risk across strategies and clusters | chat-05-allocation-across-strategies.md | done |
+| Technique 17 | Self-configuring parameters | chat-17-self-configuring-parameters.md | done |
+| Technique 4 | Drawdown-controlled sizing | chat-04-drawdown-controlled-sizing.md | done (follow-up a needed one retry) |
+| Technique 11 | Backtest overfitting and validation | chat-11-backtest-overfitting-validation.md | done (topic question needed one retry) |
+| Technique 12 | Safe de-risking and re-risking | chat-12-safe-derisk-rerisk.md | done |
+| Technique 14 | Early exit and meta-labelling | chat-14-early-exit-meta-labelling.md | done |
+| Technique 16 | Trading costs, retail FX and crypto | chat-16-trading-costs-retail-fx-crypto.md | done |
+| Technique 7 | Layered limits and alarm fatigue | chat-07-layered-limits-alarm-fatigue.md | done |
+| Technique 9 | News and event risk | chat-09-news-event-risk.md | done |
+| Technique 19 | LLM agents for risk monitoring | chat-19-llm-agents-risk-monitoring.md | done |
+| Technique 20 | Approval gates and agent evaluation | chat-20-agent-approval-gates-evaluation.md | done |
+| Technique 21 | Multi-agent market simulation for risk testing | chat-21-multi-agent-market-simulation.md | done |
+| Technique 22 | The operator's saved papers, two per chat attached with '@' (deep dive, then combinations) | chat-22a ... chat-22e | done (5 chats) |
+| Technique 3 | (skipped) | - | Not run as its own chat: its ground is covered by G (chat 29, multi-asset normalisation) and B (chat 24, scalping and costs). |
+
+All 32 new chats (01, 02, 04-21, 22a-22e, and A-G as 23-29) have three turns: topic question, follow-up (a), follow-up (b). No topic in the brief's list is left unasked except topic 3, skipped as above.
+
+- **Limits hit.** The Pro 5-hour limit hit after two chats (01, 10); later a "Go plan" usage limit stopped new messages until the operator upgraded. No limit was hit after the upgrade.
+- **Bookmarks (library folder totals at the end of the run; totals include anything the folders held before).** qmx-risk-sizing: 145 papers. qmx-agents: 30 papers (agent-topic chats, including 19 and 20). qmx-unit-seeds: 1 paper. Every "Bookmark all to library" button in every chat was used. Chats 22a and 22c show no bookmark button (their cited papers are mostly the two attached ones, already in the library).
+- **Exports.** alphaXiv has no file download for a chat. Its export is the chat header menu "Chat actions > Copy Markdown" (also "Copy Markdown + Reasoning"), which copies the whole chat (questions and answers) as Markdown. That was used for every chat run here plus conv-01 to conv-03, and each copy was saved to `exports\` under the same file name as its chat file, with the chat URL in a first-line comment. No file was downloaded, opened or run. See "Exports: what carries equations and diagrams" at the end of this file.
 
 ---
 
@@ -677,6 +697,92 @@ Asked without any budget figure.
 
 **Growth vs survival (assistant's claim).** Evidence is strongest for FX volatility around major releases, index-futures liquidity around macro news, and equity price discovery around earnings; thin for oil inventory, gold, fixes, unlocks, crypto incidents and roll days, so those windows are conservative placeholders to be measured. Flattening gives up event alpha that short-horizon strategies mostly cannot capture net of costs; strategies built for events should be separate, tested units.
 
+## Technique 19 - LLM agents for risk monitoring (chat 19)
+
+Agent topic: newest work asked for. No budget figure.
+
+**Core answer (assistant's claim).** The 2026 evidence supports traceable oversight plus hard-coded controls, not LLMs catching live losses sooner. No paper shows a human operations team detecting live multi-strategy problems earlier or avoiding real losses because of an LLM monitor. Build a **deterministic risk monitor with an LLM explanation layer**, not an LLM risk controller: rules raise alerts; the LLM reads decision traces, drafts a diagnosis and a review checklist, and never trips or clears a control.
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| ReguSim: Evaluating LLM Agent Rule Grounding in Financial Compliance | https://arxiv.org/abs/2608.19974 | 2026 | Alert-quality evidence: on 900 synthetic marked records the best LLM F1 was 70.9%; a high-recall model had 91.7% recall but 59.5% precision; a trained logistic-regression detector scored 89.2% F1. Measure precision and recall of every alert source; prefer trained detectors for known patterns. | X6, X7 |
+| NEXTFUND: A Unified Performance Tracking Platform for Agentic Portfolio Management | https://arxiv.org/abs/2607.11141 | 2026 | Time-aligned record of observations, signals, decisions, rationales and executions; analyst signals agreed ~92.9% but final actions only ~36.4%. Record the decision chain so divergence is inspectable. | X6 |
+| Oculi: A Conversational Agentic Platform for Automated Credit Risk Analysis | https://arxiv.org/abs/2608.28944 | 2026 | LLM directs analysis, deterministic tools compute; 23.8% of its feature suggestions were invalid in a small test and were filtered. Validate every LLM proposal before use. | X7 |
+| Positive-Unlabeled Learning for Agent Safety False Alarm Auditing | https://arxiv.org/abs/2610.02925 | 2026 | Ranks existing alarms for human review (33.3% more false alarms recovered than the best PU baseline). A triage layer for alarm fatigue, not a better detector. | X6 |
+| SwingGuard (daily strategy generation plus a five-minute crypto risk controller) | https://arxiv.org/abs/2610.12988 | 2026 | Risk triggers (drawdown, ATR, momentum, exposure, on-chain and news anomalies, six-hour accumulation) start a deeper diagnosis; retrieves similar past risk snapshots; staged recovery. Backtest only (2024-2025 BTC/ETH). | X3, X6 |
+| Trading Agents or Market Crashers? | https://arxiv.org/abs/2609.19705 | 2026 | Simulated kill switches contained some cascades, but a fast-path threshold caused repeated calm-market halts. | X3 |
+| FinRiskAtlas; RiskReason | https://arxiv.org/abs/2608.25325 ; https://arxiv.org/abs/2611.01236 | 2026 | Benchmarks for LLM risk review and verifiable risk reasoning; synthetic scenarios. | X7 |
+
+**Growth vs survival (assistant's claim).** An LLM layer adds latency, cost and false alerts; its value is faster diagnosis after a deterministic alert, which no paper has measured in operator time saved. The monitor must not slow the kill path.
+
+**Per asset class (assistant's claim; design requirements, not benchmarked).** FX: session handovers, weekend gaps, fixing windows, whole-book currency exposure, broker-to-broker price divergence, swap at each broker's rollover time. Indices: cash vs futures vs after-hours, auctions, basis, constituent closures, venue circuit breakers. Metals: broker "spot" vs exchange futures, fixing windows, margin changes. Energy: expiry, roll, first notice, inventory events, price limits, unit and multiplier checks. Crypto: no quiet hours; funding, liquidations, mark vs index vs last, venue outages, stablecoin and chain events. Futures: contract month, roll, settlement, variation margin, limit status from the exchange calendar. Single stocks: halts, auctions, corporate actions, borrow and short-sale rules.
+
+## Technique 20 - Approval gates and agent evaluation (chat 20)
+
+Agent topic: newest work asked for. No budget figure.
+
+**Core answer (assistant's claim).** A gate helps only if it sits **outside the agent's control**, shows the **complete effect**, and authorises **exactly the version that later executes**. Use human gates for judgment (strategy promotion); make deterministic controls responsible for hard limits and exact action binding. Papers show gates catch things rule checks miss and add delay; none shows human approval improves financial outcomes at scale or measures real rubber-stamping.
+
+**Approval workflow for one operator (assistant's proposal, five steps).** (1) The agent submits a frozen proposal with an immutable ID and hash; it cannot promote, change approval status, change portfolio limits, reach broker credentials or send live orders. (2) Deterministic checks run before the queue: reproducible from frozen inputs, contract tests, no data later than its decision time, no evaluation-window reuse, realistic costs, limits respected. (3) The operator sees one screen (what changed, why, evidence after costs, worst loss, failure modes) and chooses promote, reject or request changes; promotion binds to the candidate hash, instruments and limits. (4) The runtime holds a narrow capability to activate only that version; independent order, strategy and portfolio limits; a kill switch that needs no model; material changes or stale approvals revoke it. (5) An append-only, replayable audit record (hashes, checks, the exact screen shown, approver, decision, later fills and rollbacks).
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| I-HITL: Inalienable Human-in-the-Loop | https://arxiv.org/abs/2610.35835 | 2026 | 9 of 10 models raised their own spending cap by fetching an emailed OTP. The approval channel must be out of the agent's reach. | X7 |
+| Approve What, Exactly? Effect Binding and Trusted Rendering for Agent Step-Up Authorization | https://arxiv.org/abs/2610.21063 | 2026 | Gateway turns the call into a canonical effect descriptor, renders the card from it, a passkey signs the digest, execution uses the stored descriptor; single-use, expiring grants. Blocked substitution and replay in 27,108 scripted trials; forged-narration attack success fell 0.54 to 0.03; flooding still worked 45-60% against a modelled human. | X7 |
+| AllPath: Layered Verification for a Deployed, Self-Revising LLM Trading Agent | https://arxiv.org/abs/2610.26662 | 2026 | Agent proposes orders and revisions but cannot execute, edit files or approve itself; the operator approved 4 of 6 reflection proposals; median decision delay 8.8 hours (11 min to 80.7 h); paper account, single operator. | X7 |
+| Reliable Before Profitable: QuantHarness | https://arxiv.org/abs/2610.26101 | 2026 | Task contract, spec, data bindings, output protocol, plan; a separate runtime (Harness Core) decides each stage transition; 90.72% task success on 97-task FinRelBench (A-shares). Governs development, not live risk. | X5, X7 |
+| Loopjacking: Hijacking Human-in-the-Loop Approval | https://arxiv.org/abs/2609.21081 | 2026 | A correct diff at review time is not enough if state changes before use: re-check at use time. | X7 |
+| Approval Laundering; Agent Approval Laundering | https://arxiv.org/abs/2609.38983 ; https://arxiv.org/abs/2609.28586 | 2026 | Approved actions can carry transitive effects beyond the approved call. | X7 |
+| AStockArena; Measurement Boundaries in LLM Financial Agent Evaluation | https://arxiv.org/abs/2611.00515 ; https://arxiv.org/abs/2609.32379 | 2026 | Audit that reported actions match orders and account changes, and rationales use contemporaneous evidence; fixed-tape evaluation limits. | X5 |
+
+**Growth vs survival (assistant's claim).** Gates cost latency (AllPath's 8.8-hour median) and missed opportunities; they protect against agent self-escalation, swapped actions and unreviewed changes. Keep human review for promotion and material change only; never put a human in the kill path.
+
+**Per asset class (assistant's claim; operational checks, not paper results).** One gate design for all classes; the packet's pre-queue checks are class-aware: FX instrument type, calendar, rollover and value dates; indices: cash vs ETF vs futures, point-in-time membership, auctions, basis; metals and energy: contract month, delivery, roll, storage, price limits, negative prices; crypto: exchange, custody path, funding, liquidation rules, mark vs index; futures: executable contract series separate from back-adjusted series; single stocks: point-in-time constituents with delisted names, corporate actions, borrow.
+
+## Technique 21 - Multi-agent market simulation for risk testing (chat 21)
+
+Asked for the strongest work, classics allowed. No budget figure.
+
+**Core answer (assistant's claim).** A rule can look safe against a fixed historical tape and fail when other agents react: in one 2026 study, price-triggered selling turned a simulated 9.2% crash into a 17.3% drawdown with 400 agents, while external fast halts and hard loss limits largely removed the amplification. Use simulators as complementary test benches: ABIDES for the configurable exchange and strategy integration, ABIDES-MARL for adapting liquidity providers, CrashGym for controlled cascade and intervention experiments. None covers a multi-asset portfolio across QMX's venues; realism must be earned by calibration.
+
+| Paper | Link | Year | What to borrow | Layer |
+|---|---|---|---|---|
+| ABIDES: Towards High-Fidelity Market Simulation for AI Research | https://arxiv.org/abs/1904.12066 | 2019/2020 | Event-driven, message-based exchange; strategies as agents; latency and computation delays. Best integration start; NASDAQ-like equity. | X4 |
+| ABIDES-MARL | https://arxiv.org/abs/2511.02016 | 2025 | Liquidity responds strategically; a fixed impact assumption can mislead. An opponent-adaptation test, not crisis realism. | X4 |
+| CrashGym: Measuring the Decision Value of Experimentation for LLM Agents in Counterfactual Market Crashes | https://arxiv.org/abs/2610.29245 | 2026 | Switch stress channels on and off and score decisions against counterfactuals; one synthetic asset. | X4 |
+| Trading Agents or Market Crashers? | https://arxiv.org/abs/2609.19705 | 2026 | The 9.2% to 17.3% amplification result; external halts and hard loss limits contain it. | X3, X4 |
+| LOB-Impact Benchmark; FlowLOB; M3 | https://arxiv.org/abs/2610.27100 ; https://arxiv.org/abs/2608.13096 ; https://arxiv.org/abs/2608.19227 | 2026 | Generative limit-order-book models and a benchmark for emergent market impact. | X4 |
+| Get Real: Realism Metrics for Robust Limit Order Book Market Simulations | https://arxiv.org/abs/1912.04941 | 2019/2020 | Stylised-fact checks before trusting any simulator. | X4, X5 |
+| EvoMarket | https://arxiv.org/abs/2604.18046 | 2026 | Broadest market-mechanism set (multi-asset, cross-day, institutional rules); calibrated to China A-shares. | X4 |
+| Agent-Based Simulation of a Perpetual Futures Market; Can AI Make Money in Crypto? | https://arxiv.org/abs/2501.09404 ; https://arxiv.org/abs/2609.34510 | 2025; 2026 | Perpetual funding and liquidation mechanics; the gap from crypto backtests to live markets. | X4 |
+| How to Evaluate Trading Strategies: Single Agent Market Replay or Multiple Agent Interactive Simulation? | https://arxiv.org/abs/1906.12010 | 2019 | Replay vs interactive simulation give different verdicts. | X5 |
+| LLM Multi-Agent Systems Are Vulnerable to Herding and Runaway Cascades | https://arxiv.org/abs/2610.30769 | 2026 | LLM agents cascade and self-correct less than humans (not a market test): many similar agent strategies are one crowded bet. | X7 |
+
+**Growth vs survival (assistant's claim).** Simulation finds interaction failures a backtest cannot (crowding, liquidity withdrawal, cascades) but its numbers are only as good as its calibration; use it to compare rules, not to forecast P&L.
+
+**Per asset class (assistant's claim).** Model the venue's rules, not just its prices. FX: dealer liquidity plus ECN books, sessions, last look, releases and rollover separately. Indices and listed futures: continuous book plus auctions, rolls, price limits, margin. Metals and energy: futures curve, rolls, delivery, storage and carry, inventory shocks, location and product basis. Crypto perpetuals: fragmented venues, funding, leverage, liquidation engines, mark vs index, cross-venue basis and latency. Single stocks: per-symbol books, auctions, halts, corporate actions, sector correlation.
+
+## Technique 22 - The operator's saved papers, two per chat (chats 22a-22e)
+
+Each chat attached two papers from the operator's library with '@', asked how each could serve QMX risk and sizing, then went deeper (liftable parts, asset classes, growth vs protection) and finally asked for combinations and the one idea to build first. The assistant's verdict on all ten: **none is a live risk-and-sizing layer**; each supplies a proposer, an evidence source or a governance pattern to sit in front of deterministic limits.
+
+| Paper | Link | Year | What to borrow (assistant's claim) | Layer | Chat |
+|---|---|---|---|---|---|
+| AlphaAgent: LLM-Driven Alpha Mining with Regularized Exploration to Counteract Alpha Decay | https://www.alphaxiv.org/abs/2502.16789 | 2025 | Idea, factor and evaluation agents; originality (AST novelty), hypothesis alignment and complexity regularisers; duplicate screening. Reported 11.00% excess (CSI 500) and 8.74% (S&P 500), IR 1.49 and 1.05, max DD ~9%, test 2021-2024. A candidate-admission discipline. | X5, X7 | 22a |
+| MASS (multi-agent simulated investors to portfolio) | https://www.alphaxiv.org/abs/2505.10278 | 2025 | Consensus minus disagreement across simulated investor types; weekly equal-weight top 20%, 0.1% round-trip cost; small 2023 returns. Use disagreement as a portfolio or stress input, never a sizing authority. | X4, seed | 22a |
+| Diffusion Predictive Control with Constraints (DPCC) | https://www.alphaxiv.org/abs/2412.09342 | 2024 | A robot controller, not trading: lift the pattern propose, constrain, execute one step, observe, replan, for order and position paths under exposure, turnover and drawdown limits; constrained stress-path generation is a new use. | X2, X4 | 22b |
+| QuantaAlpha | https://www.alphaxiv.org/abs/2602.07085 | 2026 | Evolves research trajectories (mutation and crossover) over hypotheses and symbolic factors; CSI 300 IC 0.0472, excess 4.68%, IR 0.65. AutoScientist-Quant (https://www.alphaxiv.org/abs/2608.28632) reports lookahead in an evaluation pipeline reused by QuantaAlpha: treat its numbers as unverified. | X5, X7 | 22b |
+| MarketSenseAI 2.0 | https://www.alphaxiv.org/abs/2502.00415 | 2025 | Monthly long-only stock selection; its news, fundamentals, macro and dynamics agents can emit typed, timestamped, expiring evidence records; risk metrics are analysis inputs only. | X7 | 22c |
+| EvolveTrade: Experience-Driven Policy Refinement for Self-Evolving LLM Trading Agents | https://www.alphaxiv.org/abs/2609.17632 | 2026 | A policy agent revises tool-use and analysis instructions every five trading days from decision traces and outcomes. Learn the procedure, never the risk boundary; every policy change goes through versioned replay and human promotion. | X7 | 22c |
+| Label Unbalance in High-frequency Trading | https://www.alphaxiv.org/abs/2503.09988 | 2025 | Three-class, fee-threshold labels for one-minute futures moves; class weights, cost-sensitive and focal losses for rare classes. Six contracts, 20 days, no net portfolio results: a signal-model experiment only. | X1, seed | 22d |
+| FinRL-X: An AI-Native Modular Infrastructure for Quantitative Trading | https://www.alphaxiv.org/abs/2603.21330 | 2026 | Strategy proposals kept separate from the final weight and execution interface, with risk overlays downstream; daily-rebalanced paper account Oct 2025-Mar 2026 +19.76%, Sharpe 1.96, max DD -12.22% (authors: an execution test, not proof of alpha). | X2, X6 | 22d |
+| Reliable Before Profitable: QuantHarness | https://www.alphaxiv.org/abs/2610.26101 | 2026 | Governed development: task contract, data bindings, frozen spec, stage transitions decided by a runtime outside the agent, retained rejected outputs. FinRelBench task success 90.72% vs 74.23-84.54% for Codex CLI, SWE-agent, Aider, OpenHands (chart captured in chat 22e). Reliability, not return. | X5, X7 | 22e |
+| Trading-R1: Financial Trading with LLM Reasoning via Reinforcement Learning | https://www.alphaxiv.org/abs/2509.11420 | 2025 | Qwen3-4B, staged SFT then RL (thesis structure, evidence-grounded claims, five-way recommendation with volatility-aware labels); six US equities and ETFs, June-August 2024, +2.38% to +8.08%, Sharpe 0.86-2.72. Narrow test; a proposer whose risk decision must live elsewhere. | X7, seed | 22e |
+
+Related papers these chats surfaced: Propose, Don't Judge (https://www.alphaxiv.org/abs/2609.27051), Fake News, Real Crashes (https://www.alphaxiv.org/abs/2610.26438), SHARP rubric policy (https://www.alphaxiv.org/abs/2605.06822), FINSABER (https://www.alphaxiv.org/abs/2505.07078), Position Sizing as a Risk-Control Variable: A Closed-Loop GRPO Framework for LLM Trading (https://ieeexplore.ieee.org/document/11676654/), an injected-truth study of admission gates (https://www.alphaxiv.org/abs/2610.07701), Measuring Strategy-Decay Risk: Minimum Regime Performance (https://www.alphaxiv.org/abs/2604.08356), Anytime-Valid Distribution Shift Detection via Predictive Rank Martingales (https://www.alphaxiv.org/abs/2609.00536), Anytime-Valid Certification of Robustness Margins for Safe Control via E-Values (https://www.alphaxiv.org/abs/2610.23746).
+
+**What to build first, per paper (assistant's picks).** AlphaAgent: candidate screening plus a frozen, anytime-valid promotion gate. MASS: agent disagreement as a stress input. DPCC: the propose-constrain-execute-one-step order filter. QuantaAlpha: traceable mutation lineage inside a search ledger. MarketSenseAI: one typed, timestamped, expiring evidence interface (advisory only). EvolveTrade: a policy-update channel that cannot touch limits, permissions or exits. Label Unbalance: the classifier as a signal proposer behind separate admission, sizing and live gates. FinRL-X: the proposal-to-weights-to-orders interface with downstream overlays. QuantHarness: the governed promotion pipeline. Trading-R1: its signal tested net of costs under the search-aware gate, with sizing decided elsewhere.
+
 ---
 
 ## Asset-class differences across topics (running table)
@@ -693,6 +799,18 @@ Condensed from chats 01, 06, 08 and 10. All of it is the assistant's claim.
 | Futures | Contracts from stressed $ P&L per contract; margin buffer | Hard stop on contract identity or margin reject | Basis or roll break cuts the contract | Multiplier, tick, roll per trade; margin is not risk |
 | Single stocks | Shrink to sector; borrow, gaps; point-in-time universe | Block while halted; stability check after reopen | Sector, peers, own liquidity; name-level cuts | Corporate actions, earnings gaps; sparse trades |
 
+Continued from later chats (04, 12, 13, 16, 19-21). Event windows per class are in the chat 09 section; top-down per-class verdicts are in sections A-G. All of it is the assistant's claim.
+
+| Class | Drawdown sizing (04) | Ramping up (12) | Stops (13) | Costs to model (16) | Monitoring (19) | Simulation needs (21) |
+|---|---|---|---|---|---|---|
+| FX | Aggregate currency factors (USD, JPY, carry); weekend reopen gaps | Notional steps above venue minimums; evidence per session and pair | No consolidated price or universal trigger; rollover, handoff and releases widen spreads | Last look (window, accept, reject, requote odds), broker swap long and short, rollover time and day multiplier | Session handovers, fixing windows, whole-book currency exposure, broker price divergence | Dealer liquidity plus ECN books, sessions, last look; releases and rollover stressed separately |
+| Indices | Stress jointly with equity beta; separate overnight-gap stress | Micro futures or small ETF size, integer-contract steps; regular vs overnight evidence | Cash vs futures hours; auctions; gaps | Futures: spread in ticks, fees per contract, tick value, depth, roll; CFDs: spread and financing | Cash vs futures vs after-hours, auctions, basis, venue circuit breakers | Continuous book plus auctions, rolls, price limits, margin |
+| Metals | Precious vs industrial; USD, real-rate, risk factors | Each metal its own bucket; valid contract rounding; active vs thin sessions | Gold liquid across sessions; silver and small contracts differ | Futures roll and fees; CFD spread, swap, multiplier | Broker spot vs exchange futures, fixing windows, margin changes | Futures curve, rolls, delivery, storage and carry |
+| Energy | More conservative jump stresses; concentration caps across maturities | Slowest ramp, smallest exposure | Inventory, OPEC, weather; expiry and delivery; limit moves | Contract value, roll execution, calendar spread; back-adjusted series hide roll losses | Expiry, roll, first notice, inventory events, unit and multiplier checks | Inventory and supply shocks, location and product basis |
+| Crypto | Ordinary and tail stresses; venue limits; collateral buffers | 24/7 data is not independent evidence; block by session, weekday vs weekend, venue, funding | Trigger on last, mark or index price; funding, liquidation engine | Fee tier, maker and taker fee, rebate, funding rate and time, position at funding | No quiet hours; funding, liquidations, mark vs index, outages, stablecoin and chain events | Fragmented spot and perp venues, funding, liquidation engines, basis, latency |
+| Futures | Notional, vol and stressed margin per contract, not contract counts | If one contract exceeds the loss budget, size is zero, not rounded up | Limit moves; roll | Per-contract fees, tick value, roll | Contract month, roll, settlement, variation margin, limit status | Exchange rules, rolls, margin, settlement |
+| Single stocks | Issuer, sector and event caps | Evidence across distinct names; whole-share minimums can make a tier infeasible | Gaps, earnings, halts; a stop cannot fill through a halt | Spread, commissions, impact, borrow availability, rate and recalls; CFD financing | Halts, auctions, corporate actions, borrow and short-sale rules | Per-symbol books, auctions, halts, corporate actions, sector correlation |
+
 ---
 
 ## Workflows QMX could have
@@ -703,7 +821,17 @@ Proposed in the answers so far (assistant's claims, framed as QMX workflows).
 2. **Graded live demotion.** Warning detector (CUSUM or e-detector) cuts the strategy's risk budget and opens a review; confirmed economic failure (e-process >= 1/alpha_i) suspends it; a pre-authorised dollar loss rule can demote before either. Each demotion records its cause. Re-promotion is a new funded episode. (chat 10)
 3. **External breaker governor.** A process outside all agents watches equity, open risk, margin, reconciliation, data freshness, rejects, slippage and order rate, and moves each strategy, bucket and the account through explicit states: alert, block new entries, cancel working orders, disabled, account stop. An order-boundary validator computes worst-case loss for every order. (chat 06)
 4. **Bucket stress isolation.** Per bucket (asset class, session or region): data-validity check, then turbulence, correlation surprise and absorption ratio; a bucket alert blocks entries and steps down that bucket's risk; a separate whole-book control covers broad shocks; re-risk in capped steps after a persistence window. (chat 08)
-5. **Read-only LLM risk narrator.** An LLM summarises incidents, explains shared exposure across strategies and drafts a review checklist; it never trips or clears a breaker. (chat 06)
+5. **Read-only LLM risk narrator.** An LLM summarises incidents, explains shared exposure across strategies and drafts a review checklist; it never trips or clears a breaker. (chat 06; chat 19 adds a decision-trace record in the NEXTFUND style and a false-alarm triage ranker)
+6. **Bound approval packet.** Agent submits a frozen, hashed candidate; deterministic pre-queue checks (reproducible, point-in-time, no window reuse, realistic costs, limits); a one-screen operator decision bound to the hash, instruments and limits; the runtime holds a narrow capability to run only that version; drift, stale approval or material change revokes it; an append-only, replayable record. (chat 20; chats 22c-22e reuse it for self-evolving agents)
+7. **Governed research pipeline.** Task contract and data bindings (QuantHarness), every trial in a search ledger, leakage-safe and search-aware evaluation, then an anytime-valid promotion test on fresh net returns, then the bound approval packet. (chats 18, 20, 22e)
+8. **Staged ramp ladder.** Shadow, then the smallest feasible live size, then larger steps only after fresh evidence at each step; de-risk fast, re-risk slowly and in capped steps; "zero" when one minimum contract exceeds the step's loss budget. (chat 12; chats 05, 11 tie each step to a promotion test or capacity estimate)
+9. **Shared cost ledger.** One ledger for backtest and live fills with per-fill markouts; conditional passive-fill odds instead of a fixed fill assumption; Slippage-at-Risk from visible depth; costs re-estimated per session and fed back to the edge-to-cost admission gate. (chat 16)
+10. **Meta-label exit and size gate.** A primary rule proposes a trade; a meta-labeller trained on triple-barrier outcomes gives a calibrated probability; probability and payoff map to size under a conservative risk budget; a separate portfolio guard can still cut. (chats 14, 22d)
+11. **Event calendar control.** Per instrument, scheduled event windows block entries and cancel stale orders; unscheduled news acts as a breaker on a trusted signal; re-entry is gated on observed spread, depth and impact, not only a timer. (chat 09)
+12. **Alert rationalisation.** Every page names an action and a deadline; strategy trips first, cluster and account act as time-graded backups; multi-window loss-budget burn alerts; incidents grouped; each trip logged with whether it was actionable. (chat 07)
+13. **Interactive simulation bench.** Run the same risk rules under fixed-tape replay, an interactive exchange (ABIDES), adaptive liquidity (ABIDES-MARL) and cascade scenarios (CrashGym); report where the verdicts differ before trusting a rule. (chat 21)
+14. **Conservative parameter tuning.** Offline tuning proposes a few stable configurations; live switching between them runs as a conservative bandit with a baseline-relative loss budget and discounting of stale results. (chat 17)
+15. **Propose-constrain-execute one step.** Strategies propose order or position paths; a deterministic layer projects them onto exposure, turnover, liquidity and drawdown limits; only the next step executes; replan with fresh state. (chat 22b, from DPCC)
 
 ## Papers that could combine
 
@@ -727,6 +855,52 @@ Pairs, triples and larger groups the answers proposed. One line each on what the
 - **ARR + correlation surprise + turbulence:** a local contagion trigger per bucket (co-movement, unusual dependence, unusual joint move). (chat 08)
 - **Conformal Kelly + Page CUSUM + the bucket contagion gate:** a strategy's own decay lowers its risk even in a calm bucket; the bucket is cut only when bucket stress also fires. (chat 08)
 - **Robust drawdown invariance + HRP (Lopez de Prado 2016):** cluster caps from strategy P&L (not instrument labels), then a portfolio drawdown multiplier and local regime multipliers. (chat 08)
+
+From the later chats (same caveat: proposed designs, not tested end to end):
+
+- **Agnostic Risk Parity + HRP + Bayes-Stein:** cluster-aware risk budgets stop similar sleeves from stacking; shrunk return estimates. (A)
+- **Kelly information rate + Bayes-Stein + Deflated Sharpe:** conservative edge estimate, discounted for the number of trials, before any growth sizing. (A)
+- **PBO + DSR + the agent-generated strategy log:** record every idea and variant; evaluate with leakage-safe splits. (A, 11)
+- **Meucci effective number of bets + HRP + Ledoit-Wolf covariance:** measure true breadth, allocate by clusters, stable covariance. (02)
+- **Hamilton Markov switching + Engle DCC + Moreira-Muir:** filtered macro regime and dynamic correlation scale vol-managed exposure. (D)
+- **Grossman-Zhou drawdown control + CAST uncertainty penalty + conformal VaR:** account drawdown and forecast uncertainty both cut exposure; calibrated tail limit on top. (D)
+- **Kaminski-Lo "When do stop-loss rules stop losses?" + Almgren-Chriss:** separate the decision to cut risk from the execution of the cut. (D)
+- **OFI/MLOFI + a session-aware cost model + a hard risk budget:** scalp only where the book signal clears session costs. (E)
+- **Schur Complementary Allocation + NCO-Schur bridge + conformal portfolio VaR:** stable cluster allocation with a calibrated tail limit. (05)
+- **Efficient multivariate Kelly + Schur allocation + Conformal Kelly:** growth sizing across strategies with uncertainty-calibrated caps. (05)
+- **Post-selection Sharpe + Certified Alpha Capacity + the sequential promotion test:** honest edge after search, a capacity ceiling, then fresh evidence before scaling. (05, 11)
+- **TPE-AS + Conservative Bandits (+ Rotting Bandits):** offline candidate configurations, live switching under a loss budget, stale rewards discounted. (17)
+- **AQuA or TPE-AS + "What survives honest evaluation?":** an LLM proposes bounded parameter or hypothesis changes only, compiled and judged by a search-aware evaluator. (17, 18)
+- **EvoQuantLab + "What survives honest evaluation?" + Promote (2611.03384):** evolutionary discovery, search-aware historical evidence, anytime-valid live promotion. (18)
+- **AQuA + Propose, Don't Judge + AllPath:** research memory, a frozen referee the agent cannot tune, human approval. (18)
+- **Propose, Don't Judge + e-detectors + Understanding Alpha Decay:** frozen admission plus live decay retirement. (11)
+- **Synthetic execution benchmark + anytime-valid promotion + instrument-mechanics stress:** promotion evidence that already includes realistic fills and contract mechanics. (11)
+- **Tail-GAN + SSGEN + execution-cost stress:** generated tail scenarios for strategy P&Ls, with costs stressed too. (15)
+- **Packham-Woebbeking correlation stress + SSGEN + strategy-cluster budgets:** interpretable dependence shocks that test cluster caps. (15)
+- **SSGEN + CAST + an external kill switch:** find forecast and position states that create severe loss; uncertainty-aware sizing; independent stop. (15)
+- **AutoQuant + The Market Maker's Dilemma (+ Slippage-at-Risk):** one backtest/live ledger with conditional passive-fill odds and depth-based slippage. (16)
+- **Optimal Trading Filters + AutoQuant:** a cost-aware target-position filter between forecast and order. (16)
+- **Structural Limits of OHLCV momentum in MNQ + Market Maker's Dilemma + AutoQuant:** walk-forward, per-fold trade-count and net-return gates as a falsification template. (16)
+- **Funding-Aware Optimal Market Making + AutoQuant:** funding state shifts target inventory and quote skew for perps. (16)
+- **Meta-label probability-to-size + portfolio kill switches:** calibrated probability sets size; the portfolio guard can still cut. (14)
+- **IEEE inverse-time grading + ISA-18.2 + SRE burn-rate alerts:** layered limits that trip nearest-first, with actionable alerts only. (07)
+- **E-values + burn-rate alerts + hard limits:** statistical decay monitoring and budget burn kept separate from the hard-loss trip. (07)
+- **ReguSim-style alert scoring + PU false-alarm triage + NEXTFUND decision traces:** measure each alert source, rank likely false alarms, keep a replayable decision record. (19)
+- **QuantHarness + "What survives honest evaluation?" + Promote:** governed development, full search accounting, anytime-valid promotion. (20, 22e)
+- **AllPath + Approve What, Exactly? + Loopjacking:** a human queue whose approvals are bound to the exact effect and re-checked at use. (20)
+- **AllPath + SwingGuard + FARSIGHT:** promotion gate plus continuous risk governance plus an independent kill path. (20)
+- **ABIDES + ABIDES-Gym + LOB-Impact Benchmark:** production agents through an exchange adapter; measure emergent impact. (21)
+- **EvoMarket + CrashGym + ABIDES-MARL:** multi-asset institutional rules, cascade scenarios, adaptive liquidity. (21)
+- **ABIDES + FARSIGHT + AllPath:** shared news and signals in an interactive market to expose crowding among QMX's own strategies before promotion. (21)
+- **CrashGym + Can AI Make Money in Crypto? + perpetual-futures ABM:** crypto venue model with funding and liquidations for cascade tests. (21)
+- **AlphaAgent + anytime-valid promotion ledger + live decay retirement:** regularised candidate generation, sequential promotion, retirement on decay. (22a)
+- **DPCC + On Control of Drawdown (2609.23272) + e-value robustness-margin certification (2610.23746):** constrained next order under a drawdown ceiling, with margins revised cautiously online. (22b)
+- **QuantaAlpha + post-selection Sharpe (2606.01650) + Promote:** each mutation is a versioned candidate; the ledger makes the search count. (22b)
+- **MarketSenseAI 2.0 + OpenPM (2608.09988) + Fake News, Real Crashes (2610.26438):** typed, timestamped, provenance-checked evidence records, replayed point in time. (22c)
+- **EvolveTrade + AllPath + Promote:** self-evolving analysis policy under human-gated, versioned promotion. (22c)
+- **Label Unbalance + FinRL-X + meta-labelling and triple-barrier exits:** a rare-event classifier as proposer, trade-lifecycle labels, a downstream allocation interface. (22d)
+- **Label Unbalance + FinRL-X + How Execution Assumptions Change Short-Horizon Sharpe Rankings (2610.05077):** an edge-to-cost gate on the classifier's "opportunity" class. (22d)
+- **Trading-R1 + Position Sizing as a Risk-Control Variable (GRPO) + AllPath:** keep the signal model apart from the sizing decision; human-gated revisions. (22e)
 
 ---
 
@@ -755,3 +929,38 @@ Trading ideas and market readings found in the answers that could become QMX uni
 | Weekend crypto stress to Monday risk | Weekend Crypto Volatility and Monday Market Risk 2026, https://www.alphaxiv.org/abs/2610.35702 | Weekend crypto volatility as a Monday exposure-review trigger. | Reading (lead) | Monday index and FX exposure. | Weekend crypto vol, Monday open gaps. |
 | Order-flow regime breaks | Regimes in the Order Flow 2026, https://www.alphaxiv.org/abs/2609.07989 | Structural breaks in intraday order-flow regimes. | Reading (candidate) | Intraday units on exchange books. | Intraday order-flow data. |
 | Scheduled energy event window | Bu 2014, https://www.sciencedirect.com/science/article/abs/pii/S0140988314001236 | Crude volatility jumps around the weekly EIA report (Wednesday 10:30 New York). | Reading (event window) | Energy units. | EIA schedule, tick data around releases. |
+| Simple OHLCV base alphas | AlphaAgent 2025, https://www.alphaxiv.org/abs/2502.16789 | Four base alphas (intraday return, daily return, 20-day relative volume, normalised daily range) regularised for originality and simplicity; target was next-day stock return. | Unit raw material (needs short-horizon cost tests) | Daily stock ranking in the paper; intraday return, range and relative volume are the closest short-horizon families. | Daily or intraday OHLCV, point-in-time universe, costs. |
+| Agent consensus minus disagreement | MASS 2025, https://www.alphaxiv.org/abs/2505.10278 | Weighted agreement of simulated investor types minus their disagreement; high disagreement linked to overpricing under short-sale limits. | Reading (ensemble agreement; stress input) | Across QMX's own strategies: do independent models agree on an instrument? | Per-strategy signals per instrument, timestamped. |
+| Fee-threshold three-class labels | Label Unbalance in High-frequency Trading 2025, https://www.alphaxiv.org/abs/2503.09988 | Up, down or flat relative to a fee threshold on one-minute futures moves; rebalanced losses for the rare classes. | Unit (scalper signal model; experiment) | Liquid futures at one-minute bars. | One-minute futures bars, fee schedule, natural-class calibration set. |
+| Volatility-aware recommendation labels | Trading-R1 2025, https://www.alphaxiv.org/abs/2509.11420 | Five-way recommendations whose labels account for volatility over the holding horizon. | Reading or unit (swing) | Single stocks and ETFs, roughly weekly horizon; not a scalper. | Prices, fundamentals, dated news, sentiment, macro. |
+| Crypto risk triggers | SwingGuard 2026, https://arxiv.org/abs/2610.12988 | Drawdown, ATR, momentum, exposure, on-chain and news anomalies, source diversity, six-hour accumulation start a deeper diagnosis; staged recovery. | Reading (risk monitor input) | BTC and ETH intraday overlays. | Five-minute prices, on-chain and news feeds, exposure state. |
+
+---
+
+## Ten most useful papers for QMX (this run's pick)
+
+Picked by how directly each answers a QMX design question and how often the answers came back to it across chats. Every description is the assistant's claim; none is verified here.
+
+| # | Paper | Link | What it gives QMX | Layer |
+|---|---|---|---|---|
+| 1 | Can We Stop the Backtest Yet? Anytime-Valid Promotion Tests for Adaptive Financial Research Agents (Promote) | https://arxiv.org/abs/2611.03384 | A promotion gate that stays valid while agents keep searching: each frozen candidate is funded from a lifetime testing budget and tested only on returns after registration. Strict: ~no power at a 5 bp edge, 70.1% at 15 bp. | X5 |
+| 2 | What survives honest evaluation? Leakage-safe, search-aware assessment of LLM-driven strategy discovery | https://arxiv.org/abs/2608.27734 | Trial ledger, publication-delay audit, DSR and PBO for agent-found strategies: the historical half of the gate. | X5, X7 |
+| 3 | Post-Selection Estimation of Sharpe Ratios (Pav) | https://arxiv.org/abs/2606.01650 | Shrink the winner's Sharpe for the size of the search before it sets size; needs the whole candidate pool. | X2, X5 |
+| 4 | E-detectors (Shin, Ramdas, Rinaldo) and non-partitioned e-detectors (Saha, Ramdas) | https://arxiv.org/abs/2203.03532 ; https://arxiv.org/abs/2607.28322 | Live alpha-decay detection with controlled false alarms: warning cuts budget, confirmation suspends. | X3 |
+| 5 | On Control of Drawdown: Robust Invariance and Optimality | https://arxiv.org/abs/2609.23272 | Exposure bounded by the remaining drawdown cushion over an assumed return support: the account and cluster brake. | X2, X3 |
+| 6 | Building Diversified Portfolios that Outperform Out of Sample (HRP) with Meucci's effective number of bets | https://doi.org/10.3905/jpm.2016.42.4.059 ; https://papers.ssrn.com/sol3/papers.cfm?abstract_id=1358533 | Cluster strategies by their P&L so many similar units do not pass as breadth; measure true breadth. | X2, X6 |
+| 7 | CAST: uncertainty-penalised state-space controller for drawdown control | https://www.alphaxiv.org/abs/2609.14205 | More forecast uncertainty means less exposure; without the penalty drawdowns reached ~80%. A sizing template. | X2 |
+| 8 | Taming Tail Risk: Conformal Calibration for Nonstationary Portfolio VaR | https://arxiv.org/abs/2602.03903 | A calibrated portfolio tail limit that is separate from any claim about edge. | X3, X4 |
+| 9 | Approve What, Exactly? Effect Binding and Trusted Rendering for Agent Step-Up Authorization | https://arxiv.org/abs/2610.21063 | Bind the operator's approval to the exact effect that later runs; single-use, expiring grants. | X7 |
+| 10 | Reliable Before Profitable: QuantHarness, with AllPath as its deployed counterpart | https://arxiv.org/abs/2610.26101 ; https://arxiv.org/abs/2610.26662 | Governed strategy development outside the agent's control, and a live case of a human-gated, self-revising trading agent (with its 8.8-hour median approval delay). | X5, X7 |
+
+Close runners-up: Trading Agents or Market Crashers? (https://arxiv.org/abs/2609.19705; external halts contain cascades that loss-triggered selling amplifies), turbulence and correlation surprise (Kritzman, Li 2010; bucket risk-off readings), MLOFI (https://www.alphaxiv.org/abs/1907.06230; scalper signal and entry veto), Certified Alpha Capacity (https://arxiv.org/abs/2610.01115).
+
+## Exports: what carries equations and diagrams
+
+Saved in `exports\` with the same file names as the chat files: 32 chats run here (01, 02, 04-21, 22a-22e, 23-29) plus conv-01 to conv-03, 35 files in all. Source: the chat header menu "Chat actions > Copy Markdown" (alphaXiv offers no file download). Each export holds the whole chat: questions (with '@' paper-mention tags), the assistant's thinking titles, and answers. Counts below are from a scan of each file; inline-equation counts are approximate (a dollar sign in prose can be miscounted).
+
+- **Equations (LaTeX kept).** Display equations: chat 01 (9 blocks), chat 10 (9), chat 02 (3), chat 24 B (3), chats 08, 13, 14, 25 C (2 each), chats 11, 17, 22a, 27 E (1 each). Inline math: heaviest in chats 10, 02, 01, 11, 13, 14, 15. No equations: chats 05, 09, 16, 18-21, 22b, 22c, 26 D, 28 F, 29 G and conv-01 to conv-03.
+- **Charts.** The export, like the per-answer copy, keeps only each chart's title as an HTML comment, not its data. Chart placeholders appear in chats 05 (2), 13 (2), 14 (4), 17 (1), 19 (1), 20 (2), 22a (4), 22c (2), 22e (1). The chart values were read from the rendered page and are written into the matching chat files in this folder (not into the exports).
+- **Diagrams.** Only conv-02 carries diagrams: 3 Mermaid blocks, kept as source text. No chat run here produced a Mermaid diagram.
+- **conv-03** is short on the page as well (one question, one answer); its export matches the earlier text copy.

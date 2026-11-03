@@ -165,3 +165,76 @@ For **Label Unbalance**, weighting or undersampling can make rare directional ca
 For **FinRL-X**, timing and volatility overlays can reduce exposure in unfavorable regimes, and its reported allocation ablations show a drawdown improvement in some configurations. But an overlay that scales down exposure necessarily gives up some upside when its signal is wrong or lags a rapid reversal. The paper’s broader lesson is architectural: keep those controls modular and observable, so a strategy’s intended weights can be compared with the risk-approved and actually executed portfolio. [Risk Overlay](https://www.alphaxiv.org/abs/2603.21330?page=5)
 
 
+## Turn 3 (follow-up b: combinations and what to build first, model: Smart) - question
+
+Follow-up 2: Combinations. What would Label Unbalance in High-frequency Trading and FinRL-X each combine with from other areas of this system: meta-labelling and triple-barrier exits, edge-to-cost admission gates, deflated Sharpe and search ledgers, live alpha-decay detection, kill switches, stress scenarios, LLM research harnesses? Name concrete pairs or triples of papers with links, what the combined method or workflow would do for sizing, validation or monitoring, and why. Then say which single idea from each paper is most worth building first.
+
+## Turn 3 (follow-up b: combinations and what to build first, model: Smart) - answer
+
+**Build the label-imbalance classifier as a signal proposer, then put admission, sizing, and live permission behind separate gates.** The useful combination is not to let a rebalance method or a research agent decide that an imbalanced-model prediction is automatically a trade.
+
+The pairings below are **proposed integrations**, not combined methods evaluated by the papers. [Label Unbalance in High-frequency Trading](https://www.alphaxiv.org/abs/2503.09988) tests classification-loss adjustments; [FinRL-X](https://www.alphaxiv.org/abs/2603.21330) provides a modular, target-weight pipeline. Neither paper demonstrates the full set of controls you list.
+
+### 1. Imbalanced signal + meta-labeling and triple-barrier outcomes + FinRL-X
+
+**Papers:** [Label Unbalance in High-frequency Trading](https://www.alphaxiv.org/abs/2503.09988) + [FinRL-X](https://www.alphaxiv.org/abs/2603.21330). Meta-labeling and triple-barrier exits are the additional method components in this proposed pairing.
+
+Use the imbalanced classifier as the **primary model**: it proposes a direction or trade candidate. A second, separately trained **meta-model** estimates whether taking that candidate is worthwhile under the current context. Define candidate outcomes using triple barriers: profit target, stop, or maximum holding time. The meta-model’s inputs can include primary-model confidence, spread, volatility, liquidity, and time of day.
+
+The output should be more than “up/down”: it should estimate the chance and payoff of each exit outcome. Convert that to expected **net** edge after expected costs; only then ask FinRL-X’s allocation stage for a target weight. A deterministic risk service caps that weight, and the execution layer handles orders. This separates *finding a possible direction* from *deciding whether to risk capital on it*.
+
+**Why:** the first paper’s three-class, fee-threshold label does not test exits or sizing. Barrier outcomes make the training target more like the trade lifecycle, while FinRL-X gives the resulting decision a downstream allocation interface. Keep the second model calibrated on the natural class distribution; class weighting in the primary model does not make its probabilities reliable for sizing. [Labels and Imbalance](https://www.alphaxiv.org/abs/2503.09988?page=3) [Weight Interface](https://www.alphaxiv.org/abs/2603.21330?page=4)
+
+### 2. Edge-to-cost admission + execution-aware evaluation
+
+**Papers:** [Label Unbalance in High-frequency Trading](https://www.alphaxiv.org/abs/2503.09988) + [FinRL-X](https://www.alphaxiv.org/abs/2603.21330) + [How Execution Assumptions Change Short-Horizon Sharpe Rankings](https://www.alphaxiv.org/abs/2610.05077).
+
+Add a deterministic **admission gate** between signal generation and sizing. For each proposed trade, estimate expected gain against a conservative cost estimate: spread, fees, slippage, and a penalty for fill uncertainty. Reject the trade if the net edge is below a predefined margin. Use venue- and instrument-specific estimates rather than one global fee number.
+
+Then replay candidates under more than one execution assumption—e.g., optimistic, expected, and stressed fills—and see whether strategy rankings or admission decisions change. The execution-assumptions paper is relevant because its topic is precisely how fill assumptions can change short-horizon Sharpe rankings; it is not evidence that this gate is already validated for your markets.
+
+**Why:** the first paper’s label threshold accounts for a fee in defining classes, but it does not report net portfolio returns under realistic fills. FinRL-X describes transaction-cost and slippage modeling, while also recognizing the gap between simulation and broker execution. A cost gate makes the model’s “directional opportunity” compete against the hurdle that an actual scalp must clear. [Label Threshold](https://www.alphaxiv.org/abs/2503.09988?page=3) [Execution Gaps](https://www.alphaxiv.org/abs/2603.21330?page=2)
+
+### 3. Strategy search ledger + leakage-safe promotion tests
+
+**Papers:** [FinRL-X](https://www.alphaxiv.org/abs/2603.21330) + [What survives honest evaluation? Leakage-safe, search-aware assessment of LLM-driven trading strategy discovery](https://www.alphaxiv.org/abs/2608.27734) + [Reliable Before Profitable: QuantHarness for Governing Financial Strategy Development with LLM Agents](https://www.alphaxiv.org/abs/2610.26101).
+
+Give each candidate strategy a permanent record: hypothesis, code/version, data range, instruments, labels, features, thresholds, costs, execution assumptions, every parameter trial, and every rejected variant. Run time-ordered, leakage-aware validation; reserve a final untouched test; then require a human promotion decision before the candidate can reach live paper or live routing. Use deflated-Sharpe or backtest-overfitting diagnostics as **additional search-aware checks**, not replacements for the ledger or untouched evaluation.
+
+The named papers here are about leakage-safe evaluation and governing agent-generated research; I did not verify a retrieved paper that establishes a specific DSR or PBO implementation for this combination. FinRL-X contributes the stable strategy-to-weight interface, not a complete search-accounting protocol.
+
+**Why:** when agents can rapidly propose variants, the number of tried strategies is part of the evidence. Recording only the winner hides selection effects. The ledger gives reviewers the denominator—what was tried—not just a polished backtest.
+
+### 4. Live alpha-decay monitoring + exposure reduction or retirement
+
+**Papers:** [FinRL-X](https://www.alphaxiv.org/abs/2603.21330) + [AlphaAgent: LLM-Driven Alpha Mining with Regularized Exploration to Counteract Alpha Decay](https://www.alphaxiv.org/abs/2502.16789) + [Measuring Strategy-Decay Risk: Minimum Regime Performance and the Durability of Systematic Investing](https://www.alphaxiv.org/abs/2604.08356).
+
+Track each strategy’s **realized net edge**, forecast calibration, win/loss profile, turnover, and fill quality against its expected range. Segment monitoring by instrument, session, and regime where sample sizes allow. If performance persistently degrades, first reduce that strategy’s risk budget; if it breaches a predeclared failure criterion, suspend it and send it back for research review.
+
+AlphaAgent is about alpha mining and decay, while the durability paper addresses decay risk; neither result as retrieved establishes a production-ready live alarm. Treat them as motivation for this monitoring design, not as proof of a validated threshold. FinRL-X supplies the modular allocation and tracking structure where such a strategy-level risk adjustment can be applied. [Monitoring](https://www.alphaxiv.org/abs/2603.21330?page=10)
+
+### 5. Stress scenarios + hard risk controls + monitored execution
+
+**Papers:** [FinRL-X](https://www.alphaxiv.org/abs/2603.21330) + [Execution Realism and Reproducibility in LLM-Based Trading Systems: A Systematic Scoping Review and Evidence Audit](https://www.alphaxiv.org/abs/2606.08285) + [How Execution Assumptions Change Short-Horizon Sharpe Rankings](https://www.alphaxiv.org/abs/2610.05077).
+
+Replay candidates through adverse but plausible scenarios: spread widening, slippage spikes, partial or rejected fills, stale feeds, venue disconnects, volatility jumps, contract rolls, and correlated market moves. Have the risk service enforce **hard rules** independently of agent output: maximum exposure and leverage, stale-data rejection, per-strategy loss limits, aggregate drawdown limits, and a kill switch that blocks new orders and/or flattens according to an explicitly approved policy.
+
+FinRL-X describes execution safeguards, logging, persistence, and tracking target-to-realized weights. Its paper-trading period also includes a roughly 12.2% drawdown tied to an extreme leveraged-instrument move, which motivates instrument-specific limits; it does not demonstrate that a kill switch prevented the loss. [Stress Case](https://www.alphaxiv.org/abs/2603.21330?page=11)
+
+**Why:** monitoring is not a kill switch. A deterministic service should own the authority to reject or stop orders; the agent should not be able to override that service. Stress tests are how you check whether the rules actually trip under the scenarios they are meant to contain.
+
+### 6. LLM research harness + sealed evaluation and human promotion
+
+**Papers:** [FinRL-X](https://www.alphaxiv.org/abs/2603.21330) + [Reliable Before Profitable: QuantHarness for Governing Financial Strategy Development with LLM Agents](https://www.alphaxiv.org/abs/2610.26101) + [What survives honest evaluation?](https://www.alphaxiv.org/abs/2608.27734).
+
+Let an LLM harness propose hypotheses, generate candidate code, and summarize results—but not control capital or label its own candidate as approved. The harness should enforce data-cutoff checks, strategy-versioning, cost assumptions, test-set access controls, and a record of all trials. A separate evaluator runs the prescribed tests, and a human decides promotion. Once approved, the candidate only produces a proposal or target weight; the risk and execution services remain independent.
+
+**Why:** this matches your governance model directly. It separates fast idea generation from evidence review and capital authorization. The cited harness paper is on governing agent-driven financial strategy development; it does not imply LLMs can reliably enforce their own boundaries without external controls.
+
+## Which idea to build first
+
+For **Label Unbalance**, build the **fixed class-weighting or distribution-based cost-sensitive classifier as a signal-only challenger**, evaluated against the unweighted model on chronological out-of-sample data. Those are the imbalance treatments the authors report as generally more effective in their experiment; undersampling and focal loss sometimes underperform. Add an edge-to-cost gate before turning predictions into trades, because the paper does not test position sizing or net trading outcomes. [Loss Comparison](https://www.alphaxiv.org/abs/2503.09988?page=8)
+
+For **FinRL-X**, build the **weight-centric interface with a deterministic risk overlay placed between strategy proposal and order generation**. It gives every small strategy the same downstream contract, lets the risk service cap or reject exposure consistently, and keeps broker execution separate from strategy logic. That architectural seam is the most directly reusable contribution for a multi-strategy system; its reported portfolio results are encouraging ablations and demonstrations, not validation of your short-horizon multi-asset strategies. [Risk Pipeline](https://www.alphaxiv.org/abs/2603.21330?page=5)
+
+
