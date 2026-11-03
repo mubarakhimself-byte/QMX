@@ -6,11 +6,11 @@ Inputs, all optional: `day` (YYYY-MM-DD, UTC; the day before the run's clock by 
 
 It reads the unit journal's `demo` world through `journal_query`: the `fill` rows, and the `trade`
 rows in the `trades_with_context` view, which sets the market journal's minute beside each trade.
-Per unit and market it counts the fills, the partial fills (a fill whose `receipt_quantity` differs
-from its `quantity`), the sizing residue in R the fills left, the trades and their R, the stops a
-price gapped through, the exits by kind, and how many trades have a market minute recorded beside
-them. It lands the counts as one `fill-quality` artifact. A day with no demo rows is quiet and asks
-no model.
+Per unit and market it counts the fills, the sizing residue in R the fills left (the share of the
+sizer's ask that lot rounding left out), the trades and their R, the stops a price gapped through,
+the exits by kind, and how many trades have a market minute recorded beside them. It counts no
+partial fills: no fill row says one happened. It lands the counts as one `fill-quality`
+artifact. A day with no demo rows is quiet and asks no model.
 """
 
 import importlib.util
@@ -53,7 +53,6 @@ def cell(row):
         key,
         {
             "fills": 0,
-            "partial_fills": 0,
             "residue_r": Decimal(0),
             "trades": 0,
             "r": Decimal(0),
@@ -69,8 +68,6 @@ for row in fills["rows"]:
         continue
     body, found = row["body"], cell(row)
     found["fills"] += 1
-    asked_size = body.get("receipt_quantity")
-    found["partial_fills"] += asked_size is not None and asked_size != body.get("quantity")
     found["residue_r"] += Decimal(str(body.get("residue_r", "0")))
 for row in trades["rows"]:
     if row["kind"] != "trade" or (wanted and row["unit_id"] not in wanted):
