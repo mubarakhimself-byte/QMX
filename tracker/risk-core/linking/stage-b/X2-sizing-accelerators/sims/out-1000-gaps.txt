@@ -1,0 +1,111 @@
+paths=1000 days=60 trades/day/unit=10 FI cut=0.35R on 50% of losers
+believed edge=0.08R, eps=0.01, H=200 rounds, rho_plan=0.3
+shared gap day probability=0.02, gap loss=3.0R on every unit at once
+
+N=1 rho=0.0 edge=believed (+0.08R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct        0.0%   1.3%       771      584       1.00%
+  split_1pct        0.0%   1.3%       771      584       1.00%
+  half_kelly       23.5%  51.2%      2576      295       4.39%
+  gitbook_ladder    0.0%  64.2%       973      326       7.57%
+  horizon_zero      0.0%   2.5%       974      579       1.72%
+  horizon_half      0.0%   6.4%      1173      581       2.30%
+
+N=1 rho=0.0 edge=half (+0.04R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct        0.2%   9.1%       599      464       1.00%
+  split_1pct        0.2%   9.1%       599      464       1.00%
+  half_kelly       52.4%  76.6%       300      270       3.38%
+  gitbook_ladder    0.0%  88.2%       351      302       4.76%
+  horizon_zero      0.0%  13.1%       603      433       1.43%
+  horizon_half      0.0%  24.5%       614      409       1.86%
+
+N=1 rho=0.0 edge=zero (+0.00R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct        2.7%  38.4%       468      356       1.00%
+  split_1pct        2.7%  38.4%       468      356       1.00%
+  half_kelly       84.4%  93.9%       299      257       2.19%
+  gitbook_ladder    0.0%  97.3%       305      300       2.91%
+  horizon_zero      0.0%  47.9%       441      359       1.16%
+  horizon_half      0.0%  62.9%       417      338       1.43%
+
+N=1 rho=0.3 edge=believed (+0.08R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct        0.0%   1.7%       762      584       1.00%
+  split_1pct        0.0%   1.7%       762      584       1.00%
+  half_kelly       25.0%  54.2%      2375      290       4.31%
+  gitbook_ladder    0.0%  67.5%      1000      324       7.34%
+  horizon_zero      0.0%   2.7%       948      575       1.70%
+  horizon_half      0.0%   6.7%      1131      577       2.27%
+
+N=1 rho=0.3 edge=half (+0.04R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct        0.1%   9.1%       595      460       1.00%
+  split_1pct        0.1%   9.1%       595      460       1.00%
+  half_kelly       55.1%  74.7%       300      271       3.26%
+  gitbook_ladder    0.0%  86.6%       351      303       4.84%
+  horizon_zero      0.0%  14.4%       599      430       1.43%
+  horizon_half      0.0%  25.9%       608      405       1.85%
+
+N=1 rho=0.3 edge=zero (+0.00R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct        2.9%  39.3%       470      361       0.99%
+  split_1pct        2.9%  39.3%       470      361       0.99%
+  half_kelly       83.8%  93.6%       299      257       2.16%
+  gitbook_ladder    0.0%  96.8%       305      300       2.89%
+  horizon_zero      0.0%  49.4%       441      361       1.16%
+  horizon_half      0.0%  63.1%       418      340       1.43%
+
+N=10 rho=0.0 edge=believed (+0.08R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct        0.3%   8.1%     27809    11804       1.00%
+  split_1pct        0.0%   0.0%       775      708       0.10%
+  half_kelly       77.8%  83.6%       300 -6746091       2.52%
+  gitbook_ladder   74.6%  87.0%     -2017 -49807112       6.24%
+  horizon_zero      0.0%   0.0%      2085     1438       0.34%
+  horizon_half      0.0%   0.0%      5547     2929       0.58%
+
+N=10 rho=0.0 edge=half (+0.04R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct        5.8%  26.1%      2826      903       0.96%
+  split_1pct        0.0%   0.0%       610      555       0.10%
+  half_kelly       90.5%  94.1%       255    -8082       1.39%
+  gitbook_ladder   78.9%  98.3%       237    -7089       2.86%
+  horizon_zero      0.0%   0.1%       830      621       0.27%
+  horizon_half      0.0%   0.6%      1138      684       0.45%
+
+N=10 rho=0.0 edge=zero (+0.00R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct       75.0%  89.7%       299      259       0.55%
+  split_1pct        0.0%   1.1%       481      439       0.10%
+  half_kelly      100.0% 100.0%       237     -166       0.46%
+  gitbook_ladder   80.3% 100.0%       300      -82       0.85%
+  horizon_zero      0.0%  20.3%       455      396       0.19%
+  horizon_half      0.0%  50.0%       427      359       0.28%
+
+N=10 rho=0.3 edge=believed (+0.08R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct        6.5%  25.3%     18813     3008       0.94%
+  split_1pct        0.0%   0.0%       770      676       0.10%
+  half_kelly       99.2%  99.5%       289    -8080       0.71%
+  gitbook_ladder   96.6%  99.7%       287    -2175       1.38%
+  horizon_zero      0.0%   0.1%      1903     1110       0.33%
+  horizon_half      0.0%   0.7%      4445     1759       0.56%
+
+N=10 rho=0.3 edge=half (+0.04R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct       30.7%  57.7%      1558      286       0.77%
+  split_1pct        0.0%   0.0%       609      528       0.10%
+  half_kelly      100.0% 100.0%       238     -560       0.36%
+  gitbook_ladder   97.4% 100.0%       297     -253       0.71%
+  horizon_zero      0.0%   2.1%       782      531       0.26%
+  horizon_half      0.0%  10.2%       979      517       0.43%
+
+N=10 rho=0.3 edge=zero (+0.00R)
+  policy           touch  <$400    median      p10 avg risk/eq
+  fixed_1pct       84.9%  94.1%       295      249       0.41%
+  split_1pct        0.0%   8.8%       483      416       0.10%
+  half_kelly      100.0% 100.0%       218     -356       0.24%
+  gitbook_ladder   98.7% 100.0%       299      134       0.48%
+  horizon_zero      0.0%  41.9%       446      366       0.19%
+  horizon_half      0.0%  66.3%       407      331       0.27%

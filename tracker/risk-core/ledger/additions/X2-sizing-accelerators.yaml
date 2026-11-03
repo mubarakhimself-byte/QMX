@@ -1,0 +1,1374 @@
+# Ledger additions from Stage B, layer X2 (sizing, allocation, accelerators and costs).
+# Written 2026-11-03. Every row is a proposal or idea from expansion/X2-sizing-accelerators.md; the X2-Hnn note names the hybrid.
+# Defaults stay null: nothing here is in the current design. Derivations say how each would be computed.
+# Reused, not redefined: hourly_cost_profile and edge_to_cost_ratio_min (X0-trading-lens.yaml); x1_aggregate_limit_factor, x1_bet_key_rule, x1_number_authority_mode (X1-template-shape.yaml).
+# Check with: uv run --no-project --with pyyaml python ledger/check.py ledger/additions/X2-sizing-accelerators.yaml ledger/additions/X0-trading-lens.yaml ledger/additions/X1-template-shape.yaml --no-write
+
+- id: survival_horizon_rounds
+  name: Rounds of trades the floor-odds survival target must hold for (H)
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Trades until the next planned look or re-anchor of the cushion. Proposal: trading days in the review cycle (a month, A4-029) times the unit's trade rate. Longer H means smaller size."
+  inputs: [trade_rate]
+  affects:
+    - {id: horizon_survival_risk_usd, direction: down, how: "Risk falls with the square root of H."}
+    - {id: book_day_sigma_budget_usd, direction: down, how: "More days in the horizon shrink the daily swing allowed."}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H01, X2-H02"}
+  seed_ids: [A13, D46]
+
+- id: horizon_survival_risk_usd
+  name: Per-trade risk from the horizon floor-odds sizer
+  level: unit
+  kind: size_output
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "At zero drift r = D_usable / (s x z x sqrt(H) x sqrt(N x (1 + (N - 1) x rho))), z = Phi^-1(1 - eps/2), D_usable = committed cushion minus the contingency reserve. With drift at the planning edge point, the largest r whose first-passage chance of touching the floor within H rounds is at most eps (bisection). Computed at each anchor and cached; a stale cache falls back to the zero-drift form."
+  inputs: [committed_cushion_usd, largest_bet_contingency_usd, result_spread_r, floor_touch_tolerance, survival_horizon_rounds, live_unit_count, stressed_unit_correlation, planning_edge_point, edge_range]
+  affects:
+    - {id: risk_amount_usd, direction: up, how: "The baseline amount before level, modifiers and clamps."}
+    - {id: floor_touch_size_bound, direction: either, how: "A derivation candidate for the floor-touch bound, finite horizon and correlated units included."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H01"}
+    - {gen: expansion, ref: "linking/stage-b/X2-sizing-accelerators/sims/out-1000.txt", note: "0 floor touches in 12 cases; 2.8x the 1/N split's median"}
+    - {gen: research, ref: "research/R9-accelerators-and-brake-pairs.md", note: "cushion rule, Hsieh lemma"}
+  seed_ids: [A2, A24, C13, C29, D46]
+  notes: "Each of N units gets 1/sqrt(N(1 + (N - 1) rho)) of the one-unit size. The GitBook ladder's 1/7 of cushion per R equals surviving about 7 to 10 trades at zero edge with 99 % confidence."
+
+- id: planning_edge_point
+  name: Which point of the edge range the sizer uses as drift (zero, low or mid)
+  level: unit
+  kind: other
+  measure: "other: choice of zero, low or mid"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Zero for new units (size safe with no edge); low once the low end of the deflated, shrunk band is positive with evidence; mid only on his click. Never moved automatically upward."
+  inputs: [edge_range, sequential_evidence_pass]
+  affects:
+    - {id: horizon_survival_risk_usd, direction: up, how: "A higher point adds drift, which relaxes the survival size."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H03"}
+  seed_ids: [A24, A14]
+  notes: "Moving it is a profile version or a calibration row with a card."
+
+- id: stressed_unit_correlation
+  name: Correlation used for sizing, the higher of measured and stressed
+  level: portfolio
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "max(measured correlation of units' residual P&L after shared drivers, stressed floor from the scenario layer). Fast override when a co-movement tell fires."
+  inputs: [unit_result_correlation, cross_market_stress_reading]
+  affects:
+    - {id: horizon_survival_risk_usd, direction: down, how: "Higher correlation shrinks each unit's share."}
+    - {id: effective_independent_bets, direction: down, how: "N_eff = N / (1 + (N - 1) rho)."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H28"}
+  seed_ids: [C29, C27]
+
+- id: book_day_sigma_budget_usd
+  name: Daily P&L swing the book may carry, from its cushion and horizon
+  level: portfolio
+  kind: limit
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "sigma_book = D_usable / (z x sqrt(days in the horizon))."
+  inputs: [committed_cushion_usd, floor_touch_tolerance, survival_horizon_rounds]
+  affects:
+    - {id: unit_day_sigma_budget_usd, direction: up, how: "Split across units by the correlation formula or QoS shares."}
+    - {id: portfolio_daily_risk_budget, direction: either, how: "A derivation candidate for the portfolio's day budget."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H02"}
+  seed_ids: [C29, C1]
+
+- id: unit_day_sigma_budget_usd
+  name: Daily P&L swing a unit may carry
+  level: unit
+  kind: size_input
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Its share of the book's sigma. Per-trade risk r = sigma_unit / (s x sqrt(n)), n the unit's trades per day, so per-trade risk falls with sqrt(n) and expected daily gain rises with sqrt(n)."
+  inputs: [book_day_sigma_budget_usd, stressed_unit_correlation, live_unit_count, unit_risk_request_share, trade_rate, result_spread_r]
+  affects:
+    - {id: risk_amount_usd, direction: up, how: "Converted to per-trade risk by the square root of the trade rate."}
+    - {id: unit_daily_loss_limit, direction: up, how: "The unit's own percentile day brake reads the same sigma."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H02"}
+  seed_ids: [C1, C29, C31]
+
+- id: stop_fill_gap_factor
+  name: Average stop fill as a multiple of 1R after gaps and slippage (g)
+  level: trade
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Mean realised loss on stopped trades divided by planned 1R, from fills, by instrument and hour; the class default until enough fills."
+  inputs: [gap_loss_beyond_stop, slippage_cost]
+  affects:
+    - {id: cost_gap_kelly_ceiling, direction: down, how: "A larger g lowers the Kelly ceiling."}
+    - {id: risk_amount_usd, direction: down, how: "Loss per stop above 1R shrinks the quantity."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H04"}
+  seed_ids: [A11]
+
+- id: cost_gap_kelly_ceiling
+  name: Kelly fraction at the stop after costs and gap factor, shrunk by evidence
+  level: unit
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "f* = [p(b - c) - (1 - p)(g + c)] / [(b - c)(g + c)] with c the round-trip cost in R for this hour, times t^2 / (1 + t^2) on the deflated edge; for three-outcome units the general Kelly on the measured distribution. A ceiling only."
+  inputs: [win_rate, average_win_r, round_trip_cost_r, stop_fill_gap_factor, edge_t_statistic, kelly_shrink_factor, fast_invalidation_cut_r]
+  affects:
+    - {id: risk_amount_usd, direction: down, how: "Caps the baseline; never raises it."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H04"}
+  seed_ids: [A11, A12]
+
+- id: worst_step_move_r
+  name: Worst one-step move per class and holding time, in R at a typical stop
+  level: trade
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. From the scenario layer's table per class and hold (weekend, news, halt, limit move), never from recent volatility."
+  inputs: [instrument_class]
+  affects:
+    - {id: largest_bet_contingency_usd, direction: up, how: "Sets the N-1 and PML reserve."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H07, X2-H47"}
+  seed_ids: [C10, C27]
+
+- id: largest_bet_contingency_usd
+  name: Reserve for the largest bet or worst credible zone event, taken off the cushion before sizing
+  level: portfolio
+  kind: limit
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "max(N-1: the largest bet key's open risk gapping to its class worst step; PML: the worst credible event per exposure zone from the scenario matrix)."
+  inputs: [worst_step_move_r, open_risk_cap_per_key_usd, open_risk_at_stop]
+  affects:
+    - {id: horizon_survival_risk_usd, direction: down, how: "Comes off the cushion before any sizing."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H07"}
+  seed_ids: [C10]
+
+- id: binding_size_constraint
+  name: Which constraint set the final size (receipt field)
+  level: trade
+  kind: evidence
+  measure: "other: constraint name"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "argmin over the candidate sizes: baseline x level x modifier, Kelly ceiling, cushion clip, tail budget, raise permission, margin, regulatory cap, venue capacity, max lots."
+  inputs: [horizon_survival_risk_usd, cost_gap_kelly_ceiling, tail_loss_budget_usd, raise_headroom_losses, margin_used, leverage, venue_capacity_cap_lots, max_position_size_lots]
+  affects:
+    - {id: control_rank_table, direction: either, how: "Audit: a cap that binds most trades is dead weight."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H06"}
+  seed_ids: [A13, C25]
+
+- id: tail_loss_budget_usd
+  name: Per-trade budget on expected shortfall for negative-skew units
+  level: unit
+  kind: limit
+  measure: USD
+  applies_to: {classes: [all], styles: [scalper, intraday], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "97.5 % expected shortfall per trade from the unit's own record resampled with gaps and stressed slippage; the class tail when the record is short. Size = min(stop budget, tail budget)."
+  inputs: [mean_loss_r, gap_loss_beyond_stop, slippage_cost, payoff_ratio]
+  affects:
+    - {id: risk_amount_usd, direction: down, how: "Binds for cliff-shaped units."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H08"}
+  seed_ids: [A20, C10]
+
+- id: carry_cost_r
+  name: Signed swap or funding over the planned hold, in R
+  level: trade
+  kind: cost
+  measure: R
+  applies_to: {classes: [all], styles: [intraday, swing], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Expected swap or funding over the planned hold divided by 1R, triple-swap day and funding timestamps included."
+  inputs: [swap_financing_cost, funding_cost, max_hold_time]
+  affects:
+    - {id: round_trip_cost_r, direction: up, how: "Joins the cost term for held positions."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H09, X2-H41"}
+  seed_ids: [A11]
+
+- id: cushion_anchor_type
+  name: Whether a cushion rule's anchor is fixed or trailing
+  level: unit
+  kind: other
+  measure: "other: fixed or trailing"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Fixed (day or session start, a dollar floor) makes the cushion rule a brake-accelerator pair; trailing (running peak) makes it a pure brake (R9 0.4)."
+  inputs: []
+  affects:
+    - {id: house_money_multiplier, direction: either, how: "Only a fixed anchor lets the rule press above baseline."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H10"}
+  seed_ids: [A21]
+
+- id: anchor_pnl_usd
+  name: P&L since the scope's anchor on its money ledger
+  level: unit
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Realised P&L since the anchor; a fast-invalidation cut counts its size, a breakeven its cost."
+  inputs: [realized_pnl, cushion_anchor_clock, fast_invalidation_cut_r]
+  affects:
+    - {id: house_money_multiplier, direction: up, how: "Profit above the anchor funds the accelerator half."}
+    - {id: drawdown_pressure_multiplier, direction: up, how: "Below the anchor the brake half cuts in proportion to the allowance left."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H10"}
+  seed_ids: [A6, A21, A28]
+
+- id: cushion_multiplier_min
+  name: Lowest value of the cushion multiplier
+  level: unit
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Floor of m = (L + P - k x O) / L; R9's AIMD pair used 0.25."
+  inputs: []
+  affects:
+    - {id: drawdown_pressure_multiplier, direction: up, how: "A higher floor keeps more size in a losing run."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H10"}
+
+- id: cushion_multiplier_max
+  name: Highest value of the cushion multiplier
+  level: unit
+  kind: accelerator
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Ceiling of the accelerator half; also bounded by the accelerator ceiling and the share of realised profit."
+  inputs: [accelerator_ceiling_multiple]
+  affects:
+    - {id: house_money_multiplier, direction: up, how: "Caps the boost."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H10"}
+
+- id: cushion_anchor_clock
+  name: When each scope's anchor resets
+  level: unit
+  kind: schedule
+  measure: "other: clock rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Per style and class: session or rolling 24 h for scalpers, per open for ORB, 17:00 New York for FX books, a declared UTC hour for crypto. Raises apply only at an anchor; anchors never reset the account floor or the true high-water mark."
+  inputs: [day_boundary, session_windows]
+  affects:
+    - {id: anchor_pnl_usd, direction: either, how: "Resets the ledger at each anchor."}
+    - {id: day_start_equity, direction: either, how: "One confirmed baseline per scope and anchor."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H12"}
+  seed_ids: [B5, C15]
+
+- id: size_level_fraction_table
+  name: Fraction of the derived baseline each size level stands for
+  level: unit
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "L0 paper; L1 = max(feasible minimum, 0.10 x baseline); then 0.25, 0.50, 0.75, 1.00 of the derived baseline. Whole contracts for lumpy classes."
+  inputs: [horizon_survival_risk_usd, min_lot]
+  affects:
+    - {id: risk_amount_usd, direction: up, how: "Level fraction times baseline."}
+    - {id: size_levels, direction: either, how: "Gives each level its dollars."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H13, answers X5 collision C4"}
+  seed_ids: [A14, A15]
+
+- id: cohort_trades
+  name: Trades per cohort for level moves
+  level: unit
+  kind: evidence
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Scaled to trade rate: about 25 for a scalper, 10 for an ORB unit (X5 drafts)."
+  inputs: [trade_rate]
+  affects:
+    - {id: size_levels, direction: either, how: "Levels move once per cohort."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H13"}
+
+- id: bad_cohort_r
+  name: Cohort result at or below which a cohort counts as bad
+  level: unit
+  kind: brake_threshold
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. In money, so FI cuts count by size; X5 drafts -5R for 25 trades."
+  inputs: [cohort_trades]
+  affects:
+    - {id: size_levels, direction: down, how: "Too many bad cohorts move the level down or lock it."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H13"}
+
+- id: first_warning_event
+  name: What counts as the first warning in a ramp
+  level: unit
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "A graded money event, a bad cohort or a day at the unit's own 5th percentile, never any loss (FDA accelerated titration)."
+  inputs: [bad_cohort_r]
+  affects:
+    - {id: level_step_cap, direction: down, how: "After the first warning steps shrink to at most +50 %."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H14"}
+    - {gen: research, ref: "research/R9-accelerators-and-brake-pairs.md", note: "1.6"}
+
+- id: level_step_cap
+  name: Largest step up as a share of the current level
+  level: unit
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "+100 % per step until the first warning, +50 % after (FDA accelerated titration)."
+  inputs: [first_warning_event]
+  affects:
+    - {id: size_ramp_to_full, direction: down, how: "Caps how fast a unit climbs."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H14"}
+
+- id: last_trip_size_level
+  name: Size level at which the last brake tripped
+  level: unit
+  kind: measure
+  measure: "other: level"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Recorded at each trip; regrowth is fast to half of it, slow near it (TCP ssthresh, CUBIC)."
+  inputs: [size_levels]
+  affects:
+    - {id: grow_back_rule, direction: down, how: "Regrowth slows near the remembered level."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H15"}
+
+- id: size_change_settle_trades
+  name: Trades at the current size before the next size change
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Enough trades to measure the last change, scaled to trade rate; cuts on money signals are exempt (heparin recheck after four half-lives)."
+  inputs: [trade_rate]
+  affects:
+    - {id: grow_back_rule, direction: down, how: "No raise while a change is settling."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H15, X2-H24"}
+
+- id: overdose_bound_alpha
+  name: Largest allowed chance that the next size level is too big
+  level: unit
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. EWOC feasibility bound, estimated by resampling the unit's own record at the next level's size."
+  inputs: []
+  affects:
+    - {id: size_levels, direction: down, how: "A step happens only while the estimate stays under alpha."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H16"}
+
+- id: baseline_floor_fraction
+  name: Share of the incumbent level's cumulative result a size probe must keep
+  level: unit
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Conservative-UCB slack: play the next level only while the lower bound stays above (1 - alpha) x the incumbent's result."
+  inputs: []
+  affects:
+    - {id: size_ramp_to_full, direction: either, how: "A looser floor explores bigger sizes sooner."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H17"}
+  seed_ids: [A14]
+
+- id: tier_width_day_sigmas
+  name: Tier width as a multiple of the unit's day swing
+  level: unit
+  kind: accelerator
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Tiers must be wide next to normal swing; Topstep's first tier needed five times its starting loss limit in profit."
+  inputs: [unit_day_sigma_budget_usd]
+  affects:
+    - {id: unit_day_sigma_budget_usd, direction: up, how: "Each tier reached lifts the unit's day swing by a declared step."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H18"}
+  seed_ids: [A21]
+
+- id: tier_dwell_active_days
+  name: Active days at a tier before stepping up
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Topstep: 10 active trading days in the new tier; for fast units also a cohort count; counter resets on drop-out."
+  inputs: [cohort_trades]
+  affects:
+    - {id: unit_day_sigma_budget_usd, direction: down, how: "A longer dwell delays each tier's raise."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H18"}
+
+- id: best_day_profit_share_max
+  name: Largest share of qualifying profit one day may supply
+  level: unit
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "FTMO consistency rule: best day at most 50 % of total profit (30 % on Instant)."
+  inputs: [daily_r_digest]
+  affects:
+    - {id: unit_day_sigma_budget_usd, direction: down, how: "Blocks a tier step earned on one lucky day."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H18"}
+
+- id: block_persistence_score
+  name: Block P&L autocorrelation at the best block size, tries counted
+  level: unit
+  kind: evidence
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Correlation of consecutive block P&L sums, scanned over block sizes with each try counted (R9 2.2)."
+  inputs: [effective_tries]
+  affects:
+    - {id: accelerator_ceiling_multiple, direction: up, how: "Passing lets persistence presses run for the unit."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H19"}
+
+- id: accelerator_growth_per_risk_ratio
+  name: Growth per unit of risk with an accelerator over an equal-average constant
+  level: unit
+  kind: evidence
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Resize replay of the unit's trades with the accelerator on, against a constant size equal to its average, on the unit's record and on a random-entry control; tries counted."
+  inputs: [effective_tries]
+  affects:
+    - {id: accelerator_ceiling_multiple, direction: up, how: "Only accelerators above the margin switch on."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H20"}
+  seed_ids: [D20, A21]
+
+- id: calm_duration_guard_days
+  name: Days of low volatility after which calm-volatility raises freeze
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [index], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Long calm spells precede crises (Danielsson et al.); count days below a low volatility percentile."
+  inputs: []
+  affects:
+    - {id: volatility_target, direction: down, how: "Stops further levering after a long calm."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H22"}
+
+- id: vol_scaler_cap
+  name: Largest multiplier from calm-volatility scaling
+  level: unit
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [index], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Raise side only for risk-asset units; other classes run the cut side only."
+  inputs: []
+  affects:
+    - {id: volatility_target, direction: either, how: "Bounds the raise from target over forecast volatility."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H22"}
+
+- id: venue_capacity_cap_lots
+  name: Largest size a venue takes before fills degrade
+  level: unit
+  kind: limit
+  measure: "other: lots"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "From probe cohorts (1.25x then 0.75x): the largest size whose p95 slippage, rejections and requotes stay in band; lowered when pushback rises."
+  inputs: [slippage_cost]
+  affects:
+    - {id: max_position_size_lots, direction: down, how: "No accelerator sizes past venue capacity."}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H23"}
+
+- id: raise_headroom_losses
+  name: Full losses at the new size that must fit before the nearest trip
+  level: unit
+  kind: limit
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "m full losses at the raised size, gap factor included, must fit inside the distance to the nearest active brake's trip; m scales with trade rate."
+  inputs: [brake_state, trade_rate, stop_fill_gap_factor]
+  affects:
+    - {id: risk_amount_usd, direction: down, how: "Clips any raise that would drive into a trip."}
+  configurable: true
+  changed_by: [operator, automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H24"}
+  seed_ids: [C19]
+
+- id: accelerator_ceiling_multiple
+  name: Highest multiple of baseline any accelerator stack may reach
+  level: unit
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. A clamp on the product of every active accelerator; R9's AIMD pair used 2.0."
+  inputs: []
+  affects:
+    - {id: house_money_multiplier, direction: down, how: "Bounds house money with every other boost."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H24"}
+  seed_ids: [C19]
+
+- id: nomogram_dead_band
+  name: Band of a sizing signal inside which size does not change
+  level: unit
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Per signal and unit; steps outside it grow with distance (heparin nomogram)."
+  inputs: []
+  affects:
+    - {id: drift_size_down_step, direction: either, how: "No step inside the band."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H25, X2-H42"}
+
+- id: aimd_cut_factor
+  name: Size multiplier after a bad day in the AIMD pair
+  level: unit
+  kind: brake_threshold
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "0.7 in R9's script (CUBIC also uses 0.7); a bad day is at or below the unit's own 5th percentile day."
+  inputs: []
+  affects:
+    - {id: drawdown_pressure_multiplier, direction: up, how: "A factor nearer 1 cuts less."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H26"}
+
+- id: aimd_add_step
+  name: Size added after a green day in the AIMD pair
+  level: unit
+  kind: brake_reset
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "+0.05 of baseline per green day in R9's script, only if the unit used at least half its size that day."
+  inputs: [share_growth_use_fraction]
+  affects:
+    - {id: grow_back_rule, direction: up, how: "Larger steps regrow faster."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H26"}
+
+- id: edge_signal_multiplier
+  name: Slow size multiplier from the shrunk live edge against the plan
+  level: unit
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Shrunk live edge divided by planned edge, moved at most one level per window of cohorts, never on one day."
+  inputs: [edge_range, kelly_shrink_factor, drift_state]
+  affects:
+    - {id: risk_amount_usd, direction: up, how: "Size follows the edge slowly; money facts act through the cushion pair."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H27"}
+  seed_ids: [A25]
+
+- id: unit_risk_qos_class
+  name: A unit's risk priority class (Guaranteed, Burstable, BestEffort)
+  level: unit
+  kind: other
+  measure: "other: Guaranteed, Burstable or BestEffort"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Proven units Guaranteed, probation units Burstable, paper and new units BestEffort; shed from BestEffort up when the book tightens."
+  inputs: [size_levels]
+  affects:
+    - {id: unit_capital_share, direction: either, how: "Sets who keeps budget under pressure."}
+  configurable: true
+  changed_by: [automatic, operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H30"}
+  seed_ids: [C26]
+
+- id: unit_risk_request_share
+  name: A unit's guaranteed share of the book's swing
+  level: unit
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "From the allocator (correlation formula, hierarchy or AIMD shares); equals the burst share for Guaranteed units."
+  inputs: [unit_risk_qos_class]
+  affects:
+    - {id: unit_day_sigma_budget_usd, direction: up, how: "The guaranteed part of the unit's swing."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H30"}
+
+- id: unit_risk_burst_share
+  name: Most of the book's swing a unit may borrow when the book has slack
+  level: unit
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Borrowing from idle pots is recalled by any brake or the lender's next open."
+  inputs: [unit_risk_qos_class]
+  affects:
+    - {id: unit_day_sigma_budget_usd, direction: up, how: "Borrowed slack on top of the request."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H30"}
+
+- id: share_growth_use_fraction
+  name: Share of a unit's budget it must use before its share may grow
+  level: unit
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Netflix AIMD limit: grow only when at least half the limit is in use."
+  inputs: []
+  affects:
+    - {id: unit_capital_share, direction: up, how: "Idle units do not grow their share."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H31, X2-H26"}
+
+- id: marginal_stress_contribution_usd
+  name: A unit's marginal contribution to the book's stress loss
+  level: unit
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Change in book stress loss over the scenario matrix when the unit's exposure rises by one unit; operational dependencies count as zones."
+  inputs: [portfolio_exposure, sleeve_stress_loss_usd]
+  affects:
+    - {id: unit_capital_share, direction: down, how: "Units that add stress get less budget; units that lower it get more."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H33"}
+  seed_ids: [C32]
+
+- id: open_risk_cap_per_key_usd
+  name: Most open risk on one bet key
+  level: position
+  kind: limit
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Unit r x (L + z x sqrt(L)) for the key's expected concurrent positions L, under the parent factor."
+  inputs: [expected_concurrent_positions, horizon_survival_risk_usd, x1_aggregate_limit_factor, x1_bet_key_rule]
+  affects:
+    - {id: open_risk_at_stop, direction: down, how: "Refuses risk beyond the key's cap; a second same-bet position gets what is left."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H34"}
+  seed_ids: [A8]
+
+- id: expected_concurrent_positions
+  name: Expected number of a unit's positions open at once (Little's law)
+  level: unit
+  kind: measure
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Trade rate times average hold time."
+  inputs: [trade_rate, max_hold_time]
+  affects:
+    - {id: open_risk_cap_per_key_usd, direction: up, how: "More expected concurrency, a wider derived heat cap."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H34"}
+
+- id: open_breadth_budget_scale
+  name: Share of the day swing usable given which classes are open now
+  level: portfolio
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Sum of the weekday shares of the classes open in this hour; when only crypto trades, crypto keeps its weekday share."
+  inputs: [session_windows, effective_independent_bets]
+  affects:
+    - {id: portfolio_daily_risk_budget, direction: down, how: "No crypto-sized hole on the FX weekend."}
+  configurable: true
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H36"}
+
+- id: pot_slot_open_day_budgets
+  name: Cushion, in the next slot's day budgets, at which a style pot opens a slot
+  level: portfolio
+  kind: accelerator
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Poker bankroll move-up band (20-30 buy-ins of the next stake)."
+  inputs: [style_capital_split]
+  affects:
+    - {id: concurrent_unit_slots, direction: up, how: "Opens a slot when the pot can carry it."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H37"}
+  seed_ids: [C26]
+
+- id: pot_slot_close_day_budgets
+  name: Cushion, in the current slot's day budgets, below which a style pot closes a slot
+  level: portfolio
+  kind: brake_threshold
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Poker move-down band (below 15-20 buy-ins); the gap to the open band is the dead band."
+  inputs: [style_capital_split]
+  affects:
+    - {id: concurrent_unit_slots, direction: down, how: "Closes a slot when the pot cannot carry it."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H37"}
+  seed_ids: [C26]
+
+- id: breadth_split_threshold
+  name: Point at which new budget buys a new deployment instead of more size
+  level: portfolio
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Share of venue capacity or bet-key cap a unit's size may reach before growth goes to breadth."
+  inputs: [venue_capacity_cap_lots]
+  affects:
+    - {id: live_unit_count, direction: up, how: "Growth above capacity is proposed as a new deployment."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H38"}
+  seed_ids: [C1]
+
+- id: stressed_stop_slippage_r
+  name: Stressed slippage on stop exits, in R
+  level: trade
+  kind: cost
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "p95 stop slippage by instrument and hour from fills, entries and exits apart; class default until measured."
+  inputs: [slippage_cost]
+  affects:
+    - {id: risk_amount_usd, direction: down, how: "Joins the size denominator."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H39"}
+
+- id: min_worthwhile_risk_usd
+  name: Smallest risk at which fixed per-trade costs stay under a set share of R
+  level: trade
+  kind: limit
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Minimum commission per order divided by the largest acceptable cost share of R (EOQ logic)."
+  inputs: [commission_cost]
+  affects:
+    - {id: trade_rate, direction: down, how: "Trades below it are skipped."}
+  configurable: true
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H39"}
+
+- id: committed_cushion_usd
+  name: Cushion left for new trades after open risk and pending orders
+  level: unit
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "min(balance, marked equity) on the unit's budget share, minus the floor, minus open risk at the stops, minus pending orders' risk (lower of cost or market)."
+  inputs: [account_balance, account_equity, unit_capital_share, portfolio_floor, open_risk_at_stop]
+  affects:
+    - {id: horizon_survival_risk_usd, direction: up, how: "The cushion every new trade is sized from."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H44"}
+  seed_ids: [B15]
+
+- id: accelerator_equity_basis
+  name: Equity series accelerators may read (realised profit only)
+  level: unit
+  kind: other
+  measure: "other: equity series"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Realised profit since the anchor only; open profit never funds a boost."
+  inputs: []
+  affects:
+    - {id: house_money_multiplier, direction: down, how: "No boost from profit that may vanish."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H44"}
+  seed_ids: [B15]
+
+- id: min_lot_risk_tolerance
+  name: Most a minimum-lot trade may exceed its level's risk
+  level: unit
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Above it the instrument stays paper for the unit."
+  inputs: []
+  affects:
+    - {id: instrument_feasible_at_size, direction: up, how: "A looser tolerance admits more instruments."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H45"}
+  seed_ids: [A17]
+
+- id: instrument_feasible_at_size
+  name: Whether an instrument is tradable for a unit at its current derived size
+  level: unit
+  kind: evidence
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Minimum-lot money at the typical stop, with gap factor and costs, at most tolerance x level risk; margin headroom and regulatory cap pass."
+  inputs: [min_lot, value_per_point, stop_distance, stop_fill_gap_factor, min_lot_risk_tolerance, size_level_fraction_table]
+  affects:
+    - {id: trade_rate, direction: up, how: "Admits the instrument to live trading for the unit."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H45"}
+  seed_ids: [A17, D16]
+
+- id: lot_dither_max_multiple
+  name: Largest multiple of target a dithered trade may risk
+  level: trade
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "1.5x target per trade, never inside a news window; residue resets at the anchor."
+  inputs: []
+  affects:
+    - {id: rounding_residue_r, direction: down, how: "Carried residue keeps average risk on target."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H46"}
+
+- id: sleeve_stress_loss_usd
+  name: A sleeve's loss at its class worst step
+  level: unit
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Open exposure revalued at the class worst-step move from the scenario table."
+  inputs: [worst_step_move_r, open_risk_at_stop]
+  affects:
+    - {id: marginal_stress_contribution_usd, direction: up, how: "Feeds the book's stress matrix."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H47"}
+
+- id: pooling_rule_per_parameter
+  name: Which parameters pool across instruments and which stay local
+  level: system
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Pool volatility dynamics within comparable products, keep costs local per instrument, venue and hour, never pool market mechanics (rolls, funding, lot steps) (A5-048)."
+  inputs: []
+  affects:
+    - {id: calibration_shrink_k, direction: either, how: "Decides what each number shrinks toward."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H47"}
+  seed_ids: [D51]
+
+- id: tick_size_tier
+  name: Instrument tier by tick size over volatility, for fast-trend caps
+  level: trade
+  kind: other
+  measure: "other: tier"
+  applies_to: {classes: [futures, index, crypto], styles: [intraday, swing], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Small-tick markets get lower caps for fast-trend units (trend decay after 2009, A3-236)."
+  inputs: [price_increment]
+  affects:
+    - {id: max_position_size_lots, direction: down, how: "Lower caps on small-tick markets for fast trend."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H48"}
+
+- id: budget_share_refresh_interval
+  name: How often a deployment's budget share is refreshed
+  level: unit
+  kind: schedule
+  measure: "other: anchors"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "At every anchor, so paper and live size from the same live share."
+  inputs: [cushion_anchor_clock]
+  affects:
+    - {id: unit_capital_share, direction: either, how: "Keeps the share current in every world."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H50"}
+  seed_ids: [D13]
+
+- id: live_cost_gap_multiplier
+  name: Live cost over paper-twin cost per trade
+  level: unit
+  kind: cost
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Live cost per trade divided by the paper twin's on the same signals, until enough live fills; a class prior before any."
+  inputs: [slippage_cost]
+  affects:
+    - {id: round_trip_cost_r, direction: up, how: "Charges demo's optimism to the live cost term."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H50"}
+  seed_ids: [D13]
+
+- id: world_switch_reset_rule
+  name: What resets when a unit switches world (paper to live, PC to VPS, venue)
+  level: unit
+  kind: brake_reset
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "House money to zero, level to L1 (or one lower on his card), costs uncalibrated until N live fills, counters reset; only when flat (A2-124)."
+  inputs: []
+  affects:
+    - {id: size_levels, direction: down, how: "Starts the new world at the first live level."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H50"}
+  seed_ids: [D13, D15]
+
+- id: tuned_input_guard_trip_limit
+  name: Guard trips after which a learned input freezes at its default
+  level: unit
+  kind: other
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "HotSpot pattern: each failed guard reverts to the fallback ladder with a named reason; after K trips the input stops tuning."
+  inputs: []
+  affects:
+    - {id: number_motion_mode, direction: either, how: "Freezes a number that keeps failing."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H51"}
+
+- id: fallback_dwell_trades
+  name: Trades the zero-edge sizer keeps control after a Simplex switch
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Dwell before control returns to the performance sizer."
+  inputs: []
+  affects:
+    - {id: risk_amount_usd, direction: down, how: "Holds the safe size for the dwell."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H52"}
+
+- id: exploration_risk_budget_usd
+  name: Ring-fenced budget for trying new sizing profiles live
+  level: unit
+  kind: limit
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. A failed exploration may lose this budget and nothing the live units depend on."
+  inputs: []
+  affects:
+    - {id: size_levels, direction: up, how: "Pays for probing a bigger level or profile."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H53"}
+
+- id: gain_lock_fraction
+  name: Share of each new high that raises the floor
+  level: portfolio
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. His choice: 0 is pure compounding on a fixed floor, 1 a trailing floor, between is TIPP. Applied at BMS anchors; units are never swept."
+  inputs: [high_water_mark_equity]
+  affects:
+    - {id: portfolio_floor, direction: up, how: "The floor ratchets up by this share of new highs."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H56"}
+  seed_ids: [C12, B10]
+
+- id: reinstatement_price
+  name: Charge for refilling a spent risk budget from the restore reserve
+  level: portfolio
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Proportional to the amount used, with a proof requirement that grows with the refill (reinsurance reinstatement)."
+  inputs: [refund_reserve_rho]
+  affects:
+    - {id: grow_back_rule, direction: down, how: "No free refills."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H57"}
+
+- id: agent_risk_scale_proposal
+  name: An agent's typed, expiring de-risk scale for a unit
+  level: unit
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "In [0, 1], with a valid-until time and sources; aggregated by a deterministic service with a cap per unverified item; expiry or service loss means no agent effect. Raise proposals go to shadow and his card."
+  inputs: [decision_freshness_bound]
+  affects:
+    - {id: risk_amount_usd, direction: down, how: "Agents can only cut size."}
+  configurable: true
+  changed_by: [agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H58"}
+  seed_ids: [D42, D41]
+
+- id: size_escalation_after_loss_forbidden
+  name: Ban on raising size after a loss unless a declared contrarian accelerator allows it
+  level: unit
+  kind: limit
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Martingale and grid sizing fail on trends and gaps (A1-008); a nightly audit grades escalation, stacking and ruin."
+  inputs: []
+  affects:
+    - {id: risk_amount_usd, direction: down, how: "Blocks size rises after losses."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H60"}
+  seed_ids: [C19]
+
+- id: class_state_multiplier
+  name: Gross multiplier on a class from macro state and volatility and liquidity state
+  level: portfolio
+  kind: size_input
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Slow macro layer times fast volatility and liquidity layer; lowered fast, raised slowly; stale inputs fall back conservative. Cuts gross, never re-weights units."
+  inputs: [cross_market_stress_reading]
+  affects:
+    - {id: cluster_exposure_cap, direction: down, how: "A shock state cuts every class together."}
+  configurable: true
+  changed_by: [automatic, operator]
+  status: idea
+  sources:
+    - {gen: expansion, ref: "expansion/X2-sizing-accelerators.md", note: "X2-H62"}
+  seed_ids: [C27]
