@@ -410,7 +410,7 @@ def test_producer_to_consumer_artifact_and_screen_state(supervisor: Supervisor) 
     assert "recorded-venue: degraded" in content["summary"]
     assert content["source_sha256"] == snapshot["sha256"]
     assert content["mode"] == "recorded_fixture"
-    assert (supervisor.home / "apps/weekend-watcher/memory.db").exists()
+    assert not (supervisor.home / "apps/weekend-watcher/memory.db").exists()
     assert not (supervisor.home / "apps/exchange-status/memory.db").exists()
     resources = supervisor.resource("exchange-status", "ui://exchange-status/view.html")
     assert "recorded-venue" in cast(str, resources[0]["text"])
