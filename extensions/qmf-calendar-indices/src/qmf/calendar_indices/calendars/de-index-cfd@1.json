@@ -3,8 +3,8 @@
   "calendar_ref": "de-index-cfd@1",
   "name": "German index CFDs (DE40), which follow Eurex's DAX futures",
   "zone": "Europe/Berlin",
-  "issued": "2026-11-02",
-  "max_age_days": 31,
+  "issued": "2026-11-03",
+  "max_age_days": 423,
   "source": "Eurex FDAX: 01:10 to 22:00 Frankfurt time on weekdays, shut on the Eurex holidays; early closes before holidays are not modelled in version 1",
   "sessions": [
     {
@@ -73,6 +73,16 @@
       "from": "2027-03-29T00:00",
       "to": "2027-03-30T00:00",
       "why": "Easter Monday"
+    },
+    {
+      "from": "2027-12-24T00:00",
+      "to": "2027-12-25T00:00",
+      "why": "Christmas Eve"
+    },
+    {
+      "from": "2027-12-31T00:00",
+      "to": "2028-01-01T00:00",
+      "why": "New Year's Eve"
     }
   ]
 }

@@ -3,9 +3,9 @@
   "calendar_ref": "cme-grains@1",
   "name": "CBOT grain futures (ZC, ZS, ZW)",
   "zone": "America/Chicago",
-  "issued": "2026-11-02",
-  "max_age_days": 31,
-  "source": "CME Group CBOT grain hours: Sunday to Friday 19:00 to 07:45 and 08:30 to 13:20 Central Time; shut on Christmas Day and New Year's Day; early closes before holidays are not modelled in version 1",
+  "issued": "2026-11-03",
+  "max_age_days": 423,
+  "source": "CME Group CBOT grain hours: Sunday to Friday 19:00 to 07:45 and 08:30 to 13:20 Central Time; shut on Christmas Day and New Year's Day; early closes before holidays are not modelled in version 1; in 2027 Christmas Day and New Year's Day both fall on a Saturday, and the observed-day hours are left out until CME publishes them",
   "sessions": [
     {
       "open": "sun 19:00",

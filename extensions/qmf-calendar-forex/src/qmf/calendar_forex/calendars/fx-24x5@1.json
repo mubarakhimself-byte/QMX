@@ -1,0 +1,27 @@
+{
+  "schema": "qmx.calendar/1",
+  "calendar_ref": "fx-24x5@1",
+  "name": "Spot forex, the 17:00 New York week",
+  "zone": "America/New_York",
+  "issued": "2026-11-03",
+  "max_age_days": 423,
+  "source": "qmf-calendar-forex's rule as data: Sunday 17:00 to Friday 17:00 New York time, with the trading dates of 25 December and 1 January fully shut, each starting at 17:00 the day before; in 2027 both fall on a Saturday, so 2027 adds no closure",
+  "sessions": [
+    {
+      "open": "sun 17:00",
+      "close": "fri 17:00"
+    }
+  ],
+  "closures": [
+    {
+      "from": "2026-12-24T17:00",
+      "to": "2026-12-27T17:00",
+      "why": "Christmas Day"
+    },
+    {
+      "from": "2026-12-31T17:00",
+      "to": "2027-01-03T17:00",
+      "why": "New Year's Day"
+    }
+  ]
+}

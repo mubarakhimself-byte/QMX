@@ -3,8 +3,8 @@
   "calendar_ref": "nyse@1",
   "name": "NYSE and Nasdaq cash session",
   "zone": "America/New_York",
-  "issued": "2026-11-02",
-  "max_age_days": 31,
+  "issued": "2026-11-03",
+  "max_age_days": 423,
   "source": "NYSE core trading 09:30 to 16:00 New York time on weekdays, shut on the NYSE holidays; the 13:00 early closes are not modelled in version 1",
   "sessions": [
     {
@@ -98,6 +98,36 @@
       "from": "2027-03-26T00:00",
       "to": "2027-03-27T00:00",
       "why": "Good Friday"
+    },
+    {
+      "from": "2027-05-31T00:00",
+      "to": "2027-06-01T00:00",
+      "why": "Memorial Day"
+    },
+    {
+      "from": "2027-06-18T00:00",
+      "to": "2027-06-19T00:00",
+      "why": "Juneteenth, observed"
+    },
+    {
+      "from": "2027-07-05T00:00",
+      "to": "2027-07-06T00:00",
+      "why": "Independence Day, observed"
+    },
+    {
+      "from": "2027-09-06T00:00",
+      "to": "2027-09-07T00:00",
+      "why": "Labor Day"
+    },
+    {
+      "from": "2027-11-25T00:00",
+      "to": "2027-11-26T00:00",
+      "why": "Thanksgiving Day"
+    },
+    {
+      "from": "2027-12-24T00:00",
+      "to": "2027-12-25T00:00",
+      "why": "Christmas Day, observed"
     }
   ]
 }

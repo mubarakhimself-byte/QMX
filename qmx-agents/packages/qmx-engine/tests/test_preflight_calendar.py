@@ -145,9 +145,15 @@ def test_holidays_shut_until_the_next_session_and_a_stale_calendar_says_so() -> 
         utc(2026, 11, 27, 14, 30), "aapl is shut on its calendar nyse@1 in America/New_York"
     )
     assert check("sp500", utc(2026, 12, 24, 22, 30)) == Shut(
-        utc(2026, 12, 27, 23),
+        utc(2026, 12, 27, 23), "sp500 is shut on its calendar cme-equity@1 in America/Chicago"
+    )
+    assert check("aapl", utc(2027, 12, 24, 15)) == Shut(
+        utc(2027, 12, 27, 14, 30), "aapl is shut on its calendar nyse@1 in America/New_York"
+    )
+    assert check("sp500", utc(2028, 1, 7, 22, 30)) == Shut(
+        utc(2028, 1, 9, 23),
         "sp500 is shut on its calendar cme-equity@1 in America/Chicago"
-        " (the calendar is 21 days past its 31-day maximum age)",
+        " (the calendar is 7 days past its 423-day maximum age)",
     )
 
 
