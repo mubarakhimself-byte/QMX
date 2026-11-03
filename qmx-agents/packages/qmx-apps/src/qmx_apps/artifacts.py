@@ -7,7 +7,8 @@ one `artifact` object whose `type` is the provides name. The landing goes throug
 the seam the host wires to the Library store it owns; with no sink attached the payload is still
 hashed, validated and registered here, and only the landing waits. An output whose contract
 names a lander skips that sink: it lands through the lander's `close`, against the run the lander
-opened for the job (AD-33 change 2).
+opened for the job (AD-33 change 2). A job may leave several outputs at once (`save_all`), and a
+ref the Library already holds is never landed a second time.
 
 `provides.<name>.stale_after` makes an output lose freshness: a read past it returns
 `stale: true`, the age and the declared share, never an error.
@@ -153,6 +154,32 @@ class Artifacts:
     ) -> Document:
         """Validate, store and land one output. An output whose contract names a lander lands
         only from a job that lander opened, through its `close`; any other lands as today."""
+        return self._land(definition, self._check(definition, output, data, run), run)
+
+    def save_all(
+        self,
+        definition: Definition,
+        outputs: Sequence[tuple[str, JsonValue]],
+        *,
+        run: Run | None = None,
+    ) -> list[Document]:
+        """Land a job's outputs in order once every one has passed its contract, so one refused
+        output lands none of them."""
+        checked = [self._check(definition, output, data, run) for output, data in outputs]
+        return [self._land(definition, item, run) for item in checked]
+
+    @dataclass(frozen=True, slots=True)
+    class _Checked:
+        output: str
+        data: JsonValue
+        schema: Document
+        stale_after: float | None
+        lander: str | None
+        encoded: bytes
+
+    def _check(
+        self, definition: Definition, output: str, data: JsonValue, run: Run | None
+    ) -> Artifacts._Checked:
         schema, stale_after = self.contract(definition, output)
         lander = definition.manifest.provides[output].lander
         if lander is not None and (run is None or run.name != lander):
@@ -170,32 +197,37 @@ class Artifacts:
         encoded = json.dumps(
             data, sort_keys=True, separators=(",", ":"), ensure_ascii=False
         ).encode()
-        sha = hashlib.sha256(encoded).hexdigest()
+        return Artifacts._Checked(output, data, schema, stale_after, lander, encoded)
+
+    def _land(self, definition: Definition, checked: Artifacts._Checked, run: Run | None) -> Document:
+        """Store a checked output and land it. A ref the Library already holds is not handed to
+        the sink again: a re-sent output refreshes its landing time and keeps its one object."""
+        sha = hashlib.sha256(checked.encoded).hexdigest()
         volume = Volume(self.home, definition.manifest.id)
         volume.check_write("blobs").mkdir(parents=True, exist_ok=True)
         target = volume.check_write(f"blobs/{sha}.json")
         temporary = volume.check_write(f"blobs/{sha}.tmp")
-        temporary.write_bytes(encoded)
+        temporary.write_bytes(checked.encoded)
         temporary.replace(target)
         ref = ArtifactRef(
             producer_app=definition.manifest.id,
             definition_hash=definition.hash,
-            output=output,
+            output=checked.output,
             sha256=sha,
         )
         at = now()
         landing = Landing(
             app_id=definition.manifest.id,
             version=definition.manifest.version,
-            output=output,
+            output=checked.output,
             ref=ref,
-            data=data,
-            schema=schema,
-            stale_after=stale_after,
+            data=checked.data,
+            schema=checked.schema,
+            stale_after=checked.stale_after,
             at=at,
-            fields={TYPE_KEY: output, "metadata": _metadata(ref, stale_after)},
-            lander=lander,
-            run=None if lander is None else run,
+            fields={TYPE_KEY: checked.output, "metadata": _metadata(ref, checked.stale_after)},
+            lander=checked.lander,
+            run=None if checked.lander is None else run,
         )
         if landing.run is not None:
             try:
@@ -203,14 +235,23 @@ class Artifacts:
             except ValueError as error:
                 raise AppError("result_refused", str(error), 422) from error
         else:
-            library_id = self.library(landing) if self.library is not None else None
+            library_id = self._library_id(ref)
+            if library_id is None and self.library is not None:
+                library_id = self.library(landing)
         with closing(sqlite3.connect(self.index)) as db, db:
             db.execute(
                 "INSERT OR REPLACE INTO artifacts"
                 "(ref, schema, landed_at, library_id, stale_after) VALUES(?,?,?,?,?)",
-                (self._key(ref), json.dumps(schema), at, library_id, stale_after),
+                (self._key(ref), json.dumps(checked.schema), at, library_id, checked.stale_after),
             )
         return cast(Document, ref.model_dump(mode="json"))
+
+    def _library_id(self, ref: ArtifactRef) -> str | None:
+        with closing(sqlite3.connect(self.index)) as db:
+            row = db.execute(
+                "SELECT library_id FROM artifacts WHERE ref=?", (self._key(ref),)
+            ).fetchone()
+        return None if row is None or row[0] is None else str(row[0])
 
     def accept(self, consumer: Definition, feed: str, value: JsonValue) -> Document:
         declared = consumer.manifest.feeds.get(feed)

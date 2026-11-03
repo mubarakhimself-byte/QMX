@@ -86,6 +86,25 @@ def refuse_tool(name: str, tool: Document) -> None:
             raise AppError("tool_refused", f"Parent record mutation refused: {name}", 403)
 
 
+def _outputs(answer: Document) -> list[tuple[str, JsonValue]]:
+    """A job answer's `outputs`, each `{output, data}` read as its name and payload. A job answers
+    one output or a list of them, never both."""
+    listed = answer["outputs"]
+    if "output" in answer or "data" in answer:
+        raise AppError("invalid_output", "A job answers output and data, or outputs, not both.")
+    if not isinstance(listed, list):
+        raise AppError("invalid_output", "outputs is a list of {output, data}.")
+    found: list[tuple[str, JsonValue]] = []
+    for item in listed:
+        if not isinstance(item, dict) or set(item) != {"output", "data"}:
+            raise AppError("invalid_output", "Each of outputs is one {output, data}.")
+        output = item["output"]
+        if not isinstance(output, str):
+            raise AppError("invalid_output", "Output names must be strings.")
+        found.append((output, item["data"]))
+    return found
+
+
 def _snapshot_files(root: Path) -> list[Path]:
     """Every file a move carries, in one order, leaving out its own manifest."""
     return [path for path in sorted(root.rglob("*")) if path.is_file() and path.name != SNAPSHOT]
@@ -1302,7 +1321,26 @@ class Supervisor:
             ran["result"] = result["result"]
         answer = result.get("result")
         closed = False
-        if isinstance(answer, dict) and "output" in answer and "data" in answer:
+        if isinstance(answer, dict) and "outputs" in answer:
+            outputs = _outputs(answer)
+            provides = instance.definition.manifest.provides
+            closes = [
+                output
+                for output, _ in outputs
+                if run is not None and output in provides and provides[output].lander == run.name
+            ]
+            if len(closes) > 1:
+                raise AppError(
+                    "lander_once",
+                    f"Job {job} answered {len(closes)} results its lander lands; a run lands one.",
+                    422,
+                )
+            ran["result"] = {key: value for key, value in answer.items() if key != "outputs"}
+            ran["artifact_refs"] = cast(
+                list[JsonValue], self.artifacts.save_all(instance.definition, outputs, run=run)
+            )
+            closed = len(closes) == 1
+        elif isinstance(answer, dict) and "output" in answer and "data" in answer:
             output = answer["output"]
             if not isinstance(output, str):
                 raise AppError("invalid_output", "Output names must be strings.")
