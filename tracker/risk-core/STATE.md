@@ -119,6 +119,16 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - Then the Fable funnel judge as before.
     - Trade-off: the deeper the linking, the later the build starts. Linking stays bounded by layer, and every hybrid must name the QMX need it serves.
 
+23. **Ledger v0 done and committed** (`ledger/`): 267 variables and 473 couplings; the checker passes strict. Defaults: 25 set, only 10 reasoned or with a formula; 242 null (169 "open"). Biggest holes:
+    - risk per trade has no derivation in any generation;
+    - fast invalidation never in code;
+    - no cross-unit exposure;
+    - no money brake says which equity it measures from;
+    - the BMS layer is ideas only;
+    - count brakes don't scale with trade count;
+    - costs never reach the sizer.
+    Schema extras: `basis` (formula, reasoned, stated, open), `seen_values`, statuses "built not running" and "dropped". Expansion agents add `ledger/additions/<id>.yaml` and run `check.py` with them.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
