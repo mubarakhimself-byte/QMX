@@ -1,0 +1,1153 @@
+# Ledger additions from Stage B layer X6 (observability, telemetry, UI states), 3 Nov 2026.
+# Expansion file: expansion/X6-observability.md. Schema: ledger/README.md.
+# No default is invented: every new number has a derivation rule and a null default,
+# except the two harvest cadences that run in the shipped stack.
+
+# ---------------------------------------------------------------- the fact spine
+
+- id: risk_state_emit_interval
+  name: Heartbeat interval at which the node writes a full RiskState fold even when nothing changed
+  level: node
+  kind: schedule
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Proposed rule: emit on every change plus a heartbeat no longer than half of risk_fact_staleness_limit, so a reader never sees a fold older than its limit without a newer one on the way. A4-152 proposed every pass; the roundtable moved it to on-change plus heartbeat to spare the VPS disk."
+  inputs: [risk_fact_staleness_limit]
+  affects:
+    - {id: brake_state, direction: either, how: "Sets how fresh the brake meters are on every screen."}
+    - {id: risk_light_state, direction: either, how: "A late heartbeat turns the six words grey (UNKNOWN)."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-01"}
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:5031", note: "A4-152 RiskState row"}
+  seed_ids: [D49]
+
+- id: risk_fact_staleness_limit
+  name: Age after which a risk fact on any screen or tool turns UNKNOWN instead of keeping its last colour
+  level: node
+  kind: limit
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Proposed rule: per fact, a multiple of its own update cadence (heartbeat for UP, the bar for TRADING, the harvest cadence for facts read on This PC). Gen 3 carried source time, receive time and watermark on every health read; no number was set."
+  inputs: [liveness_heartbeat_cadence, journal_harvest_cadence, records_home_cadence]
+  affects:
+    - {id: risk_light_state, direction: either, how: "Past the limit a word shows UNKNOWN."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "section 1 and X6-11"}
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/lenses/observability/metrics-and-alerts.md:114-116", note: "provenance-stamped health states"}
+  seed_ids: [D49]
+
+- id: status_generation
+  name: Profile version and generation a RiskState or status row was computed under
+  level: unit
+  kind: evidence
+  measure: "other: version stamp"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Copied from the unit and profile fingerprint in force when the fold ran. A status whose generation is older than the spec in force is shown as out of date (Kubernetes observedGeneration)."
+  inputs: []
+  affects:
+    - {id: risk_light_state, direction: either, how: "An out-of-date status cannot show a normal word."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:737", note: "A4-20"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-01"}
+
+- id: control_apply_lag_limit
+  name: Longest gap between a control being requested and the node enforcing it before the UI says not yet applied
+  level: node
+  kind: limit
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Proposed rule: a few node-link round trips, measured; past it the control shows requested, not enforced, with the node's name. The v17 kill-switch design shows the three stamps; no value exists."
+  inputs: []
+  affects:
+    - {id: risk_light_state, direction: either, how: "A control not applied makes ON for that scope UNKNOWN."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-09"}
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:5625", note: "A4-171 his lowering not journalled"}
+  seed_ids: [D49]
+
+- id: drawdown_by_kind
+  name: Drawdown measured as a declared triple of equity series, anchor and window (day, session, trailing, cushion, unit working anchor, account floor)
+  level: unit
+  kind: measure
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "For each kind: (anchor value minus current value of the named series) divided by the anchor value, also shown in USD and R. Series: realized, marked or venue. Anchors: day start, session start, high-water mark, fixed floor, unit working anchor (may restart), account floor (never restarts). Computed at unit, book and account."
+  inputs: [account_equity, realized_pnl, unrealized_pnl, day_start_equity, high_water_mark_equity, brake_equity_basis]
+  affects:
+    - {id: brake_state, direction: either, how: "Each money brake reads its declared kind."}
+    - {id: time_under_water, direction: either, how: "Depth and duration are shown together."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:2646", note: "A2-115 declared equity series and base"}
+    - {gen: grounding, ref: "grounding/G11-ledger-exposure-exits-observability.md:145-149", note: "four meanings of 5 % drawdown"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-02"}
+  seed_ids: [B15, C8]
+
+- id: time_under_water
+  name: Time since the last high of a drawdown kind, against the style's worry line
+  level: unit
+  kind: measure
+  measure: "other: days or trades"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Time (days for swing, trades for scalpers) since the series last set its anchor high. Compared with a duration worry line from the unit's Sharpe and style (A2-14); triple penance gives the expected recovery time (A2-15)."
+  inputs: [drawdown_by_kind, trade_rate]
+  affects:
+    - {id: drift_state, direction: up, how: "Time under water past the worry line is decay evidence for breakout and trend units."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml", note: "A2-14 duration worry lines, A2-15 triple penance"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-02"}
+
+- id: weight_gap_r
+  name: Gap between the size a unit wanted, the size risk allowed and the size the venue filled
+  level: trade
+  kind: evidence
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Three values on every decision row: wanted, risk-approved, executed. Gaps in R: wanted minus approved (risk's cut, with the binding clamp named) and approved minus executed (rounding and fills)."
+  inputs: [rounding_residue_r, control_rank_table]
+  affects:
+    - {id: brake_state, direction: either, how: "Shows which brake or clamp bound the size."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:1703", note: "A5-75 three weight vectors"}
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:5064", note: "A4-153 binding_clamp"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-03"}
+  seed_ids: [A13]
+
+- id: exit_mechanism
+  name: What closed a trade, kept apart from its outcome
+  level: trade
+  kind: evidence
+  measure: "other: code"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "A closed code emitted by the exit that acted: stop, fast-invalidation cut, breakeven, time, signal, target, trail, forced flat by kill switch, forced flat by risk rule, liquidation, roll. The outcome (R, money) is a separate field. Today the row keeps only QMB fill kinds, so time, signal and FI exits all read close."
+  inputs: []
+  affects:
+    - {id: exit_reason_code, direction: either, how: "Splits the old exit kind into mechanism and outcome."}
+    - {id: loss_counting_rule, direction: either, how: "A brake can count FI cuts by size only if the row names them."}
+    - {id: event_ledger_rates, direction: either, how: "The event ledger counts mechanisms."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:4965", note: "A4-150"}
+    - {gen: grounding, ref: "grounding/G11-ledger-exposure-exits-observability.md:190-192", note: "all non-stop exits read close"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-04"}
+  seed_ids: [A28]
+
+- id: event_ledger_rates
+  name: Exit event rates per unit (FI rate, scratch rate, full-stop share, time-exit share, stop slippage)
+  level: unit
+  kind: evidence
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Share of closed trades by exit mechanism over a rolling window of the unit's own trades, against the card's rates. A rising full-stop share or a falling FI rate is early decay evidence."
+  inputs: [exit_mechanism, trade_rate]
+  affects:
+    - {id: drift_state, direction: either, how: "A shift in the exit mix is decay evidence before money moves."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:3307", note: "A5-145 two ledgers"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-05"}
+  seed_ids: [A28]
+
+- id: number_move_receipt
+  name: Receipt row for every move of a self-configuring number (learner, applier, mode, bounds, reason)
+  level: unit
+  kind: evidence
+  measure: "other: journal row"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Written on every applied or proposed move: number, learner id and version, input window, old and new value, target with low and high bound, applier and its mode (off/shadow, at flat, at new position, live), reason code, derivation fallback step, shadow would-have result. Today a calibration row holds only old and new value with a watermark."
+  inputs: [number_motion_mode, calibration_cadence_trades, calibration_min_trades]
+  affects:
+    - {id: brake_state, direction: either, how: "A learner moving a brake threshold shows on the brake's meter."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:10", note: "A4-1 learner"}
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:59", note: "A4-2 applier modes"}
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:2692", note: "A4-80 shipped motion engine"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-08"}
+  seed_ids: [A13, D46]
+
+- id: fire_context_tags
+  name: Context written on every brake fire, risk stop, refusal and loss (session, class, MIS words, news, liquidity, rollover, roll)
+  level: unit
+  kind: evidence
+  measure: "other: tag set"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Copied at the moment of the event from the calendar, the instrument record, the MIS board and the news strip. Class-aware tags: FX rollover minute, crypto funding stamp, index cash open, metal fixes, energy releases, futures roll and limit state."
+  inputs: [session_windows, instrument_class]
+  affects:
+    - {id: breaker_fire_density, direction: either, how: "Fire density by context separates a bad market from a bad unit."}
+    - {id: market_isolation_trigger, direction: either, how: "Fires clustered in one class are isolation evidence."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:2878", note: "A2-125"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-10"}
+  seed_ids: [C27, A26]
+
+# ---------------------------------------------------------------- meanings
+
+- id: risk_light_state
+  name: His six words per scope (UP, ON, TRADING, RIGHT, WRONG, TRIPPED) plus UNKNOWN
+  level: unit
+  kind: evidence
+  measure: "other: word"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Predicates over the RiskState fold, defined in expansion/X6-observability.md section 1: UP from heartbeat and link age; ON from kill level, pause, stand-downs, trading state, calendar and warm-up; TRADING from ON, decision pulse and trade count against the card; RIGHT mechanically (reconcile, stops at venue, costs, replay) and statistically (drift zone, cone); WRONG when a RIGHT half fails; TRIPPED when a brake is latched; UNKNOWN when any input is past its staleness limit or folds disagree. Computed per market, unit, book, account and node."
+  inputs: [liveness_heartbeat_cadence, kill_switch_level, brake_state, drift_state, decision_pulse_max_age, risk_fact_staleness_limit, reconciliation_tolerance, cost_assumption_ratio]
+  affects: []
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "section 1, X6-11"}
+    - {gen: operator_words, ref: "seeds/operator-words-2026-11-03.md:79", note: "M12: wrong, right, working, up, on, trading"}
+  seed_ids: [D49, C7]
+  aliases: [six lights, up on trading]
+
+- id: decision_pulse_max_age
+  name: Longest time a unit may go without evaluating a bar before TRADING turns false (deaf)
+  level: unit
+  kind: limit
+  measure: bars
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Proposed rule: a small number of the unit's own bars, read from a sampled 'evaluated, no signal' row. No such row exists; signal rows are written only for blocked decisions (G9 7.1)."
+  inputs: []
+  affects:
+    - {id: risk_light_state, direction: either, how: "A missed pulse makes the unit 'on but deaf'."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-12"}
+    - {gen: grounding, ref: "grounding/G9-runtime-brakes-isolation-evidence.md:233-234", note: "signal rows for blocked decisions only"}
+  seed_ids: [D49]
+
+- id: silence_alarm_probability
+  name: Chance of seeing zero trades, given the card's trade rate and the open hours, below which a unit is flagged quiet
+  level: unit
+  kind: other
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Proposed rule: Poisson P(zero trades | card trade rate x open calendar hours in the window); below this level a ticket says 'quiet beyond expectation', split by refusal counts into shut, no signal, refused or deaf. Alert threshold, not a brake."
+  inputs: [trade_rate, trade_rate_band, session_windows]
+  affects:
+    - {id: risk_light_state, direction: either, how: "Turns TRADING into 'on but quiet' with a cause."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:3819", note: "A2-166 trade-rate band"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-12"}
+  seed_ids: [D49, C11]
+  notes: "Alert threshold. Weak for swing units with a few trades a week (roundtable)."
+
+# ---------------------------------------------------------------- alerts
+
+- id: loss_budget_burn_rate
+  name: How fast a scope is spending its loss budget against the share of trading time elapsed
+  level: unit
+  kind: measure
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "(share of the period loss budget used) / (share of the period's trading time elapsed). 1 spends the budget exactly by the period's end. Trading time follows each market's calendar: FX weekends do not elapse, crypto hours all do. Computed at unit, book and account."
+  inputs: [period_loss_budget, budget_remaining, unit_daily_loss_limit, day_boundary]
+  affects:
+    - {id: burn_rate_page_threshold, direction: either, how: "Compared with the page tier."}
+    - {id: burn_rate_ticket_threshold, direction: either, how: "Compared with the ticket tier."}
+    - {id: brake_state, direction: either, how: "Shown on each money brake's meter."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:653", note: "A2-28 burn-rate brake"}
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:1134", note: "A4-32 SRE burn tiers"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-15"}
+  seed_ids: [C7, D49]
+
+- id: burn_rate_page_threshold
+  name: Burn rate over both windows at which the phone is woken
+  level: unit
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Google SRE pages at 14.4 (2 % of a monthly budget in 1 hour) and 6 (5 % in 6 hours). Proposed derivation for trading: the budget from the unit's own daily P&L distribution at its trade count (A5-144) and windows in expected trades, so a healthy unit pages at most once a month in replay. Alert threshold; the brake response is X3's."
+  seen_values:
+    - {value: 14.4, gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:653", note: "Google SRE, monthly budget, 1 h window; not trading"}
+  inputs: [loss_budget_burn_rate, burn_window_trades]
+  affects:
+    - {id: alert_tier, direction: up, how: "Above it the alert is a page."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-15"}
+  seed_ids: [D49]
+
+- id: burn_rate_ticket_threshold
+  name: Burn rate over both windows at which a ticket opens
+  level: unit
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Google SRE opens a ticket at burn 1 over 3 days (10 % of a monthly budget). Proposed: same derivation as the page tier at a slower window, so a healthy unit opens at most one ticket a week in replay."
+  seen_values:
+    - {value: 1, gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:653", note: "Google SRE ticket tier; not trading"}
+  inputs: [loss_budget_burn_rate, burn_window_trades]
+  affects:
+    - {id: alert_tier, direction: up, how: "Above it the alert is at least a ticket."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-15"}
+
+- id: burn_short_window_ratio
+  name: Length of the short burn window as a share of the long one; both must exceed the tier
+  level: unit
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: stated
+  derivation: "SRE practice sets the short window at about 1/12 of the long one so an alert resets fast once burning stops. No trading test; kept as a seen value until the replay sets it."
+  seen_values:
+    - {value: 0.083, gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:1134", note: "1/12, Google SRE"}
+  inputs: []
+  affects:
+    - {id: burn_rate_page_threshold, direction: either, how: "A shorter short window resets pages faster and fires on more blips."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:1134", note: "A4-32"}
+
+- id: burn_window_trades
+  name: Long burn window expressed in the unit's expected trades instead of hours
+  level: unit
+  kind: schedule
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Proposed: a window holding enough expected trades for the burn to be more than one trade's noise; converted to time through the card's trade rate and the open calendar. Below low_traffic_trade_rate the per-trade rule replaces it."
+  inputs: [trade_rate, low_traffic_trade_rate]
+  affects:
+    - {id: loss_budget_burn_rate, direction: either, how: "Sets the window over which burn is measured."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-15"}
+  seed_ids: [C33]
+
+- id: low_traffic_trade_rate
+  name: Trade rate below which burn-rate alerts give way to a per-trade loss rule
+  level: unit
+  kind: other
+  measure: "other: trades per day"
+  applies_to: {classes: [all], styles: [swing, intraday], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. SRE says low-traffic services need their own rule. Proposed: below this rate a ticket opens when one loss exceeds k times the card's p95 loss. Raised by the swing trader in the roundtable."
+  inputs: [trade_rate]
+  affects:
+    - {id: burn_window_trades, direction: either, how: "Below it the burn window is not used."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:1134", note: "A4-32 low-traffic note"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-15"}
+
+- id: alert_tier
+  name: Urgency tier of an observation (silent act, digest, ticket, page)
+  level: system
+  kind: other
+  measure: "other: tier"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Rule, no number: clamps act silently and record; learner moves and normal fires are digest lines; edge estimates and slow burns are tickets; money at risk now that the system cannot fix alone is a page. Enforcement never waits for any tier (A4-201, A5-28, A5-139)."
+  inputs: [loss_budget_burn_rate, burn_rate_page_threshold, burn_rate_ticket_threshold, drift_state]
+  affects:
+    - {id: phone_wake_conditions, direction: either, how: "Only page-tier observations can wake him."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:640", note: "A5-28 three signals three jobs"}
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:6597", note: "A4-201 enforcement apart from notification"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-14"}
+  seed_ids: [D49, C7]
+
+- id: alert_priority
+  name: Order in which simultaneous alerts are shown, one at a time
+  level: system
+  kind: other
+  measure: "other: rank"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Aviation shows one aural alert at a time by priority. Proposed order: unprotected money, exit capacity lost, fast burn, node or broker lost with open positions, everything else by tier."
+  inputs: [alert_tier]
+  affects:
+    - {id: phone_wake_conditions, direction: either, how: "The highest-priority open incident is the one pushed."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:5183", note: "A4-157"}
+
+- id: incident_root_cause_key
+  name: Key that groups alerts from one cause (broker, feed, node, class, unit) into one incident
+  level: system
+  kind: other
+  measure: "other: key"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Rule: an alert's key is the narrowest shared dependency among its contributors (broker, feed, node, class or region, unit). Deduplicating pages by key never deduplicates trips (A2-20, A4-160)."
+  inputs: [fire_context_tags]
+  affects:
+    - {id: page_escalation_after, direction: either, how: "One incident is paged once and re-paged only if worse."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml", note: "A2-20 central controller"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-16"}
+
+- id: incident_group_window
+  name: Window within which alerts with one root-cause key join one incident (the hours clause)
+  level: account
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Reinsurers count all losses inside a set number of hours as one event (24 h tornado, 72 h windstorm). Proposed: per class and style, from the time its shared shocks take to play out; short for scalpers at opens, a session for intraday, a day for swing."
+  inputs: [loss_event_window]
+  affects:
+    - {id: incident_root_cause_key, direction: either, how: "Longer windows join more alerts into one incident."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:607", note: "A2-26 hours clause"}
+
+- id: page_escalation_after
+  name: Minutes after which an unacknowledged or worsening money page is re-sent on a second channel
+  level: system
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Process-industry alarm practice escalates if worse or unresolved. Proposed: shorter than the page's own action deadline. ntfy has no delivery acknowledgement today and no second channel exists."
+  inputs: [incident_root_cause_key]
+  affects: []
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:6597", note: "A4-201"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-16, X6-17"}
+
+- id: phone_wake_conditions
+  name: Conditions that may wake him (money at risk now, the system cannot fix it alone, his action changes the outcome by a deadline)
+  level: system
+  kind: other
+  measure: "other: list"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Shipped C-18 list: protection escalation, risk stop with open trades, broker link down with open trades, clock stand-down, failing heals, mostly only while a market they concern is open. Proposed: condition on open positions or working orders, never on market hours; add exit capacity lost and floor buffer breached; every page names an action and a deadline."
+  seen_values:
+    - {value: "C-18 list", gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qmn/src/qmn/app/alarms.py:1-20"}
+  inputs: [alert_tier, alert_priority, exit_capacity_state, kill_line_distance]
+  affects: []
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: grounding, ref: "grounding/G11-ledger-exposure-exits-observability.md:217", note: "C-18 pushes and limits"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-17"}
+  seed_ids: [D49]
+
+- id: false_page_budget
+  name: Most pages a month that may turn out to need no action before the page rules are reviewed
+  level: account
+  kind: limit
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. An error budget applied to the alert system: over budget, a ticket opens against the noisiest rule. The roundtable proposed at most one page a month per account on healthy replays as the selection rule for alert designs."
+  inputs: [operator_dismiss_rate]
+  affects:
+    - {id: burn_rate_page_threshold, direction: up, how: "Over budget, the page tier is reviewed upward."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-17, X6-46"}
+
+- id: exit_capacity_state
+  name: Whether an open position can be exited now at expected cost (open and liquid, thin, halted or limit-locked, venue down, rejecting)
+  level: position
+  kind: evidence
+  measure: "other: state"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "From the market calendar, venue status, spread against its hour norm, recent rejects and limit state. A halt or a rejected order is never counted as risk controlled (A4-203)."
+  inputs: [spread_cost, session_windows]
+  affects:
+    - {id: locked_heat, direction: up, how: "Non-exitable positions move their risk into locked heat."}
+    - {id: phone_wake_conditions, direction: either, how: "Exit capacity lost with open positions may page."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:6670", note: "A4-203"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-20"}
+
+- id: locked_heat
+  name: Open risk at the stop in positions that cannot be exited now
+  level: account
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Sum of open_risk_at_stop over positions whose exit_capacity_state is not open and liquid, plus their gap allowance."
+  inputs: [open_risk_at_stop, exit_capacity_state, gap_loss_beyond_stop]
+  affects:
+    - {id: phone_wake_conditions, direction: up, how: "Locked heat above a share of room above the floor may page."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-20"}
+  seed_ids: [C10]
+
+- id: watch_window_at_open
+  name: Minutes around session opens and high-impact releases with raised watch sensitivity and grouped notifications
+  level: node
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Proposed: per instrument and event type, from where volatility, spread and fill rates return to normal against matched non-event periods (A3-229). Hard protection never loosens inside it."
+  inputs: [news_blackout_before, news_blackout_after, session_windows]
+  affects:
+    - {id: incident_group_window, direction: either, how: "Notifications inside the window are grouped."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:6670", note: "A4-203"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-19"}
+
+# ---------------------------------------------------------------- alarm economics
+
+- id: brake_recall
+  name: Share of known bad episodes a brake caught, on replay
+  level: unit
+  kind: evidence
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Caught bad episodes divided by all bad episodes in a replay set (historical shocks, injected faults), per class and style. Fewer than N episodes reads 'too few to judge'."
+  inputs: [brake_precision]
+  affects:
+    - {id: brake_lift_vs_random, direction: either, how: "Read together in the brake scorecard."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:3274", note: "A2-142 alert scorecard"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-21"}
+  seed_ids: [C33]
+
+- id: brake_lift_vs_random
+  name: How much better a brake does than a random brake firing as often
+  level: unit
+  kind: evidence
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Result of the unit with the brake divided by the result with a random brake at matched frequency, over the same trades (MQL5 23482). Near 1 means the brake only trades less; any brake looks good on a losing strategy for that reason."
+  inputs: [breaker_fire_density, brake_precision]
+  affects:
+    - {id: brake_precision_floor, direction: either, how: "A brake without lift is retuned or sent back to shadow."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:3112", note: "A2-135 random-control brake test"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-21"}
+  seed_ids: [C33]
+
+- id: brake_precision_floor
+  name: Precision below which a brake is reported as a defect
+  level: system
+  kind: limit
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Hospitals find 85-99 % of alarms need no action and staff then ignore them. Proposed: set per brake kind from its replay so a healthy unit's fires mostly needed action; under it a ticket proposes retune or shadow."
+  inputs: [brake_precision]
+  affects:
+    - {id: brake_state, direction: either, how: "A brake under the floor can be moved back to shadow."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:701", note: "A2-30"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-21"}
+  seed_ids: [C33]
+
+- id: trip_tax_r
+  name: What a trip cost (units paused, time lost, forgone net result, exit costs) beside the loss it avoided
+  level: unit
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Per trip: the shadow twin's net R during the pause plus exit costs, minus the loss avoided against the twin. Summed per brake per month. A counterfactual, labelled so."
+  inputs: [twin_gap_r, breaker_fire_density]
+  affects:
+    - {id: brake_precision_floor, direction: either, how: "A brake whose tax exceeds its saving is reviewed."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:6634", note: "A4-202 trip tax"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-22"}
+  seed_ids: [C11]
+
+- id: under_baseline_share
+  name: Share of open hours a unit or book held size below its baseline (the sitting-duck meter)
+  level: unit
+  kind: measure
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Open trading hours with the unit braked, paused or in REDUCING, divided by all its open trading hours, over a window."
+  inputs: [brake_state]
+  affects:
+    - {id: missed_return_r, direction: up, how: "More time under baseline leaves more return on the table if the edge held."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:1657", note: "A5-73 cost of conservatism"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-22"}
+  seed_ids: [C11]
+
+- id: missed_return_r
+  name: Return the baseline would have earned while size was held below it
+  level: unit
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "The shadow twin's R at baseline size during under-baseline hours minus the unit's actual R in those hours."
+  inputs: [under_baseline_share, twin_gap_r]
+  affects: []
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:1657", note: "A5-73"}
+  seed_ids: [C11]
+
+- id: accelerator_earned_r
+  name: Extra R an accelerator risked and won, beside the unit's block-persistence result
+  level: unit
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Per accelerator: realised R minus the R the same trades make at baseline size (trade-list re-sizer), and the extra risk taken. With no measured block persistence the line reads 'size in disguise' (R9 1.11)."
+  inputs: [house_money_multiplier, size_levels, expectancy_r]
+  affects: []
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "research/R9-accelerators-and-brake-pairs.md:31-34", note: "accelerators pay only with persistence"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-23"}
+  seed_ids: [C19]
+
+- id: growth_attribution
+  name: Daily money change split into edge at base size, accelerators, brakes held, costs, execution gap and allocation
+  level: account
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Waterfall: R at base size times the money per R, plus accelerator_earned_r, minus missed_return_r, minus realised costs, minus the twin gap, plus allocation changes. The order of the bars is a declared choice."
+  inputs: [accelerator_earned_r, missed_return_r, round_trip_cost_r, twin_gap_r]
+  affects: []
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml", note: "A4-42 two records"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-24"}
+
+- id: operator_dismiss_rate
+  name: Share of a card or push class he dismisses without action
+  level: system
+  kind: evidence
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Dismissed without action divided by all shown, per class, over a window. A class dismissed often proposes demotion to digest with his yes; money pages are exempt."
+  inputs: []
+  affects:
+    - {id: false_page_budget, direction: up, how: "Dismissed pages count against the budget."}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:1206", note: "A5-53 review queue"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-26"}
+
+# ---------------------------------------------------------------- drift, verification, costs
+
+- id: trades_toward_proof
+  name: Trades a unit has toward the count its verification plan needs
+  level: unit
+  kind: evidence
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Counted paper and live trades since the frozen card, against verification_trades_needed; shown with the next planned look. May duplicate an X5 entry; the funnel merges."
+  inputs: [verification_trades_needed, effective_tries]
+  affects:
+    - {id: drift_state, direction: either, how: "Below the needed count the zone reads 'thin'."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:5434", note: "A4-165"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-27"}
+
+- id: upside_alarm_percentile
+  name: Cone percentile above which results are flagged too good (check for a sizing bug or hidden exposure)
+  level: unit
+  kind: other
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. A2-176 proposes above the 95th percentile for two looks. Computed in R so accelerators do not trip it. Alert threshold. May duplicate an X5 entry."
+  inputs: [mc_cone_floor_percentile]
+  affects:
+    - {id: drift_state, direction: either, how: "Too good is a yellow, not a green."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:4045", note: "A2-176"}
+
+- id: bad_day_percentile
+  name: Where a day's R sits in the card's daily distribution for this unit type
+  level: unit
+  kind: measure
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Percentile of the day's R in the card's simulated daily R at the unit's trade count; rendered as 'a one-in-N day for a healthy unit of this type'. May duplicate an X5 entry."
+  inputs: [daily_r_digest, trade_rate, win_rate]
+  affects:
+    - {id: alert_tier, direction: either, how: "A healthy bad day is a digest line, not a ticket."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:4068", note: "A2-177"}
+  seed_ids: [A25]
+
+- id: effective_observations
+  name: Independent observations behind a shown performance number
+  level: unit
+  kind: evidence
+  measure: count
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Nominal count adjusted for overlap and serial correlation (for AR(1), N(1 - rho)/(1 + rho)), shown with every live performance number. May duplicate an X5 entry."
+  inputs: [trade_rate]
+  affects: []
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:686", note: "A5-30"}
+
+- id: demotion_cause
+  name: Why a unit was demoted or sized down (statistical failure, change warning, pre-authorised loss rule, cost, execution)
+  level: unit
+  kind: evidence
+  measure: "other: code"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "A closed code written with every demotion or size step, with its cause class. May duplicate an X5 entry."
+  inputs: [drift_state]
+  affects: []
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A2-brakes-drift-exits.yaml:3684", note: "A2-160"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-06, X6-25"}
+
+- id: cost_cell_key
+  name: Key of a cost cell (instrument, hour of week, broker, order type)
+  level: trade
+  kind: other
+  measure: "other: key"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: reasoned
+  derivation: "Rule: costs differ by instrument, hour, venue and order type (A3-9, A3-17); one cell per combination, with ordinary and stressed estimates kept apart."
+  inputs: []
+  affects:
+    - {id: cost_assumption_ratio, direction: either, how: "Ratios are kept per cell."}
+  configurable: false
+  changed_by: [none]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-9 venue cost ledger"}
+  seed_ids: [A11]
+
+- id: cost_assumption_ratio
+  name: Realised cost over assumed cost per cell (spread, commission, slippage, swap or funding)
+  level: unit
+  kind: measure
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Rolling realised cost in R divided by the cost the card or cost profile assumed, per cost_cell_key; slippage from node send and fill rows. Feeds the cost_drift_multiple threshold and the sizer's cost input."
+  inputs: [cost_cell_key, slippage_cost, spread_cost, commission_cost, swap_financing_cost, funding_cost]
+  affects:
+    - {id: cost_drift_multiple, direction: either, how: "The threshold compares this ratio."}
+    - {id: round_trip_cost_r, direction: up, how: "Measured costs replace assumed ones in the sizer."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A1-sizing-allocation.yaml:3473", note: "A1-146 one cost ledger"}
+    - {gen: grounding, ref: "grounding/G9-runtime-brakes-isolation-evidence.md:139-145", note: "slippage measurable from node rows"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-30"}
+  seed_ids: [A11]
+
+- id: slippage_p95_by_hour
+  name: 95th percentile slippage per instrument and hour, entries and exits apart
+  level: unit
+  kind: measure
+  measure: pips_points_ticks
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "From every node order row: fill minus (reference price plus or minus the sent distance), all samples kept, p50 and p95 per cell."
+  inputs: [slippage_cost, cost_cell_key]
+  affects:
+    - {id: cost_assumption_ratio, direction: up, how: "Wider tails raise realised cost."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:5498", note: "A4-167"}
+
+- id: slippage_asymmetry
+  name: Exit slippage against entry slippage per broker and symbol
+  level: unit
+  kind: measure
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Mean or p95 exit slippage divided by the same for entries, per cell. Stops fill on the executable side, often worse than entries."
+  inputs: [slippage_p95_by_hour]
+  affects: []
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A1-sizing-allocation.yaml:3427", note: "A1-144"}
+
+- id: fill_markout_bp
+  name: Mid-price move against a fill at 1 s, 5 s and 60 s after it
+  level: trade
+  kind: measure
+  measure: "other: basis points"
+  applies_to: {classes: [all], styles: [scalper, intraday], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Sign-adjusted (mid at t after fill minus fill) over fill, grouped by instrument, venue, session and news state. On FX and CFD broker quotes it is a venue proxy and labelled so (A3-78)."
+  inputs: []
+  affects:
+    - {id: cost_assumption_ratio, direction: up, how: "Toxic fills are a hidden cost."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-11 post-fill markout"}
+
+- id: twin_gap_r
+  name: Per-trade gap between a live unit and its paper twin on the same signals
+  level: unit
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Live trade R minus the twin's R on the same signal. Measures fill and cost drift; the twin keeps producing evidence while live is paused. Paper fills have zero slippage, so the gap includes all live slippage."
+  inputs: [slippage_cost]
+  affects:
+    - {id: trip_tax_r, direction: either, how: "The twin is the counterfactual for a trip."}
+    - {id: replay_match_floor, direction: either, how: "A growing gap is read beside replay match."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A4-template-agents-telemetry.yaml:1233", note: "A4-35 paper twin"}
+
+# ---------------------------------------------------------------- exposure
+
+- id: co_loss_fraction
+  name: Share of units losing in one window, and the loss given that share
+  level: account
+  kind: measure
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Units with a loss in the window divided by units trading in it, with the summed loss; compared with the expected rate from the cohort's history."
+  inputs: [loss_event_window, unit_result_correlation]
+  affects:
+    - {id: chorus_expected_frequency, direction: either, how: "Observed against expected is the chorus signal."}
+    - {id: market_isolation_trigger, direction: up, how: "A class losing together is isolation evidence."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A3-structure-regimes-scenarios.yaml", note: "A3-158 co-loss breadth"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-34"}
+  seed_ids: [C27]
+
+- id: unit_agreement_score
+  name: How many independent units sit on the same side of one instrument or factor, and which families dominate
+  level: account
+  kind: measure
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Weighted consensus of open unit directions per instrument and per bet key, with disagreement beside it (MASS); a sudden convergence opens a ticket. A diagnostic, never a sizing authority."
+  inputs: [unit_result_correlation, effective_independent_bets]
+  affects:
+    - {id: portfolio_exposure, direction: either, how: "Agreement shows crowding inside QMX."}
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:1454", note: "A5-64"}
+
+- id: stress_gauge_loss
+  name: Loss if the worst plausible move per class hit now, with gap allowance, against room above the floor
+  level: account
+  kind: measure
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Per open position, the class scenario move (SPAN-style thirds of a scan range) times exposure, plus gap allowance for held positions, summed with the stressed correlation; shown as a share of kill_line_distance."
+  inputs: [open_risk_at_stop, gap_loss_beyond_stop, kill_line_distance]
+  affects: []
+  configurable: false
+  changed_by: [automatic]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:2110", note: "A5-93 SPAN grid"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-35"}
+  seed_ids: [C10]
+
+# ---------------------------------------------------------------- journals and flow
+
+- id: black_box_window
+  name: Minutes of ticks, decisions and RiskState frozen when any brake trips
+  level: node
+  kind: schedule
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Proposed: long enough to cover the unit's own decision horizon before the trip and at least one incident_group_window; ticks for scalpers, bars for swing units. Written once into the incident ledger."
+  inputs: [incident_group_window]
+  affects:
+    - {id: brake_recall, direction: either, how: "Frozen records let a missed or late trip be replayed and scored."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:1206", note: "A5-53 keep raw records"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-36"}
+
+- id: journal_harvest_cadence
+  name: How often This PC harvests the open month of node journals
+  level: node
+  kind: schedule
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 60
+  basis: stated
+  derivation: "Shipped B15 harvester: on This PC the open month of journals every 60 s. No working given."
+  inputs: []
+  affects:
+    - {id: risk_fact_staleness_limit, direction: up, how: "Facts read on This PC are at least this old."}
+  configurable: true
+  changed_by: [operator]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qmx-agents/packages/qmx-host/src/qmx_host/records.py:1-26"}
+    - {gen: grounding, ref: "grounding/G11-ledger-exposure-exits-observability.md:214"}
+  aliases: [open_harvest_s]
+
+- id: records_home_cadence
+  name: How often server nodes' records are pulled home to This PC
+  level: node
+  kind: schedule
+  measure: "other: seconds"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 300
+  basis: stated
+  derivation: "Shipped B16: pulls server nodes' records to This PC every 300 s, so they can be up to one round late. No working given."
+  inputs: []
+  affects:
+    - {id: risk_fact_staleness_limit, direction: up, how: "Server facts on This PC are up to this old."}
+  configurable: true
+  changed_by: [operator]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qmx-agents/packages/qmx-host/src/qmx_host/records.py:28-33"}
+    - {gen: grounding, ref: "grounding/G11-ledger-exposure-exits-observability.md:215"}
+
+- id: chaos_drill_cadence
+  name: How often faults are injected on paper and demo to prove every alert fires
+  level: system
+  kind: schedule
+  measure: "other: days"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Proposed drills: stale feed, missing fill, duplicate order, stop dropped at the venue, node link cut; the report lists which alerts fired and how fast."
+  inputs: []
+  affects:
+    - {id: brake_recall, direction: either, how: "Drills supply known faults, so recall is measured, not assumed."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:1140", note: "A5-50 injected faults"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-40"}
+
+- id: get_even_window
+  name: Time after a loss within which any size raise, by him or an agent, is flagged
+  level: unit
+  kind: other
+  measure: minutes
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Prop traders with a get-even bias traded bigger after a morning loss and lost more (A5-85). Proposed: minutes for scalpers, the session for intraday, a day for swing."
+  inputs: []
+  affects:
+    - {id: alert_tier, direction: up, how: "A size raise inside the window becomes a flagged ticket, not a silent change."}
+    - {id: risk_fraction, direction: down, how: "Raises proposed right after a loss are held for his look."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: research, ref: "linking/components/A5-topup.yaml:1931", note: "A5-85"}
+    - {gen: expansion, ref: "expansion/X6-observability.md", note: "X6-42"}
