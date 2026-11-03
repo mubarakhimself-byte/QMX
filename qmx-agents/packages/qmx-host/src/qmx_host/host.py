@@ -195,6 +195,7 @@ from qmx_host.publish_collection import publish_collection_router
 from qmx_host.records import Cadence, Harvester, Projection, Pull, Records, append_roots
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
+from qmx_host.vault_acl import KeyRefused, VaultRefused, owner_only, read_key
 
 type Role = Literal["pc", "node", "server"]
 """`server` is the node role plus the Library service: on the server the one `qmx_host` process
@@ -217,7 +218,9 @@ MEMORY_ROLE: Final = "memory_extractor"
 SYNC_INTERVAL_S: Final = 30.0
 """How often the PC asks the Library server what moved since its last sequence (AD-10). The
 `[library] sync_interval` setting raises or lowers it."""
-PAIRING_KEY: Final = "vault/pairing-key"
+VAULT: Final = "vault"
+PAIRING_KEY: Final = "pairing-key"
+VAULT_FIXED: Final = "your keys folder was readable by other users, fixed"
 APP_SECRET: Final = re.compile(r"qmx/[a-zA-Z0-9_-]+")
 """The secret names a manifest may declare (`qmx_apps.manifest`), checked again before a path."""
 HOST_VAULT: Final = frozenset(service.removeprefix("qmx/") for service in HOST_SECRETS)
@@ -335,7 +338,7 @@ def serve_forever(
     except PortTaken as taken:
         print(f"QMX did not start: {taken}", file=sys.stderr)
         return PORT_TAKEN
-    except (*OPEN_REFUSALS, AppDidNotStart) as refused:
+    except (*OPEN_REFUSALS, AppDidNotStart, VaultRefused) as refused:
         if served.is_set():
             raise
         print(f"QMX did not start: {' '.join(str(refused).split())}", file=sys.stderr)
@@ -1003,25 +1006,21 @@ def own_door(role: Role, port: int) -> str:
 
 
 def vault_secrets(vault: Path) -> Callable[[str, str], str | None]:
-    """An app's declared secret `qmx/<name>`, read from `vault/<name>`. A missing file is None, so
-    the supervisor refuses the start with `missing_secret`. On POSIX a file whose mode grants its
-    group or others anything is refused. On Windows the mode bits hold no ACL, so the folder's NTFS
-    permissions are what keep it owner-only. No refusal carries the file's content."""
+    """An app's declared secret `qmx/<name>`, read from `vault/<name>` by `read_key`. A missing
+    file is None, so the supervisor refuses the start with `missing_secret`. A link, a hard link, a
+    file another user owns and, on POSIX, a file its group or others can read are refused; start
+    made the vault's Windows DACL owner-only (`vault_acl`). No refusal carries the file's
+    content."""
 
     def read(service: str, _username: str) -> str | None:
         name = service.removeprefix("qmx/")
         if not APP_SECRET.fullmatch(service) or name.casefold() in HOST_VAULT:
             raise AppError("vault_refused", f"{service!r} is not a secret an app may declare.")
-        path = vault / name
         try:
-            if os.name == "posix" and path.stat().st_mode & 0o077:
-                raise AppError(
-                    "vault_refused",
-                    f"The vault file for {service} is readable by others; chmod 600 it.",
-                )
-            return path.read_text(encoding="utf-8").strip()
-        except FileNotFoundError:
-            return None
+            found = read_key(vault / name)
+            return None if found is None else found.decode("utf-8").strip()
+        except KeyRefused as refused:
+            raise AppError("vault_refused", f"The vault file for {service} {refused}.") from None
         except (OSError, UnicodeDecodeError) as error:
             raise AppError(
                 "vault_refused",
@@ -1056,6 +1055,8 @@ async def serve(
     port the app answers on. `place` is the `--place` name setup gives a server's host. `served`
     is set once uvicorn has served, so a refusal after that is not named a start that failed."""
     port: int = sock.getsockname()[1]
+    # Before any key is written: the run pass key below, a pairing, a venue session's tokens.
+    vault = owner_only(home / VAULT)
     qmx_home = QmxHome(home)
     control = control_for(role, qmx_home)
     name = placement_name(control, role, place)
@@ -1089,6 +1090,8 @@ async def serve(
             market=door if isinstance(door, MarketDoor) else None,
         )
         harness.adopt_passes(passes)
+        if vault == "repaired":
+            harness.doctor_from(lambda: DoctorLine(VAULT, True, VAULT_FIXED))
         try:
             floor = floor_bytes(section(control, "engine"), free_bytes(home))
             with open_store(home, root, serving=serving, floor=floor) as store:
@@ -1546,20 +1549,26 @@ def placement_name(control: ControlService, role: Role, place: str = "") -> str:
 def hub_link(home: Path, control: ControlService) -> HubLink | None:
     """The Hub this home answers to, or None when no `[library] hub_url` names one."""
     url = section(control, "library").get("hub_url")
-    key_file = home / "vault" / "pairing-key"
-    if not isinstance(url, str) or not url or not key_file.exists():
+    if not isinstance(url, str) or not url:
         return None
-    return HubLink(url, key_file.read_text(encoding="utf-8").strip())
+    key = vault_key(home)
+    return None if key is None else HubLink(url, key)
+
+
+def vault_key(home: Path, name: str = PAIRING_KEY) -> str | None:
+    """One of the host's own vault files, read by `read_key`, or None when it is missing. A link,
+    a hard link or a file another user owns raises `VaultRefused`, which names the file and never
+    its content, so a start stops with that line."""
+    try:
+        found = read_key(home / VAULT / name)
+    except KeyRefused as refused:
+        raise VaultRefused(f"the vault file {name} {refused}") from None
+    return None if found is None else found.decode("utf-8").strip()
 
 
 def pairing_key(home: Path) -> Callable[[], str | None]:
     """The home's pairing key, read at each use, so a key paired after the start is used."""
-
-    def read() -> str | None:
-        found = home / PAIRING_KEY
-        return found.read_text(encoding="utf-8").strip() if found.exists() else None
-
-    return read
+    return lambda: vault_key(home)
 
 
 def node_link(home: Path, control: ControlService, name: str) -> NodeLink:
@@ -1590,10 +1599,9 @@ def node_link(home: Path, control: ControlService, name: str) -> NodeLink:
 
 def forwarders_for(home: Path, core: Engine, name: str, role: Role) -> list[Forwarder]:
     """The owned instances this home asks: every node on the PC, none on a node (AD-65)."""
-    key_file = home / "vault" / "pairing-key"
-    if role != "pc" or not key_file.exists():
+    key = vault_key(home) if role == "pc" else None
+    if key is None:
         return []
-    key = key_file.read_text(encoding="utf-8").strip()
     return [
         Forwarder(instance, key=key, source=name, principal="operator", now=wall)
         for instance in owned_instances(placement_rows(core.settings), home=name)
@@ -2050,10 +2058,9 @@ def answering_router(home: Path, engine: EngineDoor) -> list[APIRouter]:
     from qmx_host.venue_session import for_host  # noqa: PLC0415 - kept beside the mount (WU8)
 
     venue = for_host(home, engine)
-    key_file = home / "vault" / "pairing-key"
-    if not key_file.exists():
+    key = vault_key(home)
+    if key is None:
         return [venue]
-    key = key_file.read_text(encoding="utf-8").strip()
     return [forward_router(engine.svc.remote(), key), venue]
 
 
@@ -2412,12 +2419,11 @@ def library_service(
     one carrying `bearer` (`PrincipalDoor`)."""
     if not serving:
         return "", ()
-    key_file = home / PAIRING_KEY
-    if not key_file.exists():
+    key = vault_key(home)
+    if key is None:
         print("library: no pairing key, so the Library routes are not mounted", file=sys.stderr)
         return "", ()
-    hub = HomeHub(store, home=home)
-    return key_file.read_text(encoding="utf-8").strip(), [in_process(hub, bearer)]
+    return key, [in_process(HomeHub(store, home=home), bearer)]
 
 
 class HubTarget:
