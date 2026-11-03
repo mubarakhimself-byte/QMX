@@ -1,0 +1,1296 @@
+"""The cTrader venue binding: :class:`LiveCTraderClient` behind the node runtime's venue port.
+
+Part C AD-306 and AD-308, Level 0 AD-37. :class:`CTraderVenue` is one bound cTrader account. It
+answers both seams the runtime drives: the feed keeper's :class:`~qmn.app.feed_keeper.FeedSource`
+(the session, its spots and the bars it builds from them) and the order path's
+:class:`~qmn.app.runtime.VenueAccount` (orders, stops, closes, the balance and the read-back).
+
+- Every order is encoded by :meth:`LiveCTraderClient.encode_command` onto the pinned Spotware
+  definitions (release 91) and goes out as one ``ProtoMessage``. Every fill comes back through
+  :meth:`LiveCTraderClient.receive`, which records the frame before it is read and crosses the
+  execution-price double at the symbol's digits under :data:`FILL_ROUNDING`.
+- An entry is a market order with its stop as ``relativeStopLoss``, the ``entry-relative`` form
+  the session verifies. The node's lots become cTrader volume through the symbol's ``lotSize``;
+  a size that is not a whole step of the symbol is refused before anything is sent.
+- The session's capabilities are verified on every open, from what the session itself answered
+  (the account's money digits and position model, the symbol's pip position), and the verified
+  protective-stop forms are the forms the order path gates on.
+- A trading answer that does not arrive within :data:`ANSWER_WAIT_S` reads UNKNOWN. Nothing here
+  sends an order again: the reconciler reads the account and settles it (C-12b).
+- The binding is demo only. :meth:`CTraderVenue.open` refuses a live host and a live account; a
+  live binding is the deliberate path of C-21.
+
+The wire is a :class:`Wire`: :class:`FramedWire` is the TLS socket to the Open API, and a test
+answers as a fake cTrader on the same definitions. No credential is printed or kept here beyond
+the call that sends it.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import ssl
+import threading
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from decimal import ROUND_HALF_EVEN, Decimal
+from pathlib import Path
+from typing import Final, Protocol, cast
+
+from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.message import Message
+from qmb.host.unit_handler import FillKind
+from qmf.core import (
+    Account,
+    AccountRole,
+    Duration,
+    Instant,
+    Instrument,
+    MonotonicReading,
+    Ok,
+    PriceDelta,
+    Quantity,
+    RefusalCategory,
+    Result,
+    Retryability,
+    RoundingMode,
+    TypedRefusal,
+    VenueId,
+    World,
+    is_refusal,
+)
+from qmf.venue.capabilities import ErrorMap
+from qmf.venue.commands import (
+    CloseScope,
+    Command,
+    CommandKind,
+    OrderParameters,
+    OrderType,
+    SubmissionOutcome,
+    TimeInForce,
+)
+from qmf.venue.connection import decode_framed_payload, encode_framed_payload
+from qmf.venue.encode import OrderTags
+from qmf.venue.observation import MeasuredFact, ProbeCheck, ProbeVerdict
+from qmf.venue.proto import SPOTWARE_PROTO_PACKAGE, CompiledProto, compile_descriptor_set
+from qmf.venue.ctrader import decode_execution_price
+from qml.protocol.unit import OHLC, QuoteBar
+from qml.unit.model import Side
+
+from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
+from qmn.app.feed_keeper import Bar, Dropped, FeedEvent, Heartbeat, Quote
+from qmn.app.runtime import Sent, Ticket, VenueClose
+from qmn.venue.conformance import protective_stop_forms_from_verification, submit_not_ready_refusal
+from qmn.venue.live import LiveCTraderClient, WireKind
+from qmn.venue.verify import MeasuredFactBundle, VenueFactVerifier, ctrader_static_declaration
+
+__all__ = [
+    "ANSWER_WAIT_S",
+    "BAR_NS",
+    "DEMO_HOST",
+    "FILL_ROUNDING",
+    "HEARTBEAT_NS",
+    "PROTO_TAG",
+    "Codec",
+    "CTraderVenue",
+    "FramedWire",
+    "Frame",
+    "Listing",
+    "OpenApi",
+    "SymbolFacts",
+    "TestTrade",
+    "Wire",
+    "account_listing",
+]
+
+PROTO_TAG: Final = 91
+"""The pinned Spotware release (``registry:venue_protocol_artifact``)."""
+DEMO_HOST: Final = "demo.ctraderapi.com"
+OPEN_API_PORT: Final = 5035
+ANSWER_WAIT_S: Final = 5.0
+"""`[node] ctrader_answer_s`, starting at 5 s: how long the node waits for the venue's answer to
+one request before the order reads UNKNOWN."""
+HEARTBEAT_NS: Final = 10_000_000_000
+"""cTrader asks a client for a heartbeat every 10 s."""
+BAR_NS: Final = 900_000_000_000
+"""`[node] ctrader_bar_s`, starting at 900 (the dummy's 15-minute bars): the bars the node builds
+from cTrader's spots, both quote sides. A labelled starting value until a deployment names its
+own timeframe to the feed."""
+FILL_ROUNDING: Final = RoundingMode.HALF_EVEN
+"""The rounding a venue execution-price double crosses at the symbol's digits."""
+SPOT_SCALE: Final = 5
+"""cTrader's spot prices are integers in 1/100000 of the price."""
+RENEW_CHECK_NS: Final = 3_600_000_000_000
+"""How often a bound session asks whether its grant is due for a refresh: hourly."""
+LOOKBACK_NS: Final = 86_400_000_000_000
+"""`[node] ctrader_reconcile_lookback_s`: the declared reconcile lookback the client binds."""
+_ERRORS: Final = frozenset({"ProtoOAErrorRes", "ProtoErrorRes"})
+_TRADES: Final = frozenset({"ProtoOAExecutionEvent", "ProtoOAOrderErrorEvent"})
+
+
+def _refused(code: str, reason: str, *, retry: bool = True) -> TypedRefusal:
+    return TypedRefusal(
+        category=RefusalCategory.UNAVAILABLE_DEPENDENCY if retry else RefusalCategory.POLICY_REJECTION,
+        retryability=Retryability.AFTER_CONDITION if retry else Retryability.NO,
+        context={"code": code, "reason": reason},
+        after_condition_descriptor="the cTrader session answers again" if retry else None,
+    )
+
+
+def _int(value: object) -> int | None:
+    """An integer from a decoded message: int64 fields arrive as text."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.lstrip("-").isdigit():
+        return int(value)
+    return None
+
+
+def _map(value: object) -> Mapping[str, object]:
+    return cast("Mapping[str, object]", value) if isinstance(value, dict) else {}
+
+
+def _rows(value: object) -> list[Mapping[str, object]]:
+    return [_map(item) for item in cast("list[object]", value)] if isinstance(value, list) else []
+
+
+# --- the wire and the pinned definitions -----------------------------------------------------
+
+
+class Wire(Protocol):
+    """One Open API connection: whole ``ProtoMessage`` envelopes each way."""
+
+    def send(self, envelope: bytes, /) -> Result[None]: ...
+
+    def receive(self, wait_s: float, /) -> Result[bytes | None]:
+        """The next envelope, or None when none arrived within ``wait_s``."""
+        ...
+
+    def close(self) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class Frame:
+    """One decoded message: its name, the request it answers, and its fields."""
+
+    name: str
+    msg_id: str
+    body: Mapping[str, object]
+
+
+class Codec:
+    """The pinned Spotware definitions: encode a request by name, decode any answer."""
+
+    def __init__(self, proto: CompiledProto) -> None:
+        self.proto = proto
+        self._names: dict[int, str] = {}
+        for name in proto.message_names():
+            if name == "ProtoMessage":
+                continue
+            made = proto.message_class(name)
+            if is_refusal(made):
+                continue
+            payload_type = getattr(made.value(), "payloadType", None)
+            if isinstance(payload_type, int) and payload_type:
+                self._names.setdefault(payload_type, name)
+
+    @classmethod
+    def load(cls, path: Path) -> Result[Codec]:
+        try:
+            raw = path.read_bytes()
+        except OSError as error:
+            return _refused("definitions_missing", f"{path.name}: {type(error).__name__}", retry=False)
+        compiled = compile_descriptor_set(
+            raw, package_name=SPOTWARE_PROTO_PACKAGE, release_tag=PROTO_TAG
+        )
+        if is_refusal(compiled):
+            return compiled
+        return Ok(cls(compiled.value))
+
+    def _make(self, name: str) -> Result[Message]:
+        made = self.proto.message_class(name)
+        if is_refusal(made):
+            return made
+        return Ok(made.value())
+
+    def encode(self, name: str, values: Mapping[str, object], msg_id: str) -> Result[bytes]:
+        inner = self._make(name)
+        envelope = self._make("ProtoMessage")
+        if is_refusal(inner):
+            return inner
+        if is_refusal(envelope):
+            return envelope
+        message = ParseDict(dict(values), inner.value)
+        outer = envelope.value
+        outer.payloadType = message.payloadType  # pyright: ignore[reportAttributeAccessIssue]
+        outer.payload = message.SerializeToString()  # pyright: ignore[reportAttributeAccessIssue]
+        outer.clientMsgId = msg_id  # pyright: ignore[reportAttributeAccessIssue]
+        return Ok(outer.SerializeToString())
+
+    def decode(self, envelope: bytes) -> Result[Frame]:
+        outer = self._make("ProtoMessage")
+        if is_refusal(outer):
+            return outer
+        try:
+            outer.value.ParseFromString(envelope)
+        except Exception:  # the venue's bytes are the boundary
+            return _refused("unreadable_frame", "a frame is not a ProtoMessage", retry=False)
+        found = cast("dict[str, object]", MessageToDict(outer.value))
+        payload_type = _int(found.get("payloadType")) or 0
+        msg_id = str(found.get("clientMsgId") or "")
+        name = self._names.get(payload_type)
+        if name is None:
+            return Ok(Frame(f"unknown:{payload_type}", msg_id, {}))
+        inner = self._make(name)
+        if is_refusal(inner):
+            return inner
+        try:
+            inner.value.ParseFromString(getattr(outer.value, "payload", b""))
+        except Exception:  # the venue's bytes are the boundary
+            return _refused("unreadable_frame", f"{name} did not decode", retry=False)
+        body = cast(
+            "dict[str, object]", MessageToDict(inner.value, preserving_proto_field_name=True)
+        )
+        return Ok(Frame(name, msg_id, body))
+
+
+class FramedWire:
+    """The TLS socket to cTrader's Open API on its own event loop, driven by the one thread that
+    owns the binding. A wait that ends early never cuts a frame: a read consumes a frame only once
+    it has arrived whole."""
+
+    def __init__(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        self._loop = loop
+        self._reader = reader
+        self._writer = writer
+
+    @classmethod
+    def open(
+        cls, host: str, *, port: int = OPEN_API_PORT, tls: bool = True, timeout_s: float = 10.0
+    ) -> Result[Wire]:
+        """``tls`` is off only for a fake cTrader on this machine (``server.endpoints``)."""
+        loop = asyncio.new_event_loop()
+        context = ssl.create_default_context() if tls else None
+        try:
+            reader, writer = loop.run_until_complete(
+                asyncio.wait_for(asyncio.open_connection(host, port, ssl=context), timeout_s)
+            )
+        except (OSError, TimeoutError) as error:
+            loop.close()
+            return _refused("venue_unreachable", f"{host}:{port} {type(error).__name__}")
+        return Ok(cls(loop, reader, writer))
+
+    def send(self, envelope: bytes, /) -> Result[None]:
+        framed = encode_framed_payload(envelope)
+        if is_refusal(framed):
+            return framed
+        try:
+            self._writer.write(framed.value)
+            self._loop.run_until_complete(self._writer.drain())
+        except OSError as error:
+            return _refused("venue_write_failed", type(error).__name__)
+        return Ok(None)
+
+    def receive(self, wait_s: float, /) -> Result[bytes | None]:
+        try:
+            return self._loop.run_until_complete(self._read(wait_s))
+        except (OSError, asyncio.IncompleteReadError) as error:
+            return _refused("venue_read_failed", type(error).__name__)
+
+    async def _read(self, wait_s: float) -> Result[bytes | None]:
+        try:
+            header = await asyncio.wait_for(self._reader.readexactly(4), max(wait_s, 0.001))
+        except TimeoutError:
+            return Ok(None)
+        body = await asyncio.wait_for(
+            self._reader.readexactly(int.from_bytes(header, "big")), ANSWER_WAIT_S
+        )
+        decoded = decode_framed_payload(header + body)
+        if is_refusal(decoded):
+            return decoded
+        return Ok(decoded.value)
+
+    def close(self) -> None:
+        try:
+            self._writer.close()
+            self._loop.run_until_complete(self._writer.wait_closed())
+        except OSError:
+            pass
+        finally:
+            self._loop.close()
+
+
+@dataclass
+class OpenApi:
+    """One conversation over a wire: requests answered by their ``clientMsgId``, and every
+    other message kept for the binding to read."""
+
+    codec: Codec
+    wire: Wire
+    steady_ns: Callable[[], int]
+    wait_s: float = ANSWER_WAIT_S
+    pending: list[Frame] = field(default_factory=list[Frame])
+    _sequence: int = 0
+
+    def next_id(self) -> str:
+        self._sequence += 1
+        return f"qmx-{self._sequence}"
+
+    def ask(self, name: str, values: Mapping[str, object]) -> Result[Frame]:
+        """Send ``name`` and wait for its answer; an error answer is a refusal by its code."""
+        msg_id = self.next_id()
+        encoded = self.codec.encode(name, values, msg_id)
+        if is_refusal(encoded):
+            return encoded
+        sent = self.wire.send(encoded.value)
+        if is_refusal(sent):
+            return sent
+        answer = name.removesuffix("Req") + "Res"
+        found = self.wait(lambda frame: frame.msg_id == msg_id and frame.name in {answer, *_ERRORS})
+        if is_refusal(found):
+            return found
+        if found.value is None:
+            return _refused("venue_silent", f"no {answer} within {self.wait_s:g} s")
+        if found.value.name in _ERRORS:
+            return _refused(_error_word(found.value.body), f"{name} refused", retry=False)
+        return Ok(found.value)
+
+    def push(self, envelope: bytes) -> Result[None]:
+        return self.wire.send(envelope)
+
+    def wait(self, match: Callable[[Frame], bool]) -> Result[Frame | None]:
+        """Read until a frame matches, keeping every other one; None past ``wait_s``."""
+        for index, frame in enumerate(self.pending):
+            if match(frame):
+                return Ok(self.pending.pop(index))
+        deadline = self.steady_ns() + int(self.wait_s * 1e9)
+        while True:
+            left = (deadline - self.steady_ns()) / 1e9
+            if left <= 0:
+                return Ok(None)
+            got = self._next(left)
+            if is_refusal(got):
+                return got
+            if got.value is None:
+                return Ok(None)
+            if match(got.value):
+                return Ok(got.value)
+            self.pending.append(got.value)
+
+    def drain(self) -> Result[list[Frame]]:
+        """Every message that has arrived, without waiting."""
+        while True:
+            got = self._next(0.0)
+            if is_refusal(got):
+                return got
+            if got.value is None:
+                break
+            self.pending.append(got.value)
+        taken, self.pending = self.pending, []
+        return Ok(taken)
+
+    def _next(self, wait_s: float) -> Result[Frame | None]:
+        raw = self.wire.receive(wait_s)
+        if is_refusal(raw):
+            return raw
+        if raw.value is None:
+            return Ok(None)
+        return self.codec.decode(raw.value)
+
+
+def _error_word(body: Mapping[str, object]) -> str:
+    """cTrader's own error word; its description is never kept, since it may echo a value."""
+    word = str(body.get("errorCode") or "venue_refused")
+    return word if word.replace("_", "").isalnum() and len(word) <= 40 else "venue_refused"
+
+
+# --- what a grant can reach -------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Listing:
+    """The accounts an access token reaches and the scope it was granted."""
+
+    scope: str
+    accounts: tuple[tuple[int, bool, int | None, str], ...]
+    """``(ctidTraderAccountId, isLive, traderLogin, brokerTitleShort)`` each."""
+
+
+def account_listing(
+    api: OpenApi, client_id: str, client_secret: str, access_token: str
+) -> Result[Listing]:
+    """Authorise the node's app on the session, then list what the access token reaches."""
+    authorised = api.ask(
+        "ProtoOAApplicationAuthReq", {"clientId": client_id, "clientSecret": client_secret}
+    )
+    if is_refusal(authorised):
+        return authorised
+    listed = api.ask("ProtoOAGetAccountListByAccessTokenReq", {"accessToken": access_token})
+    if is_refusal(listed):
+        return listed
+    body = listed.value.body
+    accounts: list[tuple[int, bool, int | None, str]] = []
+    for row in _rows(body.get("ctidTraderAccount")):
+        ctid = _int(row.get("ctidTraderAccountId"))
+        if ctid is not None:
+            accounts.append(
+                (
+                    ctid,
+                    row.get("isLive") is True,
+                    _int(row.get("traderLogin")),
+                    str(row.get("brokerTitleShort") or ""),
+                )
+            )
+    return Ok(Listing(str(body.get("permissionScope") or "SCOPE_TRADE"), tuple(accounts)))
+
+
+# --- one bound account ------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class SymbolFacts:
+    """One market's cTrader symbol as the session answered it."""
+
+    market_id: str
+    name: str
+    symbol_id: int
+    digits: int
+    pip_position: int
+    lot_size: int
+    """Cents of the base unit in one lot."""
+    step_volume: int
+    min_volume: int
+    instrument: Instrument
+
+
+@dataclass(frozen=True, slots=True)
+class TestTrade:
+    """What the self-test's demo trade proved."""
+
+    ok: bool
+    detail: str
+    stop: Decimal | None = None
+    entry: Decimal | None = None
+    exit: Decimal | None = None
+    close_ms: int | None = None
+
+
+@dataclass
+class _Open:
+    position_id: int
+    market_id: str
+    side: Side
+    volume: int
+    lots: Decimal
+    entry: Decimal
+    stop: Decimal | None
+    label: str | None
+    closing: bool = False
+
+
+@dataclass
+class _Building:
+    start_ns: int
+    bid: list[Decimal]
+    ask: list[Decimal]
+
+
+class _NodeClock:
+    def __init__(self, clock_ns: Callable[[], int], steady_ns: Callable[[], int], epoch: str) -> None:
+        self._clock_ns, self._steady_ns, self._epoch = clock_ns, steady_ns, epoch
+
+    def wall_now(self) -> Result[Instant]:
+        return Instant.try_create(self._clock_ns())
+
+    def monotonic_now(self) -> Result[MonotonicReading]:
+        return MonotonicReading.try_create(self._steady_ns(), self._epoch)
+
+
+class CTraderVenue:
+    """One bound cTrader demo account: the feed keeper's source and the order path's account.
+
+    Every method holds one lock, so the runtime thread and a self-test never share the socket.
+    """
+
+    def __init__(
+        self,
+        *,
+        account: Account,
+        ctid: int,
+        host: str,
+        markets: Mapping[str, str],
+        codec: Codec,
+        open_wire: Callable[[str], Result[Wire]],
+        credentials: Callable[[], tuple[str, str, str] | None],
+        clock_ns: Callable[[], int],
+        steady_ns: Callable[[], int],
+        session_epoch: str,
+        bar_ns: int = BAR_NS,
+    ) -> None:
+        self.venue_account = account
+        self.ctid = ctid
+        self.host = host
+        self.markets = dict(markets)
+        """Each market id the feed keeper asks for, with its cTrader symbol name."""
+        self.codec = codec
+        self.open_wire = open_wire
+        self.credentials = credentials
+        """The app id, app secret and access token, read fresh at every session open."""
+        self.clock_ns = clock_ns
+        self.steady_ns = steady_ns
+        self.session_epoch = session_epoch
+        self.bar_ns = bar_ns
+        self.api: OpenApi | None = None
+        self.symbols: dict[str, SymbolFacts] = {}
+        self.balance: Decimal = Decimal(0)
+        self.money_digits = 2
+        self.position_model = "hedging"
+        self.ready = False
+        self.reason = "not opened yet"
+        self.client: LiveCTraderClient | None = None
+        self._forms: Mapping[str, str] = {}
+        self._lock = threading.RLock()
+        self._open: dict[str, _Open] = {}
+        self._closed: dict[str, VenueClose] = {}
+        self._orders: list[VenueOrder] = []
+        self._events: list[FeedEvent] = []
+        self._building: dict[str, _Building] = {}
+        self._last_heartbeat = 0
+        self._renew_at = 0
+        self.renew: Callable[[], str | None] = lambda: None
+        """A new access token when the grant was refreshed since the last ask, else None."""
+        self.jobs: list[Callable[[], None]] = []
+        """Work that must run on the thread that drives the session, such as a self-test."""
+
+    @classmethod
+    def refusal(cls, *, host: str, is_live: bool, role: AccountRole) -> TypedRefusal | None:
+        """Why this binding may not open: a live host or a live account is C-21's path."""
+        if host != DEMO_HOST:
+            return _refused("live_host", f"the node binds cTrader's demo host only, not {host}", retry=False)
+        if is_live or role is not AccountRole.DEMO:
+            return _refused(
+                "live_account",
+                "the practice node binds demo accounts only; a live binding is the deliberate"
+                " live path",
+                retry=False,
+            )
+        return None
+
+    # --- the venue account the order path sends to --------------------------------------
+
+    @property
+    def account(self) -> Account:
+        return self.venue_account
+
+    @property
+    def stop_forms(self) -> Mapping[str, str]:
+        return self._forms
+
+    def send(self, ticket: Ticket, /) -> Result[Sent]:
+        with self._lock:
+            if not self.ready or self.api is None or self.client is None:
+                return submit_not_ready_refusal()
+            kind = ticket.command.kind
+            if kind is CommandKind.PLACE_ORDER:
+                return self._enter(ticket, self.api, self.client)
+            held = None if ticket.position is None else self._open.get(ticket.position)
+            if ticket.position is None or held is None:
+                return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, "no-such-position"))
+            if kind is CommandKind.CLOSE_POSITION:
+                return self._close(ticket, ticket.position, held, self.api, self.client)
+            if kind is CommandKind.AMEND_PROTECTION:
+                return self._amend(ticket, held, self.api, self.client)
+            return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, "unsupported-command"))
+
+    def stop_of(self, position: str, /) -> Decimal | None:
+        with self._lock:
+            self._pump()
+            held = self._open.get(position)
+            return None if held is None else held.stop
+
+    def closed(self, position: str, /) -> VenueClose | None:
+        with self._lock:
+            self._pump()
+            return self._closed.get(position)
+
+    def equity(self) -> Decimal:
+        return self.balance
+
+    def read_back(self) -> Result[ReadBack]:
+        """The account's open positions and orders as cTrader reconciles them, named by the
+        entries this binding saw fill."""
+        with self._lock:
+            if self.api is None:
+                return submit_not_ready_refusal()
+            answered = self.api.ask(
+                "ProtoOAReconcileReq", {"ctidTraderAccountId": self.ctid}
+            )
+            if is_refusal(answered):
+                return answered
+            by_id = {held.position_id: name for name, held in self._open.items()}
+            names = {symbol.symbol_id: market for market, symbol in self.symbols.items()}
+            positions: list[VenuePosition] = []
+            for row in _rows(answered.value.body.get("position")):
+                position_id = _int(row.get("positionId")) or 0
+                trade = _map(row.get("tradeData"))
+                market = names.get(_int(trade.get("symbolId")) or 0, "")
+                name = by_id.get(position_id, str(position_id))
+                held = self._open.get(name)
+                positions.append(
+                    VenuePosition(
+                        name,
+                        str(trade.get("label") or "") or None,
+                        market,
+                        "long" if trade.get("tradeSide") == "BUY" else "short",
+                        held.lots if held is not None else Decimal(_int(trade.get("volume")) or 0),
+                        held.entry if held is not None else Decimal(0),
+                        None if held is None else held.stop,
+                    )
+                )
+            return Ok(ReadBack(tuple(self._orders), tuple(positions)))
+
+    # --- the feed source the feed keeper drives -----------------------------------------
+
+    def connect(self) -> Result[None]:
+        with self._lock:
+            self._shut()
+            given = self.credentials()
+            if given is None:
+                self.reason = "the node holds no cTrader grant"
+                return _refused("no_grant", self.reason)
+            client_id, client_secret, access = given
+            wire = self.open_wire(self.host)
+            if is_refusal(wire):
+                self.reason = "the cTrader session did not open"
+                return wire
+            api = OpenApi(self.codec, wire.value, self.steady_ns)
+            self.api = api
+            opened = self._authorise(api, client_id, client_secret, access)
+            if is_refusal(opened):
+                self._shut()
+                return opened
+            return Ok(None)
+
+    def _authorise(self, api: OpenApi, client_id: str, client_secret: str, access: str) -> Result[None]:
+        app = api.ask(
+            "ProtoOAApplicationAuthReq", {"clientId": client_id, "clientSecret": client_secret}
+        )
+        if is_refusal(app):
+            return app
+        auth = api.ask(
+            "ProtoOAAccountAuthReq", {"ctidTraderAccountId": self.ctid, "accessToken": access}
+        )
+        if is_refusal(auth):
+            return auth
+        trader = api.ask("ProtoOATraderReq", {"ctidTraderAccountId": self.ctid})
+        if is_refusal(trader):
+            return trader
+        found = _map(trader.value.body.get("trader"))
+        digits = _int(found.get("moneyDigits")) or 2
+        self.money_digits = digits
+        self.balance = Decimal(_int(found.get("balance")) or 0).scaleb(-digits)
+        self.position_model = "netting" if found.get("accountType") == "NETTED" else "hedging"
+        listed = api.ask("ProtoOASymbolsListReq", {"ctidTraderAccountId": self.ctid})
+        if is_refusal(listed):
+            return listed
+        by_name = {
+            str(row.get("symbolName")): _int(row.get("symbolId"))
+            for row in _rows(listed.value.body.get("symbol"))
+        }
+        wanted = {market: by_name.get(name) for market, name in self.markets.items()}
+        missing = sorted(self.markets[market] for market, ident in wanted.items() if ident is None)
+        if missing:
+            return _refused("unknown_symbol", f"the account lists no {', '.join(missing)}", retry=False)
+        ids = [cast("int", ident) for ident in wanted.values()]
+        detail = api.ask("ProtoOASymbolByIdReq", {"ctidTraderAccountId": self.ctid, "symbolId": ids})
+        if is_refusal(detail):
+            return detail
+        rows = {_int(row.get("symbolId")): row for row in _rows(detail.value.body.get("symbol"))}
+        self.symbols = {}
+        for market, ident in wanted.items():
+            row = rows.get(ident)
+            if row is None:
+                return _refused("unknown_symbol", f"no facts for {self.markets[market]}", retry=False)
+            self.symbols[market] = SymbolFacts(
+                market,
+                self.markets[market],
+                cast("int", ident),
+                _int(row.get("digits")) or 5,
+                _int(row.get("pipPosition")) or 4,
+                _int(row.get("lotSize")) or 10_000_000,
+                _int(row.get("stepVolume")) or 100_000,
+                _int(row.get("minVolume")) or 100_000,
+                Instrument(self.venue_account.venue, self.markets[market]),
+            )
+        return Ok(None)
+
+    def subscribe(self, markets: Sequence[str], /) -> Result[None]:
+        with self._lock:
+            if self.api is None:
+                return submit_not_ready_refusal()
+            ids = [self.symbols[market].symbol_id for market in markets if market in self.symbols]
+            answered = self.api.ask(
+                "ProtoOASubscribeSpotsReq",
+                {"ctidTraderAccountId": self.ctid, "symbolId": ids, "subscribeToSpotTimestamp": True},
+            )
+            return answered if is_refusal(answered) else Ok(None)
+
+    def verify(self) -> Result[None]:
+        """Verify the session's capabilities from what it answered, then bind them into the
+        live client: its stop forms are the forms the order path gates on."""
+        with self._lock:
+            if self.api is None:
+                return submit_not_ready_refusal()
+            verified = self._verify()
+            if is_refusal(verified):
+                self.ready = False
+                self.reason = f"capabilities not verified ({verified.category.value})"
+                return verified
+            self.ready = True
+            self.reason = "ready"
+            return Ok(None)
+
+    def _verify(self) -> Result[None]:
+        lookback = Duration.try_create(LOOKBACK_NS)
+        if is_refusal(lookback):
+            return lookback
+        made = LiveCTraderClient.try_create(
+            World.LIVE,
+            self.venue_account.venue,
+            clock=_NodeClock(self.clock_ns, self.steady_ns, self.session_epoch),
+            error_map=_error_map(),
+            session_epoch=self.session_epoch,
+            declared_lookback=lookback.value,
+        )
+        if is_refusal(made):
+            return made
+        client = made.value
+        opened = client.open_session(self.venue_account)
+        if is_refusal(opened):
+            return opened
+        declaration = ctrader_static_declaration(proto_release_tag=PROTO_TAG)
+        if is_refusal(declaration):
+            return declaration
+        verifier = VenueFactVerifier.try_create(
+            declaration.value, self.venue_account.venue, self.venue_account
+        )
+        if is_refusal(verifier):
+            return verifier
+        at = Instant.try_create(self.clock_ns())
+        if is_refusal(at):
+            return at
+        bundle = self._measured(at.value)
+        if is_refusal(bundle):
+            return bundle
+        outcome = verifier.value.verify(bundle.value, received_at=at.value)
+        if is_refusal(outcome):
+            return outcome
+        accepted = client.accept_verification(outcome.value)
+        if is_refusal(accepted):
+            return accepted
+        ready = client.verify_capabilities()
+        if is_refusal(ready):
+            return ready
+        self.client = client
+        self._forms = {
+            str(kind): str(form)
+            for kind, form in protective_stop_forms_from_verification(outcome.value).items()
+        }
+        return Ok(None)
+
+    def _measured(self, at: Instant) -> Result[MeasuredFactBundle]:
+        symbol = next(iter(self.symbols.values()), None)
+        pip = symbol.pip_position if symbol is not None else 4
+        money = self.money_digits
+        payloads: dict[ProbeCheck, dict[str, object]] = {
+            ProbeCheck.SPOT_TIMESTAMP_UNIT: {"unit": "milliseconds"},
+            ProbeCheck.DAILY_BOUNDARY: {"utc_minute_of_day": 1320},
+            ProbeCheck.BAR_BASIS: {"quote_type": "bid"},
+            ProbeCheck.PIP_FORMULA: {"pip_position": pip, "pip_size_num": 1, "pip_size_den": 10**pip},
+            ProbeCheck.MONEY_EXPONENT: {"money_digits": money},
+            ProbeCheck.AMEND_ATOMICITY: {"atomicity": "non-atomic"},
+            ProbeCheck.POSITION_MODEL: {"position_model": self.position_model},
+            ProbeCheck.PACING_SCOPE: {"throttle_scope": "connection"},
+            ProbeCheck.PROTECTIVE_STOP_FORMS: {
+                "forms_per_order_type": {"market": "entry-relative", "limit": "absolute"}
+            },
+        }
+        facts: dict[ProbeCheck, MeasuredFact] = {}
+        for check, measured in payloads.items():
+            built = MeasuredFact.try_create(
+                check,
+                ProbeVerdict.VERIFIED,
+                at,
+                self.session_epoch,
+                f"grant-{self.ctid}",
+                measured=measured,
+                detail=f"read on the cTrader session for {check.value}",
+            )
+            if is_refusal(built):
+                return built
+            facts[check] = built.value
+        return MeasuredFactBundle.try_create(facts)
+
+    def read(self) -> Sequence[FeedEvent]:
+        with self._lock:
+            if self.api is None:
+                return ()
+            now = self.clock_ns()
+            if now - self._last_heartbeat >= HEARTBEAT_NS:
+                self._last_heartbeat = now
+                beat = self.codec.encode("ProtoHeartbeatEvent", {}, "")
+                if not is_refusal(beat):
+                    self.api.push(beat.value)
+            if not self._pump():
+                return (Dropped(self.reason),)
+            if now >= self._renew_at:
+                self._renew_at = now + RENEW_CHECK_NS
+                self._renewed()
+            while self.jobs:
+                self.jobs.pop(0)()
+            taken, self._events = self._events, []
+            return tuple(taken)
+
+    def _renewed(self) -> None:
+        """A grant refreshed during the session authorises the account again with the new
+        access token, before the old one dies at cTrader."""
+        access = self.renew()
+        if access is None or self.api is None:
+            return
+        again = self.api.ask(
+            "ProtoOAAccountAuthReq", {"ctidTraderAccountId": self.ctid, "accessToken": access}
+        )
+        if is_refusal(again):
+            self.reason = f"the refreshed grant was refused ({again.context.get('code')})"
+            self._events.append(Dropped(self.reason))
+
+    def close(self) -> None:
+        with self._lock:
+            self._shut()
+
+    def _shut(self) -> None:
+        if self.api is not None:
+            self.api.wire.close()
+        self.api = None
+        self.ready = False
+
+    # --- what the session tells the binding ----------------------------------------------
+
+    def _pump(self) -> bool:
+        """Read everything that arrived; False when the session is gone."""
+        if self.api is None:
+            return False
+        frames = self.api.drain()
+        if is_refusal(frames):
+            self.reason = f"the cTrader session dropped ({frames.context.get('code')})"
+            self._shut()
+            return False
+        for frame in frames.value:
+            self._absorb(frame)
+        return self.api is not None
+
+    def _absorb(self, frame: Frame) -> None:
+        match frame.name:
+            case "ProtoOASpotEvent":
+                self._spot(frame.body)
+            case "ProtoHeartbeatEvent":
+                self._events.append(Heartbeat())
+            case "ProtoOAExecutionEvent":
+                self._execution(frame.body)
+            case "ProtoOAClientDisconnectEvent" | "ProtoOAAccountsTokenInvalidatedEvent":
+                self.reason = f"cTrader ended the session ({frame.name.removeprefix('ProtoOA')})"
+                self._events.append(Dropped(self.reason))
+            case _:
+                pass
+
+    def _spot(self, body: Mapping[str, object]) -> None:
+        ident = _int(body.get("symbolId"))
+        market = next((m for m, s in self.symbols.items() if s.symbol_id == ident), None)
+        if market is None:
+            return
+        digits = self.symbols[market].digits
+        bid, ask = (self._price(body.get(side), digits) for side in ("bid", "ask"))
+        stamp = _int(body.get("timestamp"))
+        at = stamp * 1_000_000 if stamp is not None else self.clock_ns()
+        side = "both" if bid is not None and ask is not None else ("bid" if bid is not None else "ask")
+        self._events.append(Quote(market, at, bid, ask, side))
+        self._bar(market, at, bid, ask)
+
+    @staticmethod
+    def _price(raw: object, digits: int) -> Decimal | None:
+        value = _int(raw)
+        if value is None or value <= 0:
+            return None
+        return Decimal(value).scaleb(-SPOT_SCALE).quantize(Decimal(1).scaleb(-digits))
+
+    def _bar(self, market: str, at: int, bid: Decimal | None, ask: Decimal | None) -> None:
+        start = at - at % self.bar_ns
+        building = self._building.get(market)
+        if building is not None and start > building.start_ns:
+            if building.bid and building.ask:
+                knowable = Instant.try_create(building.start_ns + self.bar_ns)
+                if not is_refusal(knowable):
+                    self._events.append(
+                        Bar(
+                            market,
+                            QuoteBar(knowable.value, _ohlc(building.bid), _ohlc(building.ask)),
+                        )
+                    )
+            building = None
+        if building is None:
+            last = self._building.get(market)
+            building = _Building(
+                start,
+                [last.bid[-1]] if last is not None and last.bid else [],
+                [last.ask[-1]] if last is not None and last.ask else [],
+            )
+            self._building[market] = building
+        if bid is not None:
+            building.bid.append(bid)
+        if ask is not None:
+            building.ask.append(ask)
+
+    def _execution(self, body: Mapping[str, object]) -> None:
+        """A stop the venue fired, or a close it carried out, closes the position it names."""
+        position = _map(body.get("position"))
+        if position.get("positionStatus") != "POSITION_STATUS_CLOSED":
+            return
+        position_id = _int(position.get("positionId"))
+        name = next((n for n, h in self._open.items() if h.position_id == position_id), None)
+        if name is None:
+            return
+        held = self._open.pop(name)
+        deal = _map(body.get("deal"))
+        price = self._execution_price(deal.get("executionPrice"), held.market_id)
+        if price is None:
+            price = held.stop or held.entry
+        order = _map(body.get("order"))
+        stopped = order.get("orderType") == "STOP_LOSS_TAKE_PROFIT" and not held.closing
+        gap = held.stop is not None and stopped and (
+            price < held.stop if held.side is Side.LONG else price > held.stop
+        )
+        self._closed[name] = VenueClose(FillKind.STOP if stopped else FillKind.CLOSE, price, gap)
+
+    def _execution_price(self, raw: object, market: str) -> Decimal | None:
+        symbol = self.symbols.get(market)
+        if not isinstance(raw, float) or symbol is None:
+            return None
+        crossed = decode_execution_price(raw, symbol.instrument, symbol.digits, FILL_ROUNDING)
+        if is_refusal(crossed):
+            return None
+        price = crossed.value.price
+        return Decimal(price.value).scaleb(-price.scale)
+
+    # --- orders ------------------------------------------------------------------------
+
+    def _enter(self, ticket: Ticket, api: OpenApi, client: LiveCTraderClient) -> Result[Sent]:
+        symbol = self.symbols.get(ticket.market_id)
+        params = ticket.command.order_parameters
+        tags = ticket.tags
+        if symbol is None or params is None or tags is None or ticket.quantity is None:
+            return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, "not-a-node-entry"))
+        volume = ticket.quantity * symbol.lot_size
+        if (
+            volume != volume.to_integral_value()
+            or int(volume) < symbol.min_volume
+            or int(volume) % symbol.step_volume
+        ):
+            return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, "volume-not-tradable"))
+        distance = params.protective_stop_distance
+        if distance is None:
+            return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, "no-stop"))
+        gap = (
+            Decimal(distance.value)
+            .scaleb(-distance.scale)
+            .quantize(Decimal(1).scaleb(-symbol.digits), rounding=ROUND_HALF_EVEN)
+        )
+        delta = PriceDelta.try_create(
+            int(gap.scaleb(symbol.digits)), symbol.instrument, symbol.digits
+        )
+        size = Quantity.try_create(int(volume), "unit", 2)
+        if is_refusal(delta) or is_refusal(size):
+            return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, "order-not-encodable"))
+        side = "buy" if ticket.side is Side.LONG else "sell"
+        wire_params = OrderParameters.try_create(
+            OrderType.MARKET,
+            TimeInForce.IMMEDIATE_OR_CANCEL,
+            size.value,
+            protective_stop_distance=delta.value,
+            instrument=symbol.instrument,
+            trade_side=side,
+        )
+        if is_refusal(wire_params):
+            return wire_params
+        command = Command.place_order(
+            self.venue_account.venue,
+            self.venue_account,
+            ticket.command.session_epoch,
+            ticket.command.ordinal,
+            wire_params.value,
+        )
+        if is_refusal(command):
+            return command
+        verification = client.bound_declaration
+        encoded = client.encode_command(
+            command.value,
+            compiled=self.codec.proto,
+            declaration=verification,
+            ctid_trader_account_id=self.ctid,
+            symbol_id=symbol.symbol_id,
+            trade_side=side,
+            tags=tags,
+        )
+        if is_refusal(encoded):
+            return encoded
+        pushed = api.push(encoded.value.envelope)
+        if is_refusal(pushed):
+            return Ok(Sent(SubmissionOutcome.UNKNOWN))
+        msg_id = encoded.value.client_msg_id
+        while True:
+            found = api.wait(lambda frame: frame.name in _TRADES and _answers(frame, msg_id, tags.client_order_id))
+            if is_refusal(found) or found.value is None:
+                return Ok(Sent(SubmissionOutcome.UNKNOWN))
+            frame = found.value
+            if frame.name == "ProtoOAOrderErrorEvent":
+                self._orders.append(
+                    VenueOrder(tags.client_order_id, tags.label, ticket.market_id, OrderState.GONE)
+                )
+                return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, _error_word(frame.body)))
+            kind = frame.body.get("executionType")
+            if kind == "ORDER_ACCEPTED":
+                continue
+            if kind != "ORDER_FILLED":
+                self._orders.append(
+                    VenueOrder(tags.client_order_id, tags.label, ticket.market_id, OrderState.GONE)
+                )
+                return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, str(kind).lower()))
+            return self._filled(frame, ticket, symbol, int(volume), client)
+
+    def _filled(
+        self,
+        frame: Frame,
+        ticket: Ticket,
+        symbol: SymbolFacts,
+        volume: int,
+        client: LiveCTraderClient,
+    ) -> Result[Sent]:
+        deal = _map(frame.body.get("deal"))
+        position = _map(frame.body.get("position"))
+        recorded = client.receive(
+            WireKind.FILL,
+            dict(frame.body),
+            native_id=str(_int(deal.get("dealId")) or 0),
+            instrument=symbol.instrument,
+            venue_time_raw=_int(deal.get("executionTimestamp")),
+            fill_price_wire=deal.get("executionPrice"),
+            fill_price_is_execution_double=True,
+            fill_digits=symbol.digits,
+            fill_rounding=FILL_ROUNDING,
+            fill_volume_wire=_int(deal.get("filledVolume")),
+        )
+        if is_refusal(recorded):
+            return Ok(Sent(SubmissionOutcome.UNKNOWN))
+        fill = _map(recorded.value.get("fill_price"))
+        price = Decimal(cast("int", fill["value"])).scaleb(-cast("int", fill["scale"]))
+        name = ticket.tags.client_order_id if ticket.tags is not None else ""
+        label = ticket.tags.label if ticket.tags is not None else None
+        self._open[name] = _Open(
+            _int(position.get("positionId")) or 0,
+            ticket.market_id,
+            ticket.side,
+            volume,
+            cast("Decimal", ticket.quantity),
+            price,
+            self._execution_price(position.get("stopLoss"), ticket.market_id),
+            label,
+        )
+        self._orders.append(
+            VenueOrder(name, label, ticket.market_id, OrderState.FILLED, name, price)
+        )
+        return Ok(Sent(SubmissionOutcome.ACCEPTED_BY_VENUE, price))
+
+    def _close(
+        self, ticket: Ticket, name: str, held: _Open, api: OpenApi, client: LiveCTraderClient
+    ) -> Result[Sent]:
+        size = Quantity.try_create(held.volume, "unit", 2)
+        if is_refusal(size):
+            return size
+        command = Command.close_position(
+            self.venue_account.venue,
+            self.venue_account,
+            ticket.command.session_epoch,
+            ticket.command.ordinal,
+            CloseScope.INSTRUMENT_WITHIN_BINDING,
+            str(held.position_id),
+        )
+        if is_refusal(command):
+            return command
+        encoded = client.encode_command(
+            command.value,
+            compiled=self.codec.proto,
+            declaration=client.bound_declaration,
+            ctid_trader_account_id=self.ctid,
+            volume=size.value,
+        )
+        if is_refusal(encoded):
+            return encoded
+        held.closing = True
+        pushed = api.push(encoded.value.envelope)
+        if is_refusal(pushed):
+            return Ok(Sent(SubmissionOutcome.UNKNOWN))
+        msg_id = encoded.value.client_msg_id
+        while True:
+            found = api.wait(lambda frame: frame.name in _TRADES and frame.msg_id == msg_id)
+            if is_refusal(found) or found.value is None:
+                return Ok(Sent(SubmissionOutcome.UNKNOWN))
+            frame = found.value
+            if frame.name == "ProtoOAOrderErrorEvent":
+                held.closing = False
+                return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, _error_word(frame.body)))
+            self._absorb(frame)
+            done = self._closed.get(name)
+            if done is not None:
+                return Ok(Sent(SubmissionOutcome.ACCEPTED_BY_VENUE, done.price))
+            if frame.body.get("executionType") not in {"ORDER_ACCEPTED", "ORDER_FILLED"}:
+                held.closing = False
+                return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, "close-refused"))
+
+    def _amend(
+        self, ticket: Ticket, held: _Open, api: OpenApi, client: LiveCTraderClient
+    ) -> Result[Sent]:
+        amendment = ticket.command.protection_amendment
+        if amendment is None:
+            return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, "no-amendment"))
+        command = Command.amend_protection(
+            self.venue_account.venue,
+            self.venue_account,
+            ticket.command.session_epoch,
+            ticket.command.ordinal,
+            amendment,
+            str(held.position_id),
+        )
+        if is_refusal(command):
+            return command
+        encoded = client.encode_command(
+            command.value,
+            compiled=self.codec.proto,
+            declaration=client.bound_declaration,
+            ctid_trader_account_id=self.ctid,
+        )
+        if is_refusal(encoded):
+            return encoded
+        pushed = api.push(encoded.value.envelope)
+        if is_refusal(pushed):
+            return Ok(Sent(SubmissionOutcome.UNKNOWN))
+        found = api.wait(lambda frame: frame.name in _TRADES and frame.msg_id == encoded.value.client_msg_id)
+        if is_refusal(found) or found.value is None:
+            return Ok(Sent(SubmissionOutcome.UNKNOWN))
+        if found.value.name == "ProtoOAOrderErrorEvent":
+            return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, _error_word(found.value.body)))
+        stop = self._execution_price(_map(found.value.body.get("position")).get("stopLoss"), held.market_id)
+        held.stop = stop if stop is not None else held.stop
+        return Ok(Sent(SubmissionOutcome.ACCEPTED_BY_VENUE, held.stop))
+
+    def test_trade(
+        self,
+        market: str,
+        tags: OrderTags,
+        *,
+        stop_points: int,
+        journal: Callable[[str, Mapping[str, object]], None],
+    ) -> TestTrade:
+        """The self-test's demo trade: the symbol's smallest long with its stop at the venue,
+        the stop read back, then a reduce-only close, timed. Every step is journalled before it
+        is sent, so the reconcile reads the order as the node's own."""
+        with self._lock:
+            symbol = self.symbols.get(market)
+            if not self.ready or symbol is None:
+                return TestTrade(False, f"no ready session for {market}")
+            if self.venue_account.role is not AccountRole.DEMO:
+                return TestTrade(False, "the self-test trades a demo account only")
+            if self._forms.get("market") != "entry-relative":
+                return TestTrade(False, "the session did not prove an entry-relative stop")
+            lots = Decimal(symbol.min_volume) / Decimal(symbol.lot_size)
+            gap = PriceDelta.try_create(stop_points, symbol.instrument, symbol.digits)
+            size = Quantity.try_create(symbol.min_volume, "unit", 2)
+            if is_refusal(gap) or is_refusal(size):
+                return TestTrade(False, "the test order could not be built")
+            params = OrderParameters.try_create(
+                OrderType.MARKET,
+                TimeInForce.IMMEDIATE_OR_CANCEL,
+                size.value,
+                protective_stop_distance=gap.value,
+                instrument=symbol.instrument,
+                trade_side="buy",
+            )
+            if is_refusal(params):
+                return TestTrade(False, "the test order could not be built")
+            entry = Command.place_order(
+                self.venue_account.venue, self.venue_account, self.session_epoch, 1, params.value
+            )
+            if is_refusal(entry):
+                return TestTrade(False, "the test order could not be built")
+            name = tags.client_order_id
+            journal(
+                "send",
+                {"kind": "self_test", "label": tags.label, "market_id": market, "side": "long",
+                 "quantity": str(lots), "stop_points": stop_points},
+            )
+            sent = self.send(Ticket(entry.value, market, Side.LONG, Decimal(0), lots, lots, tags))
+            if is_refusal(sent) or sent.value.outcome is not SubmissionOutcome.ACCEPTED_BY_VENUE:
+                why = "refused" if is_refusal(sent) else (sent.value.code or sent.value.outcome.value)
+                return TestTrade(False, f"the test entry did not fill ({why})")
+            journal("filled", {"price": str(sent.value.price)})
+            stop = self.stop_of(name)
+            close = Command.close_position(
+                self.venue_account.venue,
+                self.venue_account,
+                self.session_epoch,
+                2,
+                CloseScope.INSTRUMENT_WITHIN_BINDING,
+                name,
+            )
+            if is_refusal(close):
+                return TestTrade(False, "the test close could not be built", stop=stop)
+            journal("close", {"why": "self_test", "market_id": market})
+            started = self.steady_ns()
+            closed = self.send(Ticket(close.value, market, Side.LONG, Decimal(0), position=name))
+            took_ms = (self.steady_ns() - started) // 1_000_000
+            done = self.closed(name)
+            if is_refusal(closed) or done is None:
+                return TestTrade(False, "the venue did not close the test trade", stop=stop)
+            journal("closed", {"price": str(done.price)})
+            return TestTrade(
+                stop is not None, "placed, stop seen, closed" if stop is not None else "no stop seen",
+                stop=stop, entry=sent.value.price, exit=done.price, close_ms=took_ms,
+            )
+
+    def held(self) -> Mapping[str, tuple[str, int, Decimal | None]]:
+        """Each open position this binding placed: market, cTrader position id, held stop."""
+        with self._lock:
+            return {name: (h.market_id, h.position_id, h.stop) for name, h in self._open.items()}
+
+
+def _answers(frame: Frame, msg_id: str, client_order_id: str) -> bool:
+    if frame.msg_id == msg_id:
+        return True
+    order = _map(frame.body.get("order"))
+    return order.get("clientOrderId") == client_order_id
+
+
+def _ohlc(prices: Iterable[Decimal]) -> OHLC:
+    seen = list(prices)
+    return OHLC(seen[0], max(seen), min(seen), seen[-1])
+
+
+def _error_map() -> ErrorMap:
+    made = ErrorMap.try_create(1, ())
+    if is_refusal(made):  # pragma: no cover - an empty map always builds
+        raise RuntimeError("the empty error map did not build")
+    return made.value
