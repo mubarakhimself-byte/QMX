@@ -51,16 +51,21 @@ class KeyRefused(Exception):
 
 def owner_only(vault: Path) -> Outcome:
     """Make `vault` owner-only, or take every other user off it and its files. Running it again
-    changes nothing. A link or hard link anywhere in it refuses the start, and so does a file this
-    user cannot take back: on POSIX one another user owns, on Windows one whose owner or DACL
-    Windows will not change."""
+    changes nothing. A link or hard link anywhere in it refuses the start, and so does a file
+    another user owns or one whose access Windows will not change. Every refusal but the last
+    comes before any write: on Windows the folder's new DACL is pushed down to what it holds, a
+    hard link's other name outside the vault among them."""
     try:
         vault.mkdir(mode=FOLDER_MODE, parents=True)
         made = True
     except FileExistsError:
         made = False
+    tree = list(_tree(vault))
+    for path, _folder in tree:
+        if not _ours(path):
+            raise VaultRefused(_unfixable(path, FOREIGN))
     fixed = False
-    for path, folder in _tree(vault):
+    for path, folder in tree:
         fixed = _fix(path, folder=folder) or fixed
     return "made" if made else "repaired" if fixed else "kept"
 
@@ -115,10 +120,11 @@ def _unfixable(path: Path, why: str) -> str:
 
 if sys.platform != "win32":
 
+    def _ours(path: Path) -> bool:
+        return os.lstat(path).st_uid == os.geteuid()
+
     def _fix(path: Path, *, folder: bool) -> bool:
         found = os.lstat(path)
-        if found.st_uid != os.geteuid():
-            raise VaultRefused(_unfixable(path, FOREIGN))
         if not found.st_mode & LOOSE_BITS:
             return False
         os.chmod(path, FOLDER_MODE if folder else FILE_MODE)
@@ -165,6 +171,7 @@ else:
     _DENIED: Final = 1
     _INHERIT_DOWN: Final = 0x1 | 0x2
     """OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE: what the vault holds gets the same entries."""
+    _INHERITED: Final = 0x10
     _FILE_ALL_ACCESS: Final = 0x1F01FF
     _ACL_REVISION: Final = 2
     _ACL_SIZE: Final = 2
@@ -172,6 +179,9 @@ else:
     _SHARE_ALL: Final = 0x1 | 0x2 | 0x4
     _OPEN_EXISTING: Final = 3
     _OPEN_REPARSE_POINT: Final = 0x00200000
+    _BACKUP_SEMANTICS: Final = 0x02000000
+    """Lets the handle open a folder or a junction, so the reader refuses it by its tag."""
+    _DIRECTORY: Final = 0x10
     _TAG_INFO: Final = 9
     _MISSING: Final = frozenset({2, 3})
     _INVALID: Final = wintypes.HANDLE(-1).value
@@ -289,41 +299,69 @@ else:
         finally:
             _kernel.CloseHandle(token)
 
-    def _aces(dacl: int | None) -> list[str] | None:
-        """The SID of each entry, or None for an entry whose kind names no plain SID. A missing
-        DACL lets everyone in, so it reads as one entry no user owns."""
+    type _Entry = tuple[int, int, int, str]
+    """One DACL entry: its kind, its inherit flags without the inherited bit, its mask, its SID."""
+
+    def _entries(dacl: int | None) -> list[_Entry] | None:
+        """Each entry of the DACL, sorted, or None for a missing DACL, which lets everyone in, or
+        for an entry whose kind names no plain SID."""
         if not dacl:
-            return [""]
+            return None
         size = _AclSize()
         _check(_advapi.GetAclInformation(dacl, ctypes.byref(size), ctypes.sizeof(size), _ACL_SIZE))
-        sids: list[str] = []
+        found: list[_Entry] = []
         for index in range(size.count):
             ace = ctypes.c_void_p()
             _check(_advapi.GetAce(dacl, index, ctypes.byref(ace)))
-            kind = ctypes.c_ubyte.from_address(ace.value or 0).value
+            start = ace.value or 0
+            kind = ctypes.c_ubyte.from_address(start).value
             if kind not in {_ALLOWED, _DENIED}:
                 return None
-            sids.append(_sid_text((ace.value or 0) + 8))
-        return sids
+            flags = ctypes.c_ubyte.from_address(start + 1).value & ~_INHERITED
+            mask = wintypes.DWORD.from_address(start + 4).value
+            found.append((kind, flags, mask, _sid_text(start + 8)))
+        return sorted(found)
 
     def _p() -> ctypes.c_void_p:
         return ctypes.c_void_p()
 
-    def _fix(path: Path, *, folder: bool) -> bool:
-        me = _me()
-        owner, dacl, descriptor = _p(), _p(), _p()
+    def _ours(path: Path) -> bool:
+        return _owner_of(path) in {_me(), SYSTEM, ADMINISTRATORS}
+
+    def _owner_of(path: Path) -> str:
+        owner, descriptor = _p(), _p()
         failed = _advapi.GetNamedSecurityInfoW(
             str(path),
             _FILE_OBJECT,
-            _OWNER | _DACL,
+            _OWNER,
             ctypes.byref(owner),
+            None,
+            None,
+            None,
+            ctypes.byref(descriptor),
+        )
+        if failed:
+            raise VaultRefused(_unfixable(path, f"Windows would not show its owner ({failed})"))
+        try:
+            return _sid_text(owner.value)
+        finally:
+            _kernel.LocalFree(descriptor)
+
+    def _fix(path: Path, *, folder: bool) -> bool:
+        me = _me()
+        dacl, descriptor = _p(), _p()
+        failed = _advapi.GetNamedSecurityInfoW(
+            str(path),
+            _FILE_OBJECT,
+            _DACL,
+            None,
             None,
             ctypes.byref(dacl),
             None,
             ctypes.byref(descriptor),
         )
         if failed:
-            raise VaultRefused(_unfixable(path, f"Windows would not show its owner ({failed})"))
+            raise VaultRefused(_unfixable(path, f"Windows would not show its access ({failed})"))
         try:
             control, revision = wintypes.WORD(), wintypes.DWORD()
             _check(
@@ -331,18 +369,18 @@ else:
                     descriptor, ctypes.byref(control), ctypes.byref(revision)
                 )
             )
-            who = _sid_text(owner.value)
-            sids = _aces(dacl.value)
+            found = _entries(dacl.value)
             protected = bool(control.value & _DACL_PROTECTED)
         finally:
             _kernel.LocalFree(descriptor)
-        owned = who in {me, SYSTEM, ADMINISTRATORS}
-        if owned and sids is not None and set(sids) <= {me, SYSTEM} and (protected or not folder):
+        flags = _INHERIT_DOWN if folder else 0
+        wanted = sorted((_ALLOWED, flags, _FILE_ALL_ACCESS, sid) for sid in (me, SYSTEM))
+        if found == wanted and (protected or not folder):
             return False
-        _set(path, me, folder=folder, owner=not owned)
+        _set(path, me, folder=folder)
         return True
 
-    def _set(path: Path, me: str, *, folder: bool, owner: bool) -> None:
+    def _set(path: Path, me: str, *, folder: bool) -> None:
         sids = [_sid(me), _sid(SYSTEM)]
         try:
             size = 8 + sum(8 + _advapi.GetLengthSid(sid) for sid in sids)
@@ -354,12 +392,11 @@ else:
                         acl, _ACL_REVISION, _INHERIT_DOWN if folder else 0, _FILE_ALL_ACCESS, sid
                     )
                 )
-            what = _DACL | _PROTECTED_DACL | (_OWNER if owner else 0)
             failed = _advapi.SetNamedSecurityInfoW(
                 str(path),
                 _FILE_OBJECT,
-                what,
-                sids[0] if owner else None,
+                _DACL | _PROTECTED_DACL,
+                None,
                 None,
                 ctypes.addressof(acl),
                 None,
@@ -377,14 +414,21 @@ else:
 
     def _read(path: Path) -> bytes | None:
         handle = _kernel.CreateFileW(
-            str(path), _GENERIC_READ, _SHARE_ALL, None, _OPEN_EXISTING, _OPEN_REPARSE_POINT, None
+            str(path),
+            _GENERIC_READ,
+            _SHARE_ALL,
+            None,
+            _OPEN_EXISTING,
+            _OPEN_REPARSE_POINT | _BACKUP_SEMANTICS,
+            None,
         )
         if handle == _INVALID or handle is None:
             error = ctypes.get_last_error()
             if error in _MISSING:
                 return None
             raise ctypes.WinError(error)
-        with os.fdopen(msvcrt.open_osfhandle(handle, os.O_RDONLY), "rb") as file:
+        fd = msvcrt.open_osfhandle(handle, os.O_RDONLY)
+        try:
             tag = _TagInfo()
             _check(
                 _kernel.GetFileInformationByHandleEx(
@@ -393,7 +437,9 @@ else:
             )
             if tag.attributes & REPARSE_POINT and tag.tag & NAME_SURROGATE:
                 raise KeyRefused(LINKED)
-            if os.fstat(file.fileno()).st_nlink != 1:
+            if tag.attributes & _DIRECTORY:
+                raise IsADirectoryError(errno.EISDIR, "a folder")
+            if os.fstat(fd).st_nlink != 1:
                 raise KeyRefused(HARD_LINKED)
             owner, descriptor = _p(), _p()
             failed = _advapi.GetSecurityInfo(
@@ -414,4 +460,7 @@ else:
                 _kernel.LocalFree(descriptor)
             if who not in {_me(), SYSTEM, ADMINISTRATORS}:
                 raise KeyRefused(FOREIGN)
-            return file.read()
+            with os.fdopen(fd, "rb", closefd=False) as file:
+                return file.read()
+        finally:
+            os.close(fd)
