@@ -8,7 +8,23 @@
     "properties": {
       "source": {
         "type": "object",
-        "description": "{symbol, month, side (bid | ask | both), price_scale, licence}"
+        "description": "{symbol, month, side (bid | ask | both), price_scale, instrument, licence}",
+        "required": ["symbol", "price_scale"],
+        "properties": {
+          "price_scale": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "digits after the point in the symbol's Dukascopy prices: 5 for EURUSD, 3 for XAUUSD and USDJPY"
+          },
+          "instrument": {
+            "type": "object",
+            "description": "the symbol's Dukascopy instrument record; its digits must equal price_scale"
+          }
+        }
+      },
+      "check": {
+        "type": "object",
+        "description": "a landed series' dataset card: fetch nothing, and report wrong_scale when its price_scale is not the source's"
       },
       "dry_run": {"type": "boolean", "description": "check the step and download nothing"}
     },

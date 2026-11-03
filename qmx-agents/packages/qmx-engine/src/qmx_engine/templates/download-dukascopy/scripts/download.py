@@ -18,6 +18,14 @@ no ticks.
 
 The volume on every row is Dukascopy's own liquidity. The card says so.
 
+A bi5 price is a whole number at the symbol's own scale on Dukascopy: 5 digits for EURUSD, 3 for
+XAUUSD and USDJPY. The rows keep the provider's integers and the card states the scale they are
+at, so the source must name `price_scale`. A source with none is refused rather than guessed, and
+when the source hands in Dukascopy's own `instrument` record for the symbol, its `digits` must
+agree. A run given `check` (a landed series' card) fetches nothing and reports `wrong_scale` when
+that card states another scale; downloading the month again lands the same rows under a card at
+the right scale.
+
 Before the month lands, its stamps are checked (a bi5 tick is milliseconds from its UTC hour,
 so the source clock is UTC in milliseconds) and, when the source definition names its market's
 `calendar`, the month is counted against that calendar's open time. An hour wholly inside open
@@ -36,6 +44,7 @@ import time
 import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NoReturn
 
 from qmf.core import is_refusal
 from qmf.data.dukascopy import (
@@ -56,14 +65,71 @@ from qmx_engine.workers.zones import home_of
 FAILURE = "[QMX_FAILURE]"
 HOST = "datafeed.dukascopy.com"
 USER_AGENT = "qmx-feed/1.0"
-PRICE_SCALE = 5
+SOURCE = "dukascopy"
 DEFAULT_FLOOR_GB = 3.0
 HEARTBEAT_SECONDS = 10.0
 
 
-def fail(why: str) -> None:
+def fail(why: str) -> NoReturn:
     print(f"{FAILURE} {why}")
     raise SystemExit(0)
+
+
+def scale_of(source: dict[str, object], symbol: str) -> int:
+    """The digits after the point in every price Dukascopy serves for `symbol`, as the source
+    names them, checked against the symbol's Dukascopy instrument record when one is handed in.
+    Digits are a venue's fact (cTrader quotes gold at 2, Dukascopy at 3), so only Dukascopy's
+    own record can confirm the scale."""
+    scale = source.get("price_scale")
+    if scale is None:
+        fail(
+            f"the source names no price_scale for {symbol}; Dukascopy serves each symbol at its "
+            "own scale (5 for EURUSD, 3 for XAUUSD and USDJPY), so name it"
+        )
+    if isinstance(scale, bool) or not isinstance(scale, int) or scale < 0:
+        fail(f"price_scale is the whole number of digits after the point, not {scale!r}")
+    record = source.get("instrument")
+    if record is None:
+        return scale
+    if not isinstance(record, dict):
+        fail("the source's instrument is the fields of the symbol's Dukascopy instrument record")
+    venue = record.get("venue")
+    if venue != SOURCE:
+        fail(
+            f"the instrument record is for the venue {venue!r}, and a Dukascopy month's scale "
+            "is checked only against Dukascopy's own record, because digits differ by venue"
+        )
+    if str(record.get("symbol") or "").strip().upper() != symbol:
+        fail(f"the instrument record is for {record.get('symbol')!r}, not {symbol}")
+    digits = record.get("digits")
+    if isinstance(digits, bool) or digits != scale:
+        fail(
+            f"the source names price_scale {scale} for {symbol}, but its Dukascopy instrument "
+            f"record states {digits!r} digits; correct whichever is wrong before a month lands"
+        )
+    return scale
+
+
+def scale_report(card: object, symbol: str, scale: int) -> dict[str, object]:
+    """A landed series' card read against the source's scale. Its months are `wrong_scale` when
+    the card states any other scale, or none, so no reader takes them as good prices."""
+    if not isinstance(card, dict) or card.get("source") != SOURCE or card.get("subject") != symbol:
+        fail(f"check takes the dataset card of the {SOURCE} {symbol} series this source names")
+    quality = card.get("quality")
+    stated = quality.get("price_scale") if isinstance(quality, dict) else None
+    parts = card.get("partitions") if isinstance(card.get("partitions"), list) else []
+    months = [part.get("month") for part in parts if isinstance(part, dict)]
+    report: dict[str, object] = {
+        "status": "scale_ok",
+        "series": card.get("series_key"),
+        "months": months,
+        "card_price_scale": stated,
+        "price_scale": scale,
+    }
+    if isinstance(stated, bool) or stated != scale:
+        report["status"] = "wrong_scale"
+        report["note"] = "landed at the wrong price scale, download it again"
+    return report
 
 
 def month_of(text: str) -> tuple[int, int]:
@@ -238,6 +304,10 @@ if not isinstance(source, dict):
 symbol = str(source.get("symbol") or "").strip().upper()
 if symbol == "":
     fail("the source definition names no symbol")
+scale = scale_of(source, symbol)
+if "check" in given:
+    print(json.dumps(scale_report(given["check"], symbol, scale), sort_keys=True))
+    raise SystemExit(0)
 year, month = month_of(str(source.get("month") or ""))
 calendar_ref = str(source.get("calendar") or "").strip() or None
 calendar = shipped_calendars().get(calendar_ref) if calendar_ref else None
@@ -293,7 +363,7 @@ try:
         built = hour_key.hour_start_ns()
         if is_refusal(built):
             fail(f"the hour {marker(hour_key)} has no start: {built.context}")
-        decoded = decode_bi5_ticks(body, hour_start_ns=built.value, price_scale=PRICE_SCALE)
+        decoded = decode_bi5_ticks(body, hour_start_ns=built.value, price_scale=scale)
         if is_refusal(decoded):
             fail(f"the hour {marker(hour_key)} did not decode: {decoded.context}")
         for tick in decoded.value:
@@ -365,7 +435,7 @@ try:
             "volume_note": (
                 "volume is Dukascopy's own liquidity on its own book, not a consolidated tape"
             ),
-            "price_scale": PRICE_SCALE,
+            "price_scale": scale,
             "hours_refused": 0,
             "checked": None if report is None else report.as_json(),
         },
