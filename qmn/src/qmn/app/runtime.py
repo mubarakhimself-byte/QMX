@@ -1317,8 +1317,8 @@ class NodeUnit:
         """Each entry the reconcile found under another venue name than its client order id,
         such as a cTrader position id, with that name, which its closes and stop reads use."""
         self.placed: dict[str, tuple[str, Side, Decimal]] = {}
-        """Each entry the venue filled, by client order id: market, side and fill price, its
-        stop held or not."""
+        """Each entry the venue filled, by its venue name (its client order id unless
+        ``at_venue`` names another): market, side and fill price, its stop held or not."""
         self._orders: dict[str, Placed | Blocked] = {}
         self._unknown: dict[str, tuple[str, str, Side, Decimal]] = {}
         """Each entry whose outcome is unknown, by client order id: its intent, market, side and
