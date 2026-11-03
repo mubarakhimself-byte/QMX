@@ -401,6 +401,52 @@ Phase 5, the trading node and external connections. Added by the loose-ends pass
 @merge
 
 
+## Encode cTrader stop amends as the price cTrader expects (C-37)
+
+Phase 5, the trading node and external connections. Added from C-12d's review, 2026-11-03. Built fact. `encode_amend_protection` writes `stopLoss` and `takeProfit` with `_set_int` (`packages/qmf-venue/src/qmf/venue/encode.py:948-950`), but Spotware's release 91 `ProtoOAAmendPositionSLTPReq` declares both as doubles holding an absolute price. So every stop tightening and protection re-amend is refused at encode, and after three tries the order path closes the position. A stop never widens, but no unit can trail its stop on cTrader. Real step none. Done when an amend encodes `stopLoss` and `takeProfit` as the absolute price at the symbol's digits, the fake cTrader accepts a tightened stop, and the money path stays exact up to the wire.
+
+**Depends on.** C-12d.
+
+**Files.**
+
+- [ ] Edit `packages/qmf-venue/src/qmf/venue/encode.py` (`:948-950`, a `_set_double` beside `_set_int` at `:336`; the level is the exact price rounded once at the symbol's digits, toward the position's side, and turned into a double only at the field write; a double that does not round-trip to the same digits is refused).
+- [ ] Edit the fake cTrader in `qmn`'s tests so it reads `stopLoss` as a double, as cTrader does.
+- [ ] Create `packages/qmf-venue/tests/test_encode_amend_double.py`.
+
+**Build.**
+
+- [ ] Fix the encoder against the release 91 proto in the repo. The place-order path's relative distances stay integers, as declared.
+
+**You see.**
+
+- [ ] A unit's trailing stop moves on cTrader instead of the position closing.
+
+**Verify, unit.**
+
+- [ ] An amend for EURUSD at 1.08345 and for XAUUSD at 2650.25 decodes back to exactly those prices as doubles. A level off the symbol's digits rounds toward the position's side. A tightened stop on the fake is accepted with no retry. Run `uv run pytest packages/qmf-venue/tests/test_encode_amend_double.py -q`.
+
+**Verify, live.**
+
+@lane1
+- [ ] Lane 2. The dummy on a throwaway folder against the fake cTrader, a position opened and its stop tightened. Save `c37-tighten.log`. Pass when the amend is accepted on the first try and the position stays open.
+- [ ] Lane 3. Ten tightenings in a row on one position. Save `c37-trail.log`. Pass when every one is accepted and the stop only moves toward the price.
+- [ ] Lane 4. A take-profit amend. Save `c37-tp.log`. Pass when it is accepted at the exact price.
+- [ ] Lane 5. A gold position's amend. Save `c37-gold.log`. Pass when the wire price has two decimals and matches the level.
+- [ ] Lane 6. The C-12a dummy trade, unchanged. Save `c37-regress.log`. Pass when it trades exactly as at the parent.
+@menu
+
+**Verify, perf.**
+
+- [ ] Metric. Microseconds per amend encode.
+- [ ] Probe. Lane 3.
+- [ ] Baseline. The parent's place-order encode.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** Lenses edge-case and verification-gap, on the money path and float exactness. The blast-radius fact is that the place-order encoder's bytes are unchanged.
+
+@merge
+
+
 ## Make the node's status and kill tell the truth (C-35)
 
 Phase 5, the trading node and external connections. Added by the loose-ends pass of 2026-11-03 (`LOOSE-ENDS.md` C1, a MUST before the first real trade, with B5 and the first part of C3 riding along because they are the same kill he sees). Built facts. The status word can read "Trading" while a risk stop or a narrow kill holds, because `_status` reads `target.level_at("all")` and lists only `repeated_fault` stand-downs (`qmn/src/qmn/app/operations.py:558-600`). A kill or pause at an `account` or `deployment_id` scope the node does not hold is accepted and does nothing. A hold at `instrument:<symbol>` never blocks an entry, because the guard checks `instrument:<market id>`, and a resume naming the symbol does not clear it. The node journals a kill rise but not his resume (`runtime.py:2060-2072`), so the watcher reads Well after 24 h though the kill may hold. Real step none. Done when the status word and reasons name every risk stop and every kill at any scope, a scope the node does not hold is refused with its reason, symbol and market id scopes mean the same market, and every resume is journalled.
@@ -500,7 +546,7 @@ Phase 5, the trading node and external connections. Added by the loose-ends pass
 
 Phase 5, the trading node and external connections. Part C slice C-14 (OP-02), Level 0 AD-37, R1-B-04. Ruling 37 (the sign-in waits until there is something to use it for, and only this step waits on it). The real step runs on his own folder after G-LAND and G-DEMO. Done when `tools/first_real_start.py` checks each fact and prints PASS or FAIL per line, passes in rehearsal on a throwaway folder against the conformance venue, and is ready for his real run.
 
-**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-34, C-35, B15.
+**Depends on.** C-11, C-12a, C-12b, C-12c, C-12d, C-12e, C-13, C-23, C-26, C-26b, C-34, C-35, C-37, B15.
 
 **Files.**
 
