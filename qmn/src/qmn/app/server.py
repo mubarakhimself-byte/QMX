@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
-from typing import Final, cast
+from typing import Final, TypeAlias, cast
 from urllib.parse import urlsplit
 
 from qmf.core import Account, AccountRole, Result, VenueId, is_refusal
@@ -54,7 +54,13 @@ from qmn.app.grants import (
     urllib_fetch,
 )
 from qmn.app.grants import grant_store as grant_store_for
-from qmn.app.identity import INSTALL_ID_BYTES, establish, install_id_of, machine_fingerprint
+from qmn.app.identity import (
+    INSTALL_ID_BYTES,
+    TAG_LENGTH,
+    establish,
+    install_id_of,
+    machine_fingerprint,
+)
 from qmn.app.operations import (
     CHANGES,
     NOT_SET_UP,
@@ -256,7 +262,7 @@ ENDPOINTS: Final = Path("venues") / "endpoints.json"
 """A conformance binding's endpoints in ``data/``: a fake cTrader on this machine. Every host it
 names must be loopback, so it can never reach a broker."""
 LOOPBACK: Final = frozenset({"127.0.0.1", "::1", "localhost"})
-SELF_TEST_MARKET: Final = ("fx.eurusd", "EURUSD")
+SELF_TEST_MARKET: Final[tuple[str, str]] = ("fx.eurusd", "EURUSD")
 """`[node] self_test_market`: the market id and cTrader symbol the self-test trades."""
 SELF_TEST_STOP_POINTS: Final = 500
 """`[node] self_test_stop_points`, starting at 500 points (50 pips on a 5-digit pair): the
@@ -268,7 +274,7 @@ KILL_LATENCY_OK_MS: Final = 2_000
 kill switch's own act, answers within this. A labelled placeholder for the risk session."""
 SIGNED_IN: Final = "signed_in"
 
-type DoorFactory = Callable[[Store, Path], "CTraderDoor"]
+DoorFactory: TypeAlias = "Callable[[Store, Path], CTraderDoor]"
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,9 +302,10 @@ def endpoints(data: Path) -> Endpoints:
     return Endpoints((host, port), False, token)
 
 
-def _keys_now(initial: str | None) -> str | None:
-    """The keys document now. On Windows ``rotate_keys`` reads it again from Credential Manager,
-    where the host's key route wrote it; elsewhere the supervisor's copy stands until restart."""
+def keys_again(initial: str | None) -> str | None:
+    """The keys document as ``rotate_keys`` reads it again. On Windows that is the Credential
+    Manager entry the host's key route wrote; elsewhere the supervisor's copy stands until the
+    node restarts. The node never reads it at start: the supervisor's copy is the start."""
     if sys.platform == "win32":
         try:
             again = CredentialManager(NODE_KEYS_ENTRY, encoding="utf-16-le").read()
@@ -334,6 +341,7 @@ class CTraderDoor:
     store: Store
     data: Path
     keys: Callable[[], str | None]
+    """The keys document at start: the supervisor's ``NODE_KEYS``."""
     grants: Grants
     endpoint: TokenEndpoint
     open_wire: Callable[[str], Result[Wire]]
@@ -342,6 +350,8 @@ class CTraderDoor:
     steady_ns: Callable[[], int]
     host: str = DEMO_HOST
     image_digest: Callable[[], str | None] = _image_digest
+    rotated: Callable[[], str | None] | None = None
+    """How ``rotate_keys`` reads the keys document again; ``keys`` when None."""
     bar_ns: int = BAR_NS
     runtime: Runtime | None = None
     journal: JournalWriter | None = None
@@ -369,6 +379,7 @@ class CTraderDoor:
         clock_ns: Callable[[], int],
         steady_ns: Callable[[], int],
         endpoints: Endpoints,
+        rotated: Callable[[], str | None] | None = None,
         grant_store: GrantStore | None = None,
         fetch: Fetch | None = None,
         definitions: Path = DEFINITIONS,
@@ -377,7 +388,7 @@ class CTraderDoor:
         """The door over this machine's stores. The grant store is named by the node's tag,
         which the identity holds before any door is made."""
         identity = store.identity()
-        tag = "" if identity is None else identity.tag
+        tag = "" if identity is None else identity.install_id[:TAG_LENGTH]
         host, port = endpoints.open_api
         endpoint = TokenEndpoint(fetch=fetch or urllib_fetch, token_url=endpoints.token_url)
         return cls(
@@ -396,6 +407,7 @@ class CTraderDoor:
             clock_ns=clock_ns,
             steady_ns=steady_ns,
             image_digest=image_digest,
+            rotated=rotated,
         )
 
     def attach(
@@ -434,13 +446,23 @@ class CTraderDoor:
         now = self.clock_ns()
         tokens = self.endpoint.exchange(app, code, self.redirect, now)
         if is_refusal(tokens):
-            return refused("sign_in_refused", f"cTrader refused the code ({tokens.context.get('code')})")
+            return refused(
+                "sign_in_refused", f"cTrader refused the code ({tokens.context.get('code')})"
+            )
         listing = self._listing(app, tokens.value.access.reveal())
         if is_refusal(listing):
-            return refused("sign_in_refused", f"the grant's accounts could not be read ({listing.context.get('code')})")
-        accounts = tuple(GrantAccount(ctid, live, login, broker) for ctid, live, login, broker in listing.value.accounts)
+            return refused(
+                "sign_in_refused",
+                f"the grant's accounts could not be read ({listing.context.get('code')})",
+            )
+        accounts = tuple(
+            GrantAccount(ctid, live, login, broker)
+            for ctid, live, login, broker in listing.value.accounts
+        )
         grant = Grant(app.client_id, tokens.value, listing.value.scope, accounts, now)
-        listed: list[Json] = [{"account": str(item.ctid), "is_live": item.is_live} for item in accounts]
+        listed: list[Json] = [
+            {"account": str(item.ctid), "is_live": item.is_live} for item in accounts
+        ]
         kept = self.grants.keep(grant)
         if is_refusal(kept):
             if kept.context.get("code") == LIVE_GRANT_CODE:
@@ -473,7 +495,9 @@ class CTraderDoor:
     def _bind(self, account: Mapping[str, Json]) -> Answer:
         account_id = str(account.get("id"))
         given = account.get("ctid")
-        ctid = given if isinstance(given, int) else (int(account_id) if account_id.isdigit() else None)
+        ctid = (
+            given if isinstance(given, int) else (int(account_id) if account_id.isdigit() else None)
+        )
         if ctid is None:
             return refused("bad_argument", "bind: account.ctid names the cTrader account number")
         grant = self.grants.held()
@@ -485,8 +509,12 @@ class CTraderDoor:
             )
         listed = grant.account(ctid)
         if listed is None:
-            return refused("account_not_in_grant", f"the grant does not reach cTrader account {ctid}")
-        stopped = CTraderVenue.refusal(host=self.host, is_live=listed.is_live, role=AccountRole.DEMO)
+            return refused(
+                "account_not_in_grant", f"the grant does not reach cTrader account {ctid}"
+            )
+        stopped = CTraderVenue.refusal(
+            host=self.host, is_live=listed.is_live, role=AccountRole.DEMO
+        )
         if stopped is not None:
             return refused(str(stopped.context["code"]), str(stopped.context["reason"]))
         if account_id in self.bound:
@@ -494,12 +522,16 @@ class CTraderDoor:
         codec = self.codec()
         runtime, journal = self.runtime, self.journal
         if is_refusal(codec):
-            return refused("definitions_missing", "the pinned cTrader definitions could not be read")
+            return refused(
+                "definitions_missing", "the pinned cTrader definitions could not be read"
+            )
         if runtime is None or journal is None:
             return refused("not_available", "the node's runtime is not running")
         venue_name = account.get("venue")
         bound_account = Account(
-            account_id, VenueId(venue_name if isinstance(venue_name, str) else "ctrader"), AccountRole.DEMO
+            account_id,
+            VenueId(venue_name if isinstance(venue_name, str) else "ctrader"),
+            AccountRole.DEMO,
         )
         venue = CTraderVenue(
             account=bound_account,
@@ -542,12 +574,11 @@ class CTraderDoor:
             return refused("not_bound", f"account {account} is not bound on this node")
         feed = self.runtime.venues[account].feed
         venue.jobs.append(lambda: self._self_test(account, venue, feed))
-        if self.runtime is not None:
-            self.runtime.wake()
+        self.runtime.wake()
         return ok({"state": "accepted"})
 
     def rotate_keys(self) -> Answer:
-        self._app = registration(self.keys())
+        self._app = registration((self.rotated or self.keys)())
         return ok({"state": "accepted"})
 
     # --- the self-test, on the runtime thread ---------------------------------------------
@@ -645,8 +676,13 @@ class CTraderDoor:
             return {"session": "expired"}
         shown: dict[str, Json] = {
             "session": SIGNED_IN,
-            "grant": {"scope": grant.scope, "expires_at": _iso(grant.tokens.expires_at_ns) if grant.tokens.expires_at_ns else None},
-            "accounts": sorted(self.bound),
+            "grant": {
+                "scope": grant.scope,
+                "expires_at": _iso(grant.tokens.expires_at_ns)
+                if grant.tokens.expires_at_ns
+                else None,
+            },
+            "accounts": cast(Json, sorted(self.bound)),
         }
         for row in observed:
             found = cast(dict[str, Json], row) if isinstance(row, dict) else {}
@@ -670,7 +706,9 @@ class CTraderDoor:
             else [
                 {
                     "venue": "ctrader",
-                    "expires_at": _iso(grant.tokens.expires_at_ns) if grant.tokens.expires_at_ns else None,
+                    "expires_at": _iso(grant.tokens.expires_at_ns)
+                    if grant.tokens.expires_at_ns
+                    else None,
                 }
             ]
         )
@@ -702,7 +740,9 @@ class CTraderDoor:
         refreshed = self.grants.refresh(app)
         if is_refusal(refreshed):
             held = self.grants.held()
-            return None if held is None or held.tokens == grant.tokens else held.tokens.access.reveal()
+            return (
+                None if held is None or held.tokens == grant.tokens else held.tokens.access.reveal()
+            )
         return refreshed.value.tokens.access.reveal()
 
     def _kept(self) -> list[Mapping[str, Json]]:
@@ -719,11 +759,13 @@ class CTraderDoor:
 
     def _markets(self) -> dict[str, str]:
         """The self-test's market, then every market a kept deployment trades, by symbol."""
-        markets = dict([SELF_TEST_MARKET])
+        markets: dict[str, str] = {SELF_TEST_MARKET[0]: SELF_TEST_MARKET[1]}
         for change in Target.fold(self.store.accepted()).deployments.values():
             document = change.args.get("document")
             unit = document.get("unit_document") if isinstance(document, dict) else None
-            for market in cast(list[Json], unit.get("markets") if isinstance(unit, dict) else []) or []:
+            for market in (
+                cast(list[Json], unit.get("markets") if isinstance(unit, dict) else []) or []
+            ):
                 item = cast(dict[str, Json], market) if isinstance(market, dict) else {}
                 ref = item.get("instrument_ref")
                 symbol = cast(dict[str, Json], ref).get("symbol") if isinstance(ref, dict) else None
@@ -773,7 +815,8 @@ def from_environment() -> Node:
         initial = os.environ.get("NODE_KEYS")
         door = partial(
             CTraderDoor.compose,
-            keys=lambda: _keys_now(initial),
+            keys=lambda: initial,
+            rotated=lambda: keys_again(initial),
             facts=volume / HOST_FACTS,
             clock_ns=time.time_ns,
             steady_ns=time.monotonic_ns,

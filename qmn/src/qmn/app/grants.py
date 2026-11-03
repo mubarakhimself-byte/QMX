@@ -34,7 +34,7 @@ import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Final, Protocol, cast
+from typing import Final, Protocol, TypeAlias, cast
 from urllib.parse import urlencode, urlsplit
 
 from qmf.core import Ok, RefusalCategory, Result, Retryability, SecretRef, TypedRefusal, is_refusal
@@ -164,7 +164,9 @@ def trading_profile(facts: Path) -> bool:
         found: object = json.loads(facts.read_text("utf-8"))
     except (OSError, ValueError):
         return False
-    return isinstance(found, dict) and cast("dict[str, object]", found).get("trading_profile") is True
+    return (
+        isinstance(found, dict) and cast("dict[str, object]", found).get("trading_profile") is True
+    )
 
 
 # --- the grant -------------------------------------------------------------------------------
@@ -180,7 +182,12 @@ class GrantAccount:
     broker: str = ""
 
     def document(self) -> dict[str, object]:
-        return {"ctid": self.ctid, "is_live": self.is_live, "login": self.login, "broker": self.broker}
+        return {
+            "ctid": self.ctid,
+            "is_live": self.is_live,
+            "login": self.login,
+            "broker": self.broker,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -428,7 +435,7 @@ def grant_store(data: Path, tag: str) -> GrantStore:
 
 # --- cTrader's token endpoint ----------------------------------------------------------------
 
-type Fetch = Callable[[str, str], tuple[int, bytes]]
+Fetch: TypeAlias = Callable[[str, str], tuple[int, bytes]]
 """``(method, url)`` to ``(status, body)``. A test answers here as a fake cTrader."""
 
 

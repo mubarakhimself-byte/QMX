@@ -88,46 +88,6 @@ class UnknownInstrumentError(BadArgumentError):
     code = "unknown_instrument"
 
 
-@dataclass(frozen=True, slots=True)
-class Context:
-    """What every operation reads: the store, who the node is now, its journal, the clock and
-    the id source (both built in ``open_node``)."""
-
-    store: Store
-    here: str | None
-    journal_root: Path
-    data: Path
-    build: str
-    clock_ns: Callable[[], int]
-    new_id: Callable[[], str]
-    started_ns: int
-    wake: Callable[[], None] = lambda: None
-    """Wakes the runtime after a change is kept, so it acts at once instead of at its tick."""
-    deploy_preflight: Callable[[Mapping[str, Json]], Answer | None] = lambda _: None
-    """``deploy``'s staged-file checks (the runtime's ``deploy_preflight``); None lets it go."""
-    venues: VenueDoor = field(default_factory=lambda: NoVenues())
-    """The venue sign-in, binding and self-test (``server.py``); none set up by default."""
-
-    def standing(self) -> Standing:
-        row = self.store.identity()
-        if row is None:
-            raise RuntimeError("the node's identity is minted before any operation answers")
-        return Standing(row, self.here)
-
-
-def ok(value: Json) -> Answer:
-    return {"ok": True, "value": value}
-
-
-def refused(code: str, message: str, *, next_step: str | None = None, value: Json = None) -> Answer:
-    answer: Answer = {"ok": False, "code": code, "message": message}
-    if next_step is not None:
-        answer["next_step"] = next_step
-    if value is not None:
-        answer["value"] = value
-    return answer
-
-
 class VenueDoor(Protocol):
     """What the venue operations ask of the node's composition: the cTrader sign-in, the
     account bindings and the self-test. Each answers and never raises; the node calls it
@@ -190,6 +150,46 @@ class NoVenues:
 
 def _nothing_set_up() -> Answer:
     return refused("not_set_up", "no venue is set up on this node yet", next_step=NOT_SET_UP)
+
+
+@dataclass(frozen=True, slots=True)
+class Context:
+    """What every operation reads: the store, who the node is now, its journal, the clock and
+    the id source (both built in ``open_node``)."""
+
+    store: Store
+    here: str | None
+    journal_root: Path
+    data: Path
+    build: str
+    clock_ns: Callable[[], int]
+    new_id: Callable[[], str]
+    started_ns: int
+    wake: Callable[[], None] = lambda: None
+    """Wakes the runtime after a change is kept, so it acts at once instead of at its tick."""
+    deploy_preflight: Callable[[Mapping[str, Json]], Answer | None] = lambda _: None
+    """``deploy``'s staged-file checks (the runtime's ``deploy_preflight``); None lets it go."""
+    venues: VenueDoor = field(default_factory=NoVenues)
+    """The venue sign-in, binding and self-test (``server.py``); none set up by default."""
+
+    def standing(self) -> Standing:
+        row = self.store.identity()
+        if row is None:
+            raise RuntimeError("the node's identity is minted before any operation answers")
+        return Standing(row, self.here)
+
+
+def ok(value: Json) -> Answer:
+    return {"ok": True, "value": value}
+
+
+def refused(code: str, message: str, *, next_step: str | None = None, value: Json = None) -> Answer:
+    answer: Answer = {"ok": False, "code": code, "message": message}
+    if next_step is not None:
+        answer["next_step"] = next_step
+    if value is not None:
+        answer["value"] = value
+    return answer
 
 
 # --- arguments ------------------------------------------------------------------------------

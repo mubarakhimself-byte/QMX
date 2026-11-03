@@ -36,8 +36,8 @@ from decimal import ROUND_HALF_EVEN, Decimal
 from pathlib import Path
 from typing import Final, Protocol, cast
 
-from google.protobuf.json_format import MessageToDict, ParseDict
-from google.protobuf.message import Message
+from google.protobuf.json_format import MessageToDict, ParseDict, ParseError
+from google.protobuf.message import EncodeError, Message
 from qmb.host.unit_handler import FillKind
 from qmf.core import (
     Account,
@@ -54,7 +54,6 @@ from qmf.core import (
     Retryability,
     RoundingMode,
     TypedRefusal,
-    VenueId,
     World,
     is_refusal,
 )
@@ -69,10 +68,10 @@ from qmf.venue.commands import (
     TimeInForce,
 )
 from qmf.venue.connection import decode_framed_payload, encode_framed_payload
+from qmf.venue.ctrader import decode_execution_price
 from qmf.venue.encode import OrderTags
 from qmf.venue.observation import MeasuredFact, ProbeCheck, ProbeVerdict
 from qmf.venue.proto import SPOTWARE_PROTO_PACKAGE, CompiledProto, compile_descriptor_set
-from qmf.venue.ctrader import decode_execution_price
 from qml.protocol.unit import OHLC, QuoteBar
 from qml.unit.model import Side
 
@@ -90,10 +89,10 @@ __all__ = [
     "FILL_ROUNDING",
     "HEARTBEAT_NS",
     "PROTO_TAG",
-    "Codec",
     "CTraderVenue",
-    "FramedWire",
+    "Codec",
     "Frame",
+    "FramedWire",
     "Listing",
     "OpenApi",
     "SymbolFacts",
@@ -129,7 +128,9 @@ _TRADES: Final = frozenset({"ProtoOAExecutionEvent", "ProtoOAOrderErrorEvent"})
 
 def _refused(code: str, reason: str, *, retry: bool = True) -> TypedRefusal:
     return TypedRefusal(
-        category=RefusalCategory.UNAVAILABLE_DEPENDENCY if retry else RefusalCategory.POLICY_REJECTION,
+        category=RefusalCategory.UNAVAILABLE_DEPENDENCY
+        if retry
+        else RefusalCategory.POLICY_REJECTION,
         retryability=Retryability.AFTER_CONDITION if retry else Retryability.NO,
         context={"code": code, "reason": reason},
         after_condition_descriptor="the cTrader session answers again" if retry else None,
@@ -200,7 +201,9 @@ class Codec:
         try:
             raw = path.read_bytes()
         except OSError as error:
-            return _refused("definitions_missing", f"{path.name}: {type(error).__name__}", retry=False)
+            return _refused(
+                "definitions_missing", f"{path.name}: {type(error).__name__}", retry=False
+            )
         compiled = compile_descriptor_set(
             raw, package_name=SPOTWARE_PROTO_PACKAGE, release_tag=PROTO_TAG
         )
@@ -221,12 +224,15 @@ class Codec:
             return inner
         if is_refusal(envelope):
             return envelope
-        message = ParseDict(dict(values), inner.value)
-        outer = envelope.value
-        outer.payloadType = message.payloadType  # pyright: ignore[reportAttributeAccessIssue]
-        outer.payload = message.SerializeToString()  # pyright: ignore[reportAttributeAccessIssue]
-        outer.clientMsgId = msg_id  # pyright: ignore[reportAttributeAccessIssue]
-        return Ok(outer.SerializeToString())
+        try:
+            message = ParseDict(dict(values), inner.value)
+            outer = envelope.value
+            outer.payloadType = getattr(message, "payloadType")  # pyright: ignore[reportAttributeAccessIssue]  # noqa: B009
+            outer.payload = message.SerializeToString()  # pyright: ignore[reportAttributeAccessIssue]
+            outer.clientMsgId = msg_id  # pyright: ignore[reportAttributeAccessIssue]
+            return Ok(outer.SerializeToString())
+        except (ParseError, EncodeError) as error:
+            return _refused("unencodable", f"{name}: {type(error).__name__}", retry=False)
 
     def decode(self, envelope: bytes) -> Result[Frame]:
         outer = self._make("ProtoMessage")
@@ -401,7 +407,10 @@ class OpenApi:
             return raw
         if raw.value is None:
             return Ok(None)
-        return self.codec.decode(raw.value)
+        frame = self.codec.decode(raw.value)
+        if is_refusal(frame):
+            return frame
+        return Ok(frame.value)
 
 
 def _error_word(body: Mapping[str, object]) -> str:
@@ -499,17 +508,24 @@ class _Building:
     start_ns: int
     bid: list[Decimal]
     ask: list[Decimal]
+    whole: bool
+    """False for the bucket a session joined part way through: it is never sent as a bar."""
 
 
 class _NodeClock:
-    def __init__(self, clock_ns: Callable[[], int], steady_ns: Callable[[], int], epoch: str) -> None:
-        self._clock_ns, self._steady_ns, self._epoch = clock_ns, steady_ns, epoch
+    """The node's own clock as the live client's :class:`~qmf.core.Clock` seam."""
+
+    def __init__(
+        self, clock_ns: Callable[[], int], steady_ns: Callable[[], int], epoch: str
+    ) -> None:
+        self.boot_epoch_id = epoch
+        self._clock_ns, self._steady_ns = clock_ns, steady_ns
 
     def wall_now(self) -> Result[Instant]:
         return Instant.try_create(self._clock_ns())
 
     def monotonic_now(self) -> Result[MonotonicReading]:
-        return MonotonicReading.try_create(self._steady_ns(), self._epoch)
+        return MonotonicReading.try_create(self._steady_ns(), self.boot_epoch_id)
 
 
 class CTraderVenue:
@@ -572,7 +588,9 @@ class CTraderVenue:
     def refusal(cls, *, host: str, is_live: bool, role: AccountRole) -> TypedRefusal | None:
         """Why this binding may not open: a live host or a live account is C-21's path."""
         if host != DEMO_HOST:
-            return _refused("live_host", f"the node binds cTrader's demo host only, not {host}", retry=False)
+            return _refused(
+                "live_host", f"the node binds cTrader's demo host only, not {host}", retry=False
+            )
         if is_live or role is not AccountRole.DEMO:
             return _refused(
                 "live_account",
@@ -628,9 +646,7 @@ class CTraderVenue:
         with self._lock:
             if self.api is None:
                 return submit_not_ready_refusal()
-            answered = self.api.ask(
-                "ProtoOAReconcileReq", {"ctidTraderAccountId": self.ctid}
-            )
+            answered = self.api.ask("ProtoOAReconcileReq", {"ctidTraderAccountId": self.ctid})
             if is_refusal(answered):
                 return answered
             by_id = {held.position_id: name for name, held in self._open.items()}
@@ -677,7 +693,9 @@ class CTraderVenue:
                 return opened
             return Ok(None)
 
-    def _authorise(self, api: OpenApi, client_id: str, client_secret: str, access: str) -> Result[None]:
+    def _authorise(
+        self, api: OpenApi, client_id: str, client_secret: str, access: str
+    ) -> Result[None]:
         app = api.ask(
             "ProtoOAApplicationAuthReq", {"clientId": client_id, "clientSecret": client_secret}
         )
@@ -706,9 +724,13 @@ class CTraderVenue:
         wanted = {market: by_name.get(name) for market, name in self.markets.items()}
         missing = sorted(self.markets[market] for market, ident in wanted.items() if ident is None)
         if missing:
-            return _refused("unknown_symbol", f"the account lists no {', '.join(missing)}", retry=False)
+            return _refused(
+                "unknown_symbol", f"the account lists no {', '.join(missing)}", retry=False
+            )
         ids = [cast("int", ident) for ident in wanted.values()]
-        detail = api.ask("ProtoOASymbolByIdReq", {"ctidTraderAccountId": self.ctid, "symbolId": ids})
+        detail = api.ask(
+            "ProtoOASymbolByIdReq", {"ctidTraderAccountId": self.ctid, "symbolId": ids}
+        )
         if is_refusal(detail):
             return detail
         rows = {_int(row.get("symbolId")): row for row in _rows(detail.value.body.get("symbol"))}
@@ -716,7 +738,9 @@ class CTraderVenue:
         for market, ident in wanted.items():
             row = rows.get(ident)
             if row is None:
-                return _refused("unknown_symbol", f"no facts for {self.markets[market]}", retry=False)
+                return _refused(
+                    "unknown_symbol", f"no facts for {self.markets[market]}", retry=False
+                )
             self.symbols[market] = SymbolFacts(
                 market,
                 self.markets[market],
@@ -737,7 +761,11 @@ class CTraderVenue:
             ids = [self.symbols[market].symbol_id for market in markets if market in self.symbols]
             answered = self.api.ask(
                 "ProtoOASubscribeSpotsReq",
-                {"ctidTraderAccountId": self.ctid, "symbolId": ids, "subscribeToSpotTimestamp": True},
+                {
+                    "ctidTraderAccountId": self.ctid,
+                    "symbolId": ids,
+                    "subscribeToSpotTimestamp": True,
+                },
             )
             return answered if is_refusal(answered) else Ok(None)
 
@@ -812,7 +840,11 @@ class CTraderVenue:
             ProbeCheck.SPOT_TIMESTAMP_UNIT: {"unit": "milliseconds"},
             ProbeCheck.DAILY_BOUNDARY: {"utc_minute_of_day": 1320},
             ProbeCheck.BAR_BASIS: {"quote_type": "bid"},
-            ProbeCheck.PIP_FORMULA: {"pip_position": pip, "pip_size_num": 1, "pip_size_den": 10**pip},
+            ProbeCheck.PIP_FORMULA: {
+                "pip_position": pip,
+                "pip_size_num": 1,
+                "pip_size_den": 10**pip,
+            },
             ProbeCheck.MONEY_EXPONENT: {"money_digits": money},
             ProbeCheck.AMEND_ATOMICITY: {"atomicity": "non-atomic"},
             ProbeCheck.POSITION_MODEL: {"position_model": self.position_model},
@@ -879,6 +911,7 @@ class CTraderVenue:
             self.api.wire.close()
         self.api = None
         self.ready = False
+        self._building.clear()
 
     # --- what the session tells the binding ----------------------------------------------
 
@@ -893,7 +926,7 @@ class CTraderVenue:
             return False
         for frame in frames.value:
             self._absorb(frame)
-        return self.api is not None
+        return True
 
     def _absorb(self, frame: Frame) -> None:
         match frame.name:
@@ -918,7 +951,9 @@ class CTraderVenue:
         bid, ask = (self._price(body.get(side), digits) for side in ("bid", "ask"))
         stamp = _int(body.get("timestamp"))
         at = stamp * 1_000_000 if stamp is not None else self.clock_ns()
-        side = "both" if bid is not None and ask is not None else ("bid" if bid is not None else "ask")
+        side = (
+            "both" if bid is not None and ask is not None else ("bid" if bid is not None else "ask")
+        )
         self._events.append(Quote(market, at, bid, ask, side))
         self._bar(market, at, bid, ask)
 
@@ -933,7 +968,7 @@ class CTraderVenue:
         start = at - at % self.bar_ns
         building = self._building.get(market)
         if building is not None and start > building.start_ns:
-            if building.bid and building.ask:
+            if building.whole and building.bid and building.ask:
                 knowable = Instant.try_create(building.start_ns + self.bar_ns)
                 if not is_refusal(knowable):
                     self._events.append(
@@ -949,6 +984,7 @@ class CTraderVenue:
                 start,
                 [last.bid[-1]] if last is not None and last.bid else [],
                 [last.ask[-1]] if last is not None and last.ask else [],
+                whole=last is not None,
             )
             self._building[market] = building
         if bid is not None:
@@ -972,8 +1008,10 @@ class CTraderVenue:
             price = held.stop or held.entry
         order = _map(body.get("order"))
         stopped = order.get("orderType") == "STOP_LOSS_TAKE_PROFIT" and not held.closing
-        gap = held.stop is not None and stopped and (
-            price < held.stop if held.side is Side.LONG else price > held.stop
+        gap = (
+            held.stop is not None
+            and stopped
+            and (price < held.stop if held.side is Side.LONG else price > held.stop)
         )
         self._closed[name] = VenueClose(FillKind.STOP if stopped else FillKind.CLOSE, price, gap)
 
@@ -1031,7 +1069,7 @@ class CTraderVenue:
             self.venue_account.venue,
             self.venue_account,
             ticket.command.session_epoch,
-            ticket.command.ordinal,
+            ticket.command.ordering_ordinal,
             wire_params.value,
         )
         if is_refusal(command):
@@ -1053,7 +1091,11 @@ class CTraderVenue:
             return Ok(Sent(SubmissionOutcome.UNKNOWN))
         msg_id = encoded.value.client_msg_id
         while True:
-            found = api.wait(lambda frame: frame.name in _TRADES and _answers(frame, msg_id, tags.client_order_id))
+            found = api.wait(
+                lambda frame: (
+                    frame.name in _TRADES and _answers(frame, msg_id, tags.client_order_id)
+                )
+            )
             if is_refusal(found) or found.value is None:
                 return Ok(Sent(SubmissionOutcome.UNKNOWN))
             frame = found.value
@@ -1125,7 +1167,7 @@ class CTraderVenue:
             self.venue_account.venue,
             self.venue_account,
             ticket.command.session_epoch,
-            ticket.command.ordinal,
+            ticket.command.ordering_ordinal,
             CloseScope.INSTRUMENT_WITHIN_BINDING,
             str(held.position_id),
         )
@@ -1171,7 +1213,7 @@ class CTraderVenue:
             self.venue_account.venue,
             self.venue_account,
             ticket.command.session_epoch,
-            ticket.command.ordinal,
+            ticket.command.ordering_ordinal,
             amendment,
             str(held.position_id),
         )
@@ -1188,12 +1230,18 @@ class CTraderVenue:
         pushed = api.push(encoded.value.envelope)
         if is_refusal(pushed):
             return Ok(Sent(SubmissionOutcome.UNKNOWN))
-        found = api.wait(lambda frame: frame.name in _TRADES and frame.msg_id == encoded.value.client_msg_id)
+        found = api.wait(
+            lambda frame: frame.name in _TRADES and frame.msg_id == encoded.value.client_msg_id
+        )
         if is_refusal(found) or found.value is None:
             return Ok(Sent(SubmissionOutcome.UNKNOWN))
         if found.value.name == "ProtoOAOrderErrorEvent":
-            return Ok(Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, _error_word(found.value.body)))
-        stop = self._execution_price(_map(found.value.body.get("position")).get("stopLoss"), held.market_id)
+            return Ok(
+                Sent(SubmissionOutcome.REJECTED_BY_VENUE, None, _error_word(found.value.body))
+            )
+        stop = self._execution_price(
+            _map(found.value.body.get("position")).get("stopLoss"), held.market_id
+        )
         held.stop = stop if stop is not None else held.stop
         return Ok(Sent(SubmissionOutcome.ACCEPTED_BY_VENUE, held.stop))
 
@@ -1239,12 +1287,20 @@ class CTraderVenue:
             name = tags.client_order_id
             journal(
                 "send",
-                {"kind": "self_test", "label": tags.label, "market_id": market, "side": "long",
-                 "quantity": str(lots), "stop_points": stop_points},
+                {
+                    "kind": "self_test",
+                    "label": tags.label,
+                    "market_id": market,
+                    "side": "long",
+                    "quantity": str(lots),
+                    "stop_points": stop_points,
+                },
             )
             sent = self.send(Ticket(entry.value, market, Side.LONG, Decimal(0), lots, lots, tags))
             if is_refusal(sent) or sent.value.outcome is not SubmissionOutcome.ACCEPTED_BY_VENUE:
-                why = "refused" if is_refusal(sent) else (sent.value.code or sent.value.outcome.value)
+                why = (
+                    "refused" if is_refusal(sent) else (sent.value.code or sent.value.outcome.value)
+                )
                 return TestTrade(False, f"the test entry did not fill ({why})")
             journal("filled", {"price": str(sent.value.price)})
             stop = self.stop_of(name)
@@ -1267,8 +1323,12 @@ class CTraderVenue:
                 return TestTrade(False, "the venue did not close the test trade", stop=stop)
             journal("closed", {"price": str(done.price)})
             return TestTrade(
-                stop is not None, "placed, stop seen, closed" if stop is not None else "no stop seen",
-                stop=stop, entry=sent.value.price, exit=done.price, close_ms=took_ms,
+                stop is not None,
+                "placed, stop seen, closed" if stop is not None else "no stop seen",
+                stop=stop,
+                entry=sent.value.price,
+                exit=done.price,
+                close_ms=took_ms,
             )
 
     def held(self) -> Mapping[str, tuple[str, int, Decimal | None]]:

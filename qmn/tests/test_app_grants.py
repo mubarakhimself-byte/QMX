@@ -89,7 +89,10 @@ def grant(*, live: bool = False, access: str = "pair-1-a", refresh: str = "pair-
         "app-77",
         Tokens(Secret(access), Secret(refresh), NOW + 30 * 86_400 * 1_000_000_000),
         "SCOPE_TRADE",
-        (GrantAccount(4401, False, 5501, "ICM"), *((GrantAccount(4402, True, 5502, "ICM"),) if live else ())),
+        (
+            GrantAccount(4401, False, 5501, "ICM"),
+            *((GrantAccount(4402, True, 5502, "ICM"),) if live else ()),
+        ),
         NOW,
     )
 
@@ -184,7 +187,9 @@ def test_a_view_only_grant_over_a_live_account_is_kept() -> None:
     assert len(store.writes) == 1
 
 
-def test_a_refresh_stores_the_new_pair_before_the_old_is_let_go_and_a_second_refresher_waits() -> None:
+def test_a_refresh_stores_the_new_pair_before_the_old_is_let_go_and_a_second_refresher_waits() -> (
+    None
+):
     store = Recorded()
     store.held = grant().document()
     endpoint = Endpoint(
