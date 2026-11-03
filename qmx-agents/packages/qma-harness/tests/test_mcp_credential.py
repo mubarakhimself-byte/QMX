@@ -11,11 +11,11 @@ import logging
 import shutil
 from collections.abc import Awaitable, Callable, Iterator
 from pathlib import Path
-from typing import Any, override
+from typing import Any, cast, override
 
 import keyring
 import pytest
-from claude_agent_sdk import PermissionResultAllow
+from claude_agent_sdk import ClaudeAgentOptions, PermissionResultAllow
 from claude_agent_sdk.types import ToolPermissionContext
 from keyring.backend import KeyringBackend
 from keyring.errors import PasswordDeleteError
@@ -91,7 +91,7 @@ def launched(
     """Runs `body` on a harness whose control service holds the enabled ctrader row, whose
     Library holds a demo record for 41500001 and a live one for 41500002, and whose keyring
     holds `held` as qmx/ctrader-mcp."""
-    vault.set_password("qmx/ctrader-mcp", "ctrader-mcp", held)
+    vault.held["qmx/ctrader-mcp", "ctrader-mcp"] = held
     control = control_service(home)
     control.settings_put("mcp_servers", {"ctrader": {"url": url, "enabled": True}})
 
@@ -119,6 +119,12 @@ def files_holding(root: Path, value: str) -> list[str]:
     )
 
 
+def servers(options: ClaudeAgentOptions) -> dict[str, Any]:
+    found = options.mcp_servers
+    assert isinstance(found, dict)
+    return cast("dict[str, Any]", found)
+
+
 def connected_ctrader() -> list[dict[str, Any]]:
     tools = [{"name": f"mcp__ctrader__{tool}"} for tool in sorted(REMOTE_TOOLS)]
     return [{"name": "ctrader", "status": "connected", "tools": tools}]
@@ -138,7 +144,7 @@ def test_a_copilot_chat_on_a_demo_account_gets_the_header_and_no_file_or_log_hol
         chat = await harness.start_chat(NewChat(title="copilot", model="haiku"))
         await harness.send(chat, OperatorText("EURUSD's last H1 bar?"))
         [client] = FakeClient.made
-        assert dict(client.options.mcp_servers)["ctrader"] == {  # pyright: ignore[reportArgumentType]
+        assert servers(client.options)["ctrader"] == {
             "type": "http",
             "url": fake_url,
             "headers": {"Authorization": f"Bearer {DEMO}"},
@@ -168,7 +174,7 @@ def test_a_copilot_chat_on_any_other_account_starts_without_the_server_and_says_
         chat = await harness.start_chat(NewChat(title="copilot", model="haiku"))
         await harness.send(chat, OperatorText("EURUSD's last H1 bar?"))
         [client] = FakeClient.made
-        assert "ctrader" not in dict(client.options.mcp_servers)  # pyright: ignore[reportArgumentType]
+        assert "ctrader" not in servers(client.options)
         notes = [content["reason"] for kind, content in blocks(home, chat) if kind == "needs_you"]
         assert notes == [LEFT_OUT + why]
 
@@ -201,10 +207,8 @@ def test_a_workflow_step_naming_mcp_ctrader_gets_the_server_and_may_call_its_too
             FakeClient.servers = loads
             await harness.send(SessionId(chat), InjectedText("go"))
         named, unnamed = FakeClient.made
-        assert dict(named.options.mcp_servers)["ctrader"]["headers"] == {  # pyright: ignore[reportArgumentType, reportTypedDictNotRequiredAccess, reportUnknownMemberType]
-            "Authorization": f"Bearer {DEMO}"
-        }
-        assert "ctrader" not in dict(unnamed.options.mcp_servers)  # pyright: ignore[reportArgumentType]
+        assert servers(named.options)["ctrader"]["headers"] == {"Authorization": f"Bearer {DEMO}"}
+        assert "ctrader" not in servers(unnamed.options)
         assert await gate_says(named, "mcp__ctrader__get_trendbars") == "pass "
         asked = named.options.can_use_tool
         assert asked is not None

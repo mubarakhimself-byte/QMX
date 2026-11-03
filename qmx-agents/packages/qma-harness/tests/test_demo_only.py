@@ -14,6 +14,7 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
+
 from qma.harness.demo_only import NotOffered, demo_account
 from qma.harness.tools import VetCache, vet_mcp_servers
 
@@ -23,7 +24,12 @@ LIVE = "bearer-live-41500002"
 UNRECORDED = "bearer-unrecorded-41500003"
 UNBOUND = "bearer-unbound"
 EXPIRED = "bearer-expired"
-BOUND: Mapping[str, int | None] = {DEMO: 41500001, LIVE: 41500002, UNRECORDED: 41500003, UNBOUND: None}
+BOUND: Mapping[str, int | None] = {
+    DEMO: 41500001,
+    LIVE: 41500002,
+    UNRECORDED: 41500003,
+    UNBOUND: None,
+}
 RECORDS: Mapping[str, list[str]] = {"41500001": ["demo"], "41500002": ["live"]}
 REMOTE_TOOLS = frozenset(
     {
@@ -58,8 +64,14 @@ def fake_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     (folder / "accounts.json").write_text(json.dumps(BOUND), encoding="utf-8")
     port = folder / "port"
     server = subprocess.Popen(
-        [sys.executable, str(FAKE), "--accounts", str(folder / "accounts.json")]
-        + ["--port-file", str(port)]
+        [
+            sys.executable,
+            str(FAKE),
+            "--accounts",
+            str(folder / "accounts.json"),
+            "--port-file",
+            str(port),
+        ]
     )
     try:
         deadline = time.monotonic() + 60

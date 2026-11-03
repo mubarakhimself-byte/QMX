@@ -87,22 +87,24 @@ def test_the_ctrader_mcp_row_ships_off_and_keeps_its_vault_reference_and_venue(
 ) -> None:
     service = ControlService(tmp_path)
     assert service.settings_get("mcp_servers")["ctrader"] == CTRADER_OFF
-    pasted = {"url": "https://mcp.ctrader.test/remote/mcp", "enabled": True}
+    pasted: dict[str, Any] = {"url": "https://mcp.ctrader.test/remote/mcp", "enabled": True}
     service.settings_put("mcp_servers", {"ctrader": pasted})
     assert service.settings_get("mcp_servers")["ctrader"] == {**CTRADER_OFF, **pasted}
-    for invalid, code in (
+    invalid_rows: tuple[tuple[dict[str, Any], str], ...] = (
         ({"venue": "mt5"}, "invalid_settings"),
         ({"credential_ref": "qmx/other"}, "invalid_settings"),
         ({"url": "http://mcp.ctrader.test/mcp"}, "invalid_settings"),
         ({"url": "https://mcp.ctrader.test/mcp?key=do-not-save"}, "invalid_settings"),
         ({"enabled": "true"}, "invalid_settings"),
         ({"token": "do-not-save"}, "secret_ref_required"),
-    ):
+    )
+    for invalid, code in invalid_rows:
         with pytest.raises(ControlError) as refused:
             service.settings_put("mcp_servers", {"ctrader": invalid})
         assert refused.value.code == code
     service.settings_put("mcp_servers", {"ctrader": {"url": "http://127.0.0.1:8123/mcp"}})
-    assert service.settings_get("mcp_servers")["ctrader"]["url"] == "http://127.0.0.1:8123/mcp"
+    stored: dict[str, Any] = service.settings_get("mcp_servers")
+    assert stored["ctrader"]["url"] == "http://127.0.0.1:8123/mcp"
     assert "do-not-save" not in (tmp_path / "settings.toml").read_text()
 
 
