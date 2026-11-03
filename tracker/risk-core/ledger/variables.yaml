@@ -1,0 +1,870 @@
+# QMX risk-and-sizing variable ledger, v0 (3 Nov 2026).
+# Schema and rules: README.md beside this file. Check with check.py.
+# Generations: april (old vault), july (GitBook), sept_docs (docs/ and engine/base),
+# october (5-13 Oct sessions and risk lab), unit_build (stack d02af358), operator_words,
+# grounding and research (this session's G and R files).
+# A value in `default` has a source and a derivation. Placeholders and evidence-only
+# figures sit in `seen_values`.
+
+# ---------------------------------------------------------------- trade level
+
+- id: original_risk_r
+  name: R, one unit of the money a trade loses if its stop is hit
+  level: trade
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: 1
+  basis: reasoned
+  derivation: "By definition one R is the full planned loss at the stop, fixed when the trade is admitted (DEC-0076, AD-40). Every result is then stated as a multiple of it: -1 is a full loss, 0 is breakeven."
+  inputs: [stop_distance, risk_amount_usd]
+  affects:
+    - {id: excursion_mae_mfe_r, direction: either, how: "Every excursion and result is divided by the money at risk at entry."}
+    - {id: mean_loss_r, direction: either, how: "Loss sizes are counted in R, so the R definition sets what a full stop means."}
+  configurable: false
+  changed_by: [none]
+  status: running
+  sources:
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/registry/variables.yaml:460-469"}
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qmb/src/qmb/results/journal.py:397-418", note: "trade rows carry R"}
+  seed_ids: [B9]
+  aliases: [R, original_risk_unit, r_multiple, risk unit]
+  notes: "The unit build marks R undefined when a unit declares no price stop (r_missing). He has not accepted R fixed at entry: 'We shall see about that' (B9)."
+  open_questions:
+    - "Is R frozen at entry, or may it be re-based (he has not accepted the frozen version)?"
+    - "What is R for a unit with no price stop (fast invalidation only, time exit, grid)?"
+
+- id: risk_amount_usd
+  name: Money at risk on one trade if the stop is hit
+  level: trade
+  kind: size_output
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Unit build: equity used by the sizer times risk_fraction. April: current equity times the final risk percent after the six caps. Book world: requested_r times r_unit_price, frozen at entry (position_risk_amount)."
+  inputs: [sizing_equity_basis, risk_fraction, requested_r, r_unit_price]
+  affects:
+    - {id: lot_size, direction: up, how: "More money at risk means more lots for the same stop distance."}
+    - {id: original_risk_r, direction: either, how: "It is the money value of 1R for this trade."}
+    - {id: open_risk_at_stop, direction: up, how: "Each open trade adds its money at risk to the open-risk sum."}
+  configurable: false
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qml/src/qml/blocks/stdlib/fixed-fraction-at-stop/1/block.py:37-59"}
+    - {gen: april, ref: "C:/Users/Mubarak/Documents/Claude/QMX-discussion/02-Components/01-risk-and-sizing/01-canonical-formula.md:121"}
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/components/qmf-risk.md:149"}
+  aliases: [position_risk_amount, risk_cash, original_risk_amount, dollars at risk]
+  notes: "Reported in USD (his ruling). On $300 at 8.6 % per R one full stop is about $26 (October)."
+
+- id: requested_r
+  name: How many R the trade asks for (Book world)
+  level: trade
+  kind: size_input
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. July: the bot emits an intent in R. Docs: the bot may send an advisory proposed_r; the Book resolves requested_r. No rule for the value was ever written."
+  inputs: []
+  affects:
+    - {id: risk_amount_usd, direction: up, how: "Money at risk is requested_r times the price of one R."}
+  configurable: true
+  changed_by: [automatic]
+  status: docs_only
+  sources:
+    - {gen: july, ref: "C:/Users/Mubarak/Documents/QMX/raw/online/qmx-gitbook/captures/2026-07-18T141659Z/endpoints/llms-full.txt:1430"}
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/components/qmf-risk.md:93"}
+  aliases: [proposed_r]
+  notes: "Units size themselves in the unit build, so this belongs to the Book door, which stays in code beside the unit path (formats 1 and 2)."
+
+- id: stop_distance
+  name: Distance from entry to the protective stop
+  level: trade
+  kind: size_input
+  measure: pips_points_ticks
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Set by the unit's stop block. The placeholder puts the stop beyond the last swing plus stop_buffer and freezes it at entry. April: a bot-supplied distance in pips."
+  inputs: [stop_buffer]
+  affects:
+    - {id: lot_size, direction: down, how: "A wider stop needs fewer lots for the same money at risk."}
+    - {id: round_trip_cost_r, direction: down, how: "The same cost weighs less in R when the stop is wider."}
+    - {id: original_risk_r, direction: either, how: "The stop fixes where -1R sits."}
+  configurable: true
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qml/src/qml/blocks/stdlib/swing-stop-buffer/1/entry.json"}
+    - {gen: april, ref: "grounding/G3-old-system.md:107-108"}
+    - {gen: grounding, ref: "grounding/G11-ledger-exposure-exits-observability.md:182-188"}
+  seed_ids: [A10, A19]
+  aliases: [original_risk_distance, stop_pips, stop size]
+  notes: "A stop can be written in ATR multiples (measures.py) but no ATR stop block has code. MQL5 authors write stops in points far more than in ATR."
+  open_questions:
+    - "Which stop method per style: swing, ATR, fixed points, none (fast invalidation only)?"
+
+- id: stop_buffer
+  name: Extra room beyond the last swing point when placing the stop
+  level: trade
+  kind: other
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. The dummy unit's placeholder is 0.02 % of price with no reason."
+  seen_values:
+    - {value: 0.0002, gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qml/src/qml/unit/templates/dummy-trend-pullback.json:102", note: "origin placeholder"}
+  inputs: []
+  affects:
+    - {id: stop_distance, direction: up, how: "A bigger buffer widens the stop."}
+  configurable: true
+  changed_by: [operator]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qml/src/qml/unit/templates/dummy-trend-pullback.json:102"}
+  notes: "Exit setting. A unit number, fixed motion."
+
+- id: lot_size
+  name: Order size in lots sent to the venue
+  level: trade
+  kind: size_output
+  measure: "other: lots"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "lots = risk_amount_usd / (stop_distance x value_per_point), rounded down to lot_step; below min_lot the trade is skipped with a reason. April clamped up to the minimum lot instead (a silent oversize). The Book door refuses an inexact size rather than round."
+  inputs: [risk_amount_usd, stop_distance, value_per_point, lot_step, min_lot, max_lot, max_position_size_lots, leverage]
+  affects:
+    - {id: rounding_residue_r, direction: either, how: "Rounding down leaves a gap between planned and sent risk."}
+    - {id: margin_used, direction: up, how: "More lots use more margin."}
+  configurable: false
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qml/src/qml/blocks/stdlib/fixed-fraction-at-stop/1/block.py:37-59"}
+    - {gen: april, ref: "C:/Users/Mubarak/Documents/Claude/QMX-discussion/02-Components/01-risk-and-sizing/01-canonical-formula.md:146-159"}
+    - {gen: sept_docs, ref: "D:/QMX-worktrees/engine-base-read/qmn/src/qmn/order/door.py:298-313"}
+  aliases: [quantity, volume, position size]
+  notes: "The sent quantity must equal the sizer receipt after rounding (placeholder row 30, kept). On $300 the minimum lot often decides the size (G3 section 6)."
+  open_questions:
+    - "On small accounts: skip below the minimum lot, round to nearest, or allow a bounded oversize?"
+
+- id: rounding_residue_r
+  name: Risk lost or added by lot rounding, in R
+  level: trade
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Planned risk minus the risk of the rounded quantity, divided by planned risk. QMB computes it at the fill; the unit's sizer receipt hard-codes '0/1'."
+  inputs: [lot_size, risk_amount_usd]
+  affects: []
+  configurable: false
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "grounding/G8-unit-chassis-and-extensibility.md:73"}
+    - {gen: unit_build, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/build/RISK-SIZING-PLACEHOLDERS.md:28"}
+  notes: "The entry fills at the next bar's open while the size used the signal bar's price, so real risk also differs for that reason; the residue covers rounding only."
+
+- id: round_trip_cost_r
+  name: Round-trip trading cost expressed in R
+  level: trade
+  kind: cost
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Round-trip cost in money (spread + commission + slippage + carry for the hold) divided by the money at risk, which is the same as cost in price divided by stop distance. Shorter timeframes mean smaller stops, so the same cost weighs more in R."
+  seen_values:
+    - {value: 0.08, gen: october, ref: "C:/Users/Mubarak/Desktop/QMX/workroom/risk-lab-2026-10-05/ledger.md:59", note: "FX-like, synthetic test setting"}
+    - {value: 0.4, gen: october, ref: "C:/Users/Mubarak/Desktop/QMX/workroom/risk-lab-2026-10-05/ledger.md:59", note: "spot crypto stress; both systems went flat"}
+    - {value: 0.1, gen: october, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/RISK-SIZING-PACK.md:269", note: "cost added to a 0.35R fast-invalidation cut"}
+  inputs: [spread_cost, commission_cost, slippage_cost, swap_financing_cost, funding_cost, stop_distance]
+  affects:
+    - {id: expectancy_r, direction: down, how: "EV = p x W - (1 - p) x L - c."}
+    - {id: breakeven_win_rate, direction: up, how: "p* = (L + c) / (W + L)."}
+    - {id: viability_cost_fraction_max, direction: either, how: "The viability door compares this cost with the expected edge."}
+  configurable: false
+  changed_by: [automatic]
+  status: idea
+  sources:
+    - {gen: july, ref: "C:/Users/Mubarak/Documents/QMX/raw/online/qmx-gitbook/captures/2026-07-18T141659Z/endpoints/llms-full.txt:1355-1362"}
+    - {gen: grounding, ref: "grounding/G9-runtime-brakes-isolation-evidence.md:210"}
+  seed_ids: [A11, D17]
+  aliases: [c, cost per trade, round_trip_cost_R]
+  notes: "The sizer reads no cost today. His ruling: costs per market, instrument, timeframe and time must be known to the unit and feed Kelly (A11)."
+
+- id: spread_cost
+  name: Spread paid per round trip
+  level: trade
+  kind: cost
+  measure: pips_points_ticks
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Measured, never typed: from recorded bid and ask per venue, hour and session (docs plan). QMB backtests read bid and ask bars, so spread is in every run; synthetic spread for trade-only bars has no rates set."
+  inputs: []
+  affects:
+    - {id: round_trip_cost_r, direction: up, how: "A wider spread is a bigger cost per trade."}
+    - {id: sqs_score, direction: down, how: "SQS is the usual spread divided by the live spread."}
+  configurable: false
+  changed_by: [automatic]
+  status: built_not_running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qmb/src/qmb/execution/cost.py:10-13"}
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/components/qmb.md:87"}
+    - {gen: research, ref: "research/R2-trader-practice-windows-drift-isolation-breadth.md:21-22"}
+  seed_ids: [A11, D16]
+  notes: "QMB reads a cost profile per market for each of the 168 hours of the week; nothing writes one yet. FX spreads are narrowest in London hours and widest at 21:00-22:00 GMT (R2)."
+
+- id: commission_cost
+  name: Commission per lot or per notional
+  level: trade
+  kind: cost
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. No commission key exists on the instrument record. QMB has commission adapters (zero, percent of notional, per lot, notional with a minimum) with every rate deferred."
+  inputs: []
+  affects:
+    - {id: round_trip_cost_r, direction: up, how: "Commission adds to the round-trip cost."}
+  configurable: false
+  changed_by: [automatic]
+  status: built_not_running
+  sources:
+    - {gen: unit_build, ref: "grounding/G9-runtime-brakes-isolation-evidence.md:185-189"}
+    - {gen: sept_docs, ref: "grounding/G7-unit-inputs-qmb-mis-instruments.md:207"}
+  seed_ids: [A11]
+  open_questions:
+    - "Where does the commission figure come from per broker and account type, and who refreshes it?"
+
+- id: slippage_cost
+  name: Slippage between asked and filled price
+  level: trade
+  kind: cost
+  measure: pips_points_ticks
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Measurable now on demo from node order rows (fill minus stop plus its distance) and from reconcile rows; no script does it. Paper is zero by construction. QMB has a slippage catalogue (zero, constant percent, spread crossing, gap volatility, size tiered)."
+  inputs: []
+  affects:
+    - {id: round_trip_cost_r, direction: up, how: "Slippage adds to cost."}
+    - {id: cost_drift_multiple, direction: up, how: "Rising slippage is the fastest sign a unit is breaking."}
+  configurable: false
+  changed_by: [automatic]
+  status: built_not_running
+  sources:
+    - {gen: unit_build, ref: "grounding/G9-runtime-brakes-isolation-evidence.md:139-145"}
+    - {gen: sept_docs, ref: "grounding/G6-book-bms-levels-and-paper.md:288-293"}
+  seed_ids: [D13, A11]
+  notes: "Demo fills come from the broker's demo server, a weak stand-in for live fills. He asks whether slippage can be measured on demo (D13)."
+
+- id: swap_financing_cost
+  name: Overnight swap or financing on a held position
+  level: trade
+  kind: cost
+  measure: USD
+  applies_to: {classes: [fx, index, metal, energy, stock], styles: [intraday, swing], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Read from the instrument record (swap long, short, triple day) and booked as a cash event at its time; no rule uses it for size or timing."
+  inputs: []
+  affects:
+    - {id: round_trip_cost_r, direction: up, how: "Holding through rollover adds swap to the trade's cost."}
+  configurable: false
+  changed_by: [automatic]
+  status: built_not_running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/build/RISK-SIZING-PLACEHOLDERS.md:32"}
+    - {gen: grounding, ref: "grounding/G9-runtime-brakes-isolation-evidence.md:196"}
+  open_questions:
+    - "Does swap change size, or only timing (avoid holding through rollover)?"
+
+- id: funding_cost
+  name: Perpetual futures funding paid or received
+  level: trade
+  kind: cost
+  measure: USD
+  applies_to: {classes: [crypto], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Funding = position notional x funding rate at each funding time (every 8 hours on Binance; Hyperliquid has its own clock). Recorded as a cost at its time, no rule."
+  inputs: []
+  affects:
+    - {id: round_trip_cost_r, direction: either, how: "Funding can be paid or received, so it moves cost either way."}
+  configurable: false
+  changed_by: [automatic]
+  status: built_not_running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/build/RISK-SIZING-PLACEHOLDERS.md:32"}
+    - {gen: research, ref: "research/R3-edge-verification-and-analogues.md:295"}
+  notes: "In his words 'funding' means the money part of a unit, not perps funding (G2-19). This entry is perps funding."
+  open_questions:
+    - "Should units avoid funding times, or size down across them?"
+
+- id: gap_loss_beyond_stop
+  name: Loss beyond -1R when price gaps through the stop
+  level: trade
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "The stop fills at the first tradable price; the loss is recorded in R as it fell, never capped at 1R, and flagged gap_through_stop."
+  inputs: [stop_distance]
+  affects:
+    - {id: mean_loss_r, direction: up, how: "Gaps make the average loss bigger than the stop implies."}
+  configurable: false
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/build/RISK-SIZING-PLACEHOLDERS.md:29"}
+  seen_values:
+    - {value: 0.05, gen: october, ref: "C:/Users/Mubarak/Desktop/QMX/workroom/risk-lab-2026-10-05/ledger.md:58", note: "average slippage past a full stop in the synthetic test"}
+  open_questions:
+    - "Should the sizer treat gap risk (weekend, news) as extra risk?"
+
+- id: target_r
+  name: Take-profit distance as a multiple of R
+  level: trade
+  kind: other
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. The dummy unit's placeholder is 2R with no reason. April let the take-profit extend while continuation looked likely, with no hard cap."
+  seen_values:
+    - {value: 2, gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qml/src/qml/unit/templates/dummy-trend-pullback.json:103", note: "origin placeholder"}
+  inputs: []
+  affects:
+    - {id: average_win_r, direction: up, how: "A farther target makes wins bigger."}
+    - {id: win_rate, direction: down, how: "A farther target is reached less often."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qml/src/qml/unit/templates/dummy-trend-pullback.json:103"}
+  notes: "Exit setting."
+
+- id: max_hold_time
+  name: Longest a position may stay open before it is closed
+  level: trade
+  kind: other
+  measure: bars
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Unit build placeholder: close after 48 bars. Docs: a Book-declared force-flat when position age exceeds a declared duration, at rank 2; no value anywhere."
+  seen_values:
+    - {value: 48, gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qml/src/qml/unit/templates/dummy-trend-pullback.json:104", note: "origin placeholder"}
+  inputs: []
+  affects:
+    - {id: mean_loss_r, direction: either, how: "Time exits cut some losers early and some winners short."}
+    - {id: exit_reason_code, direction: either, how: "A time exit reads 'close' in the trade row, same as a fast-invalidation cut."}
+  configurable: true
+  changed_by: [operator]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qml/src/qml/unit/templates/dummy-trend-pullback.json:104"}
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/registry/variables.yaml:833-842"}
+    - {gen: july, ref: "grounding/G6-book-bms-levels-and-paper.md:87"}
+  aliases: [time_exit_bars, time_out_bars, hold_time_force_flat_trigger, hold-time force-flat]
+  notes: "Exit setting. The docs unify hold limits with no-overnight closes as one mechanism; the instant-based half is forced_flat_instant."
+
+- id: forced_flat_instant
+  name: A clock time at which open positions are closed (for example no overnight)
+  level: trade
+  kind: schedule
+  measure: "other: time of day in the market's zone"
+  applies_to: {classes: [all], styles: [intraday], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Docs: a Book may declare a force-flat at an instant from a named calendar identity. His seed: ORB never holds overnight. No value anywhere."
+  inputs: [day_boundary, session_windows]
+  affects:
+    - {id: swap_financing_cost, direction: down, how: "Closing before rollover avoids swap."}
+    - {id: gap_loss_beyond_stop, direction: down, how: "No overnight hold means no overnight gap."}
+  configurable: true
+  changed_by: [operator]
+  status: docs_only
+  sources:
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/registry/variables.yaml:833-842"}
+    - {gen: operator_words, ref: "STATE.md:110"}
+  aliases: [no-overnight, no_overnight_flat]
+  seed_ids: [D7]
+
+- id: fast_invalidation_cut_r
+  name: Size of a fast-invalidation cut, in R
+  level: trade
+  kind: other
+  measure: R
+  applies_to: {classes: [all], styles: [scalper], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. October called fast invalidation the foundation, a cut at about 0.35R; net of costs a 0.35R cut is a 0.45R loss. The lab's synthetic market cut losers at an average 0.25R. A docs scenario shows a -0.15R scratch. Must come from the exit's real path, never from hindsight."
+  seen_values:
+    - {value: 0.35, gen: october, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/research/17-grounding-history.md:408"}
+    - {value: 0.25, gen: october, ref: "C:/Users/Mubarak/Desktop/QMX/workroom/risk-lab-2026-10-05/ledger.md:57", note: "synthetic test"}
+    - {value: 0.15, gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/scenarios/SCN-0011-qualifying-loss-bench.md:38", note: "a scratch in a worked example"}
+  inputs: [fast_invalidation_trigger]
+  affects:
+    - {id: mean_loss_r, direction: up, how: "Bigger cuts raise the average loss toward a full stop."}
+    - {id: loss_points_total, direction: up, how: "Loss points count an FI cut by its size."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: idea
+  sources:
+    - {gen: october, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/RISK-SIZING-PACK.md:78"}
+    - {gen: october, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/RISK-SIZING-PACK.md:269"}
+    - {gen: grounding, ref: "grounding/G11-ledger-exposure-exits-observability.md:155-163"}
+    - {gen: operator_words, ref: "seeds/operator-words-2026-11-03.md:79"}
+  seed_ids: [A9, A28]
+  aliases: [FI cut, scratch]
+  notes: "Fast invalidation never existed in code in any generation. Every number shown so far ignored it (he pointed this out three times). In a ChatGPT synthetic sim the win rate fell from 55.2 % to 43.5 % with early invalidation (CFS:1340)."
+  open_questions:
+    - "Is fast invalidation a scalper-only exit, or does intraday get it too?"
+
+- id: fast_invalidation_trigger
+  name: When a fast-invalidation cut fires
+  level: trade
+  kind: other
+  measure: "other: rule"
+  applies_to: {classes: [all], styles: [scalper], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Never defined in any generation. Docs: a bot proposes close_full with a typed reason_code, 'the evidence half of fast invalidation', ranked 3 in the close-priority table. A September ChatGPT sim warned it must stay path-dependent, without hindsight."
+  inputs: []
+  affects:
+    - {id: fast_invalidation_cut_r, direction: either, how: "An earlier trigger means smaller cuts and more of them."}
+    - {id: win_rate, direction: down, how: "Cutting early turns some eventual winners into small losses."}
+    - {id: exit_reason_code, direction: either, how: "Needs its own reason code, or brakes cannot tell it apart."}
+  configurable: true
+  changed_by: [operator, agent_proposal]
+  status: idea
+  sources:
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/contracts/ct-23-risk-evaluation.yaml:24"}
+    - {gen: october, ref: "C:/Users/Mubarak/Downloads/Coding-formulas-strategies.md:1295"}
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qml/src/qml/catalogue/roles.py:30", note: "the invalidation role means 'wrong before entry', not an exit"}
+  seed_ids: [A9, A28]
+  aliases: [setup-invalidation exit, fast invalidation]
+
+- id: breakeven_trigger
+  name: Profit at which the stop moves to breakeven
+  level: trade
+  kind: other
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. April: once, at +1R, never trailing after. Docs: breakeven_ratchet_trigger per Book, blank, unit-kind declared per Book. The unit build runs no ratchet. His memory (M15): intraday kept a stop-to-breakeven 'depending on how much you are winning'; no source writes the intraday half."
+  seen_values:
+    - {value: 1, gen: april, ref: "C:/Users/Mubarak/Documents/Claude/QMX-discussion/02-Components/03-execution-safety-and-asymmetric-sl-tp.md:21", note: "spec value, thresholds never otherwise valued"}
+  inputs: []
+  affects:
+    - {id: mean_loss_r, direction: down, how: "More trades end at 0R instead of -1R."}
+    - {id: win_rate, direction: down, how: "Some trades that would have won are stopped at breakeven."}
+    - {id: circuit_breaker_strikes, direction: either, how: "A breakeven is a 0R loss unit; whether it counts toward the breaker was open in July."}
+  configurable: true
+  changed_by: [operator]
+  status: built_not_running
+  sources:
+    - {gen: april, ref: "C:/Users/Mubarak/Documents/Claude/QMX-discussion/02-Components/03-execution-safety-and-asymmetric-sl-tp.md:21"}
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/registry/variables.yaml:794-806"}
+    - {gen: sept_docs, ref: "D:/QMX-worktrees/bld-us-c13/qmn/src/qmn/capital/ratchet.py:1-7"}
+    - {gen: operator_words, ref: "seeds/operator-words-2026-11-03.md:97"}
+  seed_ids: [A10, A28]
+  aliases: [breakeven_ratchet_trigger, dynamic SL/TP, SLNTP, move-to-breakeven]
+  notes: "Exit setting. The April one-shot stop was chosen so the circuit breaker sees clean full stops."
+
+- id: breakeven_offset
+  name: Where the stop lands when it moves to breakeven
+  level: trade
+  kind: other
+  measure: pips_points_ticks
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. April: entry plus or minus the spread. Docs: breakeven_ratchet_offset per Book, blank, risk-non-increasing against the frozen original stop distance."
+  inputs: [spread_cost]
+  affects:
+    - {id: mean_loss_r, direction: down, how: "An offset past entry locks a small gain instead of a scratch."}
+  configurable: true
+  changed_by: [operator]
+  status: built_not_running
+  sources:
+    - {gen: april, ref: "C:/Users/Mubarak/Documents/Claude/QMX-discussion/02-Components/03-execution-safety-and-asymmetric-sl-tp.md:29-34"}
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/registry/variables.yaml:808-820"}
+  aliases: [breakeven_ratchet_offset]
+  notes: "MQL5 article 23755 does breakeven with spread compensation."
+
+- id: amend_min_improvement
+  name: Smallest stop improvement worth sending as an amendment
+  level: trade
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Docs: the ratchet's origination threshold inside the Book exit policy, an authoring rule, never a gate on the command path. Blank."
+  inputs: []
+  affects:
+    - {id: breakeven_trigger, direction: either, how: "Decides when the ratchet proposes the move."}
+  configurable: true
+  changed_by: [operator]
+  status: docs_only
+  sources:
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/registry/variables.yaml:997-1010"}
+
+- id: take_profit_extension_threshold
+  name: Continuation probability above which the take-profit is pushed further
+  level: trade
+  kind: other
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. April: the take-profit extends while in profit and the MIS continuation probability is above a threshold, with no hard cap. The threshold was never valued. Dropped in the September docs."
+  inputs: []
+  affects:
+    - {id: average_win_r, direction: up, how: "Letting winners run raises the average win."}
+  configurable: true
+  changed_by: [operator]
+  status: dropped
+  sources:
+    - {gen: april, ref: "C:/Users/Mubarak/Documents/Claude/QMX-discussion/02-Components/03-execution-safety-and-asymmetric-sl-tp.md:19"}
+    - {gen: april, ref: "C:/Users/Mubarak/Documents/Claude/QMX-discussion/outputs/sltp-authority-spec.md:113-117"}
+  seed_ids: [A28]
+  aliases: [trailing take profit, dynamic take-profit]
+  notes: "Exit setting. Part of the old dynamic SL/TP service his M15 hint refers to."
+
+- id: trailing_stop_setting
+  name: How a trailing or stepped stop follows profit
+  level: trade
+  kind: other
+  measure: "other: offset in price, share of profit, or profit steps"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Three blocks have code: offset-gated-trailing-stop (trails once profit passes an offset), profit-fraction-trailing-stop (trails at a share of profit), stepped-profit-stop (locks profit in steps). None trails in a unit today. His April code had a 'step stop' he describes loosely."
+  inputs: []
+  affects:
+    - {id: average_win_r, direction: either, how: "Trailing keeps part of a run but gives back some."}
+    - {id: mean_loss_r, direction: down, how: "A trailed stop turns some losers into small losses or scratches."}
+    - {id: circuit_breaker_strikes, direction: down, how: "April feared trailing would turn full stops into small losses and make the breaker fire late."}
+  configurable: true
+  changed_by: [operator]
+  status: built_not_running
+  sources:
+    - {gen: unit_build, ref: "grounding/G8-unit-chassis-and-extensibility.md:166-177"}
+    - {gen: april, ref: "C:/Users/Mubarak/Documents/Claude/QMX-discussion/07-Source-Material/gpt-trading-algorithm-research.md:1400"}
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/components/qmf-risk.md:103"}
+  aliases: [offset-gated-trailing-stop, profit-fraction-trailing-stop, stepped-profit-stop, step stop]
+  notes: "Exit setting. Docs left 'richer policies (trailing, laddered targets)' to later Book versions."
+
+- id: giveback_fraction
+  name: Share of peak open profit given back before closing
+  level: trade
+  kind: other
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. peak-holdings-giveback-exit has code and stays silent in a unit (per-bar exits are fed an empty input)."
+  inputs: []
+  affects:
+    - {id: average_win_r, direction: either, how: "Closes winners after a pullback from the peak."}
+  configurable: true
+  changed_by: [operator]
+  status: built_not_running
+  sources:
+    - {gen: unit_build, ref: "grounding/G8-unit-chassis-and-extensibility.md:173"}
+  aliases: [peak-holdings-giveback-exit, give-back from peak]
+
+- id: roi_table_target
+  name: Profit target that falls as the trade ages
+  level: trade
+  kind: other
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. roi-table-exit has code and stays silent in a unit. A time-varying target is one of the exit families this session owns."
+  inputs: []
+  affects:
+    - {id: average_win_r, direction: down, how: "Taking smaller profits on older trades lowers the average win."}
+    - {id: win_rate, direction: up, how: "Smaller late targets are hit more often."}
+  configurable: true
+  changed_by: [operator]
+  status: built_not_running
+  sources:
+    - {gen: unit_build, ref: "grounding/G8-unit-chassis-and-extensibility.md:174"}
+  aliases: [roi-table-exit, time-varying target]
+
+- id: unrealised_profit_cap
+  name: Open profit at which the position is closed
+  level: trade
+  kind: other
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. unrealised-profit-cap has code and stays silent in a unit."
+  inputs: []
+  affects:
+    - {id: average_win_r, direction: down, how: "Caps the size of any single win."}
+  configurable: true
+  changed_by: [operator]
+  status: built_not_running
+  sources:
+    - {gen: unit_build, ref: "grounding/G8-unit-chassis-and-extensibility.md:175"}
+  aliases: [unrealised-profit-cap, profit cap]
+
+- id: partial_close_fraction
+  name: Share of the position closed at each target (scale-out ladder)
+  level: trade
+  kind: other
+  measure: percent
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. The order format carries targets with fractions and close_partial; the runtime never sends it and the placeholders do not use it."
+  inputs: []
+  affects:
+    - {id: average_win_r, direction: either, how: "Banking part early lowers the big wins and raises the small ones."}
+  configurable: true
+  changed_by: [operator]
+  status: built_not_running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/build/RISK-SIZING-PLACEHOLDERS.md:26"}
+    - {gen: unit_build, ref: "grounding/G8-unit-chassis-and-extensibility.md:62-64"}
+  aliases: [close_partial, scale-out]
+
+- id: stop_widening_allowed
+  name: Whether a stop may ever be moved further from entry
+  level: trade
+  kind: limit
+  measure: "other: yes or no"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: false
+  basis: reasoned
+  derivation: "Every generation since July: amendments may tighten, never widen, because widening raises risk after the size was set. The unit build file says the risk session owns that law and may change it."
+  inputs: []
+  affects:
+    - {id: gap_loss_beyond_stop, direction: up, how: "Allowing widening would let losses run past the planned 1R."}
+  configurable: true
+  changed_by: [operator]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/packages/qmf-risk/src/qmf/risk/unit_intent.py:15-16"}
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/components/qmf-risk.md:93"}
+  aliases: [tighten never widen, amend_protection rule]
+
+- id: disaster_stop_distance
+  name: Wide broker-side stop kept under the working exit
+  level: trade
+  kind: limit
+  measure: pips_points_ticks
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. April: a wider broker-side hard stop sat under the working stop. October: Claude argued for a wide disaster stop when he called a scalper's stop loss irrelevant because of fast invalidation; never settled. Docs: a broker-side stop on every live order from placement."
+  inputs: []
+  affects:
+    - {id: gap_loss_beyond_stop, direction: down, how: "A broker-held stop caps the loss when the system is down."}
+  configurable: true
+  changed_by: [operator]
+  status: idea
+  sources:
+    - {gen: april, ref: "C:/Users/Mubarak/Documents/Claude/QMX-discussion/02-Components/09-kill-switch-authority.md:359-360"}
+    - {gen: october, ref: "grounding/G1-operator-sessions.md:77"}
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/components/qmf-risk.md:95"}
+  seed_ids: [A10, A28]
+  aliases: [hard stop, broker-side stop]
+
+- id: excursion_mae_mfe_r
+  name: Worst and best excursion of a trade, in R
+  level: trade
+  kind: measure
+  measure: R
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: formula
+  derivation: "Largest move against (MAE) and for (MFE) the position while open, divided by the money at risk. The unit's position surface carries both; the Library trade kind has mae_r but the journal row does not fill it."
+  inputs: [original_risk_r]
+  affects:
+    - {id: breaker_fire_density, direction: either, how: "WF3 read MAE and MFE drift beside breaker fires as decay evidence."}
+  configurable: false
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "grounding/G7-unit-inputs-qmb-mis-instruments.md:255"}
+    - {gen: april, ref: "grounding/G3-old-system.md:214"}
+  aliases: [MAE, MFE, mae_r, mfe_r]
+
+- id: exit_reason_code
+  name: Why a trade closed, as recorded on its trade row
+  level: trade
+  kind: evidence
+  measure: "other: code"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. The trade row keeps only exit_kind from QMB's fill kinds stop, target, close, liquidation, so a time exit, a signal exit and a fast-invalidation cut all read 'close'. Docs kept mechanism and outcome as separate fields."
+  inputs: []
+  affects:
+    - {id: loss_counting_rule, direction: either, how: "A brake can count fast-invalidation cuts differently only if the row says what closed the trade."}
+  configurable: false
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/bld-us-c13/qmb/src/qmb/results/journal.py:397-418"}
+    - {gen: sept_docs, ref: "C:/Users/Mubarak/Desktop/QMX/docs/scenarios/SCN-0011-qualifying-loss-bench.md:35-38"}
+  seed_ids: [A28, D49]
+  aliases: [exit_kind, reason_code]
+
+- id: min_lot
+  name: Smallest order the venue accepts for an instrument
+  level: trade
+  kind: limit
+  measure: "other: lots"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. A venue fact read into the instrument record. Fixtures: EURUSD 0.01 lot. Not a design number."
+  inputs: []
+  affects:
+    - {id: lot_size, direction: up, how: "Below the minimum the trade is skipped, so small accounts lose trades or must oversize."}
+  configurable: false
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "grounding/G7-unit-inputs-qmb-mis-instruments.md:188"}
+    - {gen: april, ref: "grounding/G3-old-system.md:234"}
+  seed_ids: [D16]
+  notes: "Instrument record fact. One sizing rule gives a tradable size in one class and nothing in another (R3: a Micro E-mini rounds to zero on $500)."
+
+- id: lot_step
+  name: Size increment the venue accepts
+  level: trade
+  kind: limit
+  measure: "other: lots"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. A venue fact read into the instrument record."
+  inputs: []
+  affects:
+    - {id: lot_size, direction: down, how: "Sizes are rounded down to the step."}
+    - {id: rounding_residue_r, direction: up, how: "A coarser step leaves more risk unrounded."}
+  configurable: false
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "grounding/G7-unit-inputs-qmb-mis-instruments.md:188"}
+  notes: "Instrument record fact."
+
+- id: max_lot
+  name: Largest order the venue accepts for an instrument
+  level: trade
+  kind: limit
+  measure: "other: lots"
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. A venue fact; the unit path refuses above it, the Book door has no live maximum."
+  inputs: []
+  affects:
+    - {id: lot_size, direction: down, how: "Caps the size."}
+  configurable: false
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "grounding/G7-unit-inputs-qmb-mis-instruments.md:217"}
+  notes: "Instrument record fact."
+
+- id: value_per_point
+  name: Money one lot gains or loses per unit of price
+  level: trade
+  kind: size_input
+  measure: USD
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. A venue fact with a value conversion and a 0.1 % cross-check. The placeholder sizer does no currency conversion."
+  inputs: []
+  affects:
+    - {id: lot_size, direction: down, how: "A bigger value per point needs fewer lots for the same risk."}
+  configurable: false
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "grounding/G7-unit-inputs-qmb-mis-instruments.md:186"}
+  seed_ids: [A17]
+  notes: "Instrument record fact. The quote currency can differ from the account's."
+
+- id: price_increment
+  name: Tick, pip and point definitions of an instrument
+  level: trade
+  kind: other
+  measure: pips_points_ticks
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Venue facts: digits, tick_size, pip with its source. A pips conversion without a pip definition is a checker error, so a stop cannot mean ten times what was intended on another market."
+  inputs: []
+  affects:
+    - {id: stop_distance, direction: either, how: "Converts a stop written in pips, points or ticks into price."}
+  configurable: false
+  changed_by: [automatic]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "grounding/G7-unit-inputs-qmb-mis-instruments.md:185"}
+    - {gen: unit_build, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/build/UNIT-PLAN.md:525"}
+  seed_ids: [A17, D16]
+  aliases: [tick_size, pip_size, point, digits]
+  notes: "Instrument record fact. Contract size (100,000 for an FX lot in the fixture, 100 oz for gold) sits with value_per_point."
+
+- id: liquidation_stop_check
+  name: Refusal of a stop that sits beyond the liquidation price
+  level: trade
+  kind: limit
+  measure: "other: yes or no"
+  applies_to: {classes: [crypto, futures, fx, index, metal, energy, stock], styles: [all], timeframes: all}
+  default: true
+  basis: reasoned
+  derivation: "A stop past the liquidation price would never fill, so the node refuses it at entry as a fact check (placeholder row 14)."
+  inputs: [leverage, margin_used]
+  affects:
+    - {id: lot_size, direction: down, how: "High leverage near liquidation forces a smaller size or a closer stop."}
+  configurable: false
+  changed_by: [none]
+  status: running
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/build/RISK-SIZING-PLACEHOLDERS.md:30"}
+
+- id: spread_cost_guard
+  name: Pre-order check of live spread against the unit's cost target
+  level: trade
+  kind: limit
+  measure: ratio
+  applies_to: {classes: [all], styles: [all], timeframes: all}
+  default: null
+  basis: open
+  derivation: "open. Planned as a local guard before every order (Level 0); not built."
+  inputs: [spread_cost, unit_cost_target]
+  affects:
+    - {id: trade_rate, direction: down, how: "Blocks entries while the spread is above the unit's target."}
+    - {id: round_trip_cost_r, direction: down, how: "Keeps expensive fills out."}
+  configurable: true
+  changed_by: [operator]
+  status: proposal
+  sources:
+    - {gen: unit_build, ref: "D:/QMX-worktrees/unit-plan/tracker/risk-sizing/architecture/level-0/ARCHITECTURE-SPINE.md:383"}
+    - {gen: grounding, ref: "grounding/G9-runtime-brakes-isolation-evidence.md:64"}

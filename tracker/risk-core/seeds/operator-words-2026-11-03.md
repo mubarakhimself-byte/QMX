@@ -144,3 +144,9 @@ Maybe portfolio optimization or portfolio sizing. As well as sculpting and load 
 ## M26, sent 2026-11-03 about 12:45 UTC, verbatim
 
 Oh, yeah. Don't forget that we're also looking at multiple instruments. You know, the fact that I'm even telling you, I'm the one correcting you, that you should be the one just knowing this is funny. As you are seeing now, why, like, the variables are so many. Okay, so multiple instruments lens is also key. multiple instruments across all these other guys, like portfolio, agents, trading styles, so on and so forth. You get the idea.
+
+---
+
+## M27, sent 2026-11-03 about 12:50 UTC, verbatim
+
+Oh my God, I'm even saying, you know, I'm just like nudging you based off the wording I'm seeing in your responses. So when you said 2026 papers, here's the thing. When you look at the financial or the trading perspective, the date of the papers isn't that much necessary, I would say. Okay, you can go back, you can go in the present, who knows, I don't really care. The update for the papers was specific towards agentic systems, because agents man change, SDKs grow. The same way a few months ago we had Opus 4.8, now we have Opus 5.5. That's what I mean. But in terms of just the other things of intraday trading systems, nah, dude, like those guys are very free.

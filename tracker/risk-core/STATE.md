@@ -107,6 +107,7 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
       4. agents for macro, micro and news, and how they interact with the risk variables;
       5. then the techniques.
       R4 and R5 both re-steered.
+    - M27: recency matters only for agent topics (tooling changes every few months); trading, portfolio, risk and market-structure research takes the strongest work from any year. R4 and R6 told.
     - The relaunched expansion gets a trading-lens layer first (X0, top-down: portfolio, then style and timeframe, then market structure), and the other layers hang off it.
 
 21. **M26: the multi-instrument lens cuts across every layer** (portfolio, styles, structure, agents, techniques). He had to remind the lead; it belongs in every brief from here on. R4 and R5 re-steered. The alphaXiv MCP is now signed in and works. **R6 started** (Opus): reads the papers themselves through the MCP, top-down and multi-instrument, checks the R4 assistant's claims, and saves kept papers to his library folder `qmx-risk-sizing` → `research/R6-alphaxiv-papers/` (`T-NN-*.md`, `R6-synthesis.md`). The relaunched expansion and the mixer must carry the instrument-class lens in every layer.
