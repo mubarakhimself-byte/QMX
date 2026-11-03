@@ -15,8 +15,8 @@ client order id and the positions by their label, and attributes each record
   stays UNKNOWN. A venue that lists no filled order, as cTrader's reconcile lists pending ones
   only, still shows the position: one open position with the order's label, market and side
   that no other order opened is the order's, under the venue's name, at every later run while
-  it stays open. The order reads absent
-  only when no such position is open, and two of them keep it UNKNOWN with an alarm.
+  it stays open. The order reads absent only when no such position is open, and two of them
+  keep it UNKNOWN with an alarm.
 - a twin or a foreign node's record stands the account down: no new entry, with an alarm.
 - a position that is not the node's is never touched and never adopted. It is shown as
   "not ours, protected", and an untagged one raises the ``not_ours`` alarm once.
