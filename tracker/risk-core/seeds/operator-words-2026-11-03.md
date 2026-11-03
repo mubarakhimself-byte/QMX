@@ -150,3 +150,9 @@ Oh, yeah. Don't forget that we're also looking at multiple instruments. You know
 ## M27, sent 2026-11-03 about 12:50 UTC, verbatim
 
 Oh my God, I'm even saying, you know, I'm just like nudging you based off the wording I'm seeing in your responses. So when you said 2026 papers, here's the thing. When you look at the financial or the trading perspective, the date of the papers isn't that much necessary, I would say. Okay, you can go back, you can go in the present, who knows, I don't really care. The update for the papers was specific towards agentic systems, because agents man change, SDKs grow. The same way a few months ago we had Opus 4.8, now we have Opus 5.5. That's what I mean. But in terms of just the other things of intraday trading systems, nah, dude, like those guys are very free.
+
+---
+
+## M28, sent 2026-11-03 about 12:55 UTC, verbatim
+
+also, like, there are things that are interesting. When you look at the MT5 articles, whether they're script or the ones on the web, regardless, there are things that I remember reading in these articles, because the way these guys write these papers, or the articles, they reference, they're like, markets tend to act as, let's say, a neural network, or markets tend to act as this. What does this say? It means that they are using methodologies that would work in a given sector and borrowing their logic. Elsewhere, I think MT5 articles bring this out. The ones I think in ML, I don't know. MT5. Let me see MT5. I haven't looked at the articles in so long. Even the script ones are like, serious. Let me see articles. You can go to the website. I really don't give a damn. It's also logged in right now in my browser. But if you look at these articles, these guys, especially if you're reading the ones that are in a series, you realize what they are trying to say. These guys link logic.

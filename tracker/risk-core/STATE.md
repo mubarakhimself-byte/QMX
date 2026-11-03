@@ -107,6 +107,7 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
       4. agents for macro, micro and news, and how they interact with the risk variables;
       5. then the techniques.
       R4 and R5 both re-steered.
+    - M28: MQL5 authors borrow logic from other fields ("markets act as a neural network"), clearest in multi-part series that link logic part to part. R5 told to add "Borrowed logic from other fields", reading whole series, local corpus only (the browser is busy with R4). The mql5.com site is also signed in in his browser if newer series are needed later.
     - M27: recency matters only for agent topics (tooling changes every few months); trading, portfolio, risk and market-structure research takes the strongest work from any year. R4 and R6 told.
     - The relaunched expansion gets a trading-lens layer first (X0, top-down: portfolio, then style and timeframe, then market structure), and the other layers hang off it.
 
