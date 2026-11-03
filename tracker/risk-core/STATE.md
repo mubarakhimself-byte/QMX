@@ -187,6 +187,12 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
     - The QMX **Lab** (designed in `LAB/LLD.md`, unbuilt per G8 §6.2: a seven-slot pod with allocator, caps and guards) and **MCPs** must be able to use the risk template without rework. Simulating it, comparing variants, agents reading risk state and proposing through MCP tools: all of that stays out of the order path.
     - Stage B briefs must carry this (X1 template shape, X7 agents). The lead may add his own ideas there.
 
+32. **Stage A progress.** Both committed so far:
+    - A1 sizing and allocation: 174 components, 18 unit seeds.
+    - A2 brakes, drift and exits: 270 components, 11 unit seeds. "Live in another field" evidence means grids, SRE and trials, not trading.
+    Both covered R4 up to chat-29 except chat-02 (breadth, partly) and chat-15 (stress); those go to the top-up pass. Gaps both flagged: fast invalidation has no paper; exits evidence is weak; only 6 brake components rest on a fair control; class isolation is untested; money-based brakes are unsimulated; energy and single stocks are thin; pooling across instruments is unbacked.
+    **R8 started** (Opus, alphaXiv MCP plus the built-in browser): stop-loss literature (Kaminski-Lo, trailing stops), fast invalidation and early exits, stress scenarios, energy instruments, pooling across instruments → `research/R8-gap-topup.md`. Its components go in through the top-up pass with R4's remainder.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
