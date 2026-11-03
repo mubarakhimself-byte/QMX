@@ -174,6 +174,54 @@ def test_a_ctrader_partial_fill_is_held_and_killed_at_the_deal_filled_volume(
 
 
 @dataclass
+class TwoDealCTrader(binding.FakeCTrader):
+    """The fake demo broker, filling each entry in two deals: ``ORDER_PARTIAL_FILL`` for
+    300000, then ``ORDER_FILLED`` for the rest, the position growing to the order's volume."""
+
+    def _on_ProtoOANewOrderReq(self, msg_id: str, body: dict[str, object]) -> None:
+        lose, self.lose_answers = self.lose_answers, 1
+        super()._on_ProtoOANewOrderReq(msg_id, body)
+        self.lose_answers = lose
+        held = self.held[self._next]
+        full = held.volume
+        held.volume = 300_000
+        self._execution("ORDER_ACCEPTED", held, "POSITION_STATUS_OPEN", held.price, "MARKET", msg_id)
+        self._deal("ORDER_PARTIAL_FILL", held, 300_000, msg_id)
+        held.volume = full
+        self._deal("ORDER_FILLED", held, full - 300_000, msg_id)
+
+    def _deal(self, kind: str, held: binding.Held, volume: int, msg_id: str) -> None:
+        self._execution(kind, held, "POSITION_STATUS_OPEN", held.price, "MARKET", msg_id)
+        frame = self.codec.decode(self._out.pop())
+        body = dict(frame.value.body)  # type: ignore[union-attr]
+        body["deal"] = {**body["deal"], "filledVolume": volume}  # type: ignore[dict-item]
+        self._say("ProtoOAExecutionEvent", body, msg_id)
+
+
+def test_a_ctrader_entry_filled_in_two_deals_is_killed_at_the_whole_position_volume(
+    tmp_path: Path,
+) -> None:
+    broker = TwoDealCTrader(binding.codec())
+    rig = binding.bound_rig(tmp_path, broker=broker)
+    binding.signed_in(rig)
+    binding.bind(rig)
+    binding.deploy_dummy(rig)
+    at = binding.play_until_sent(rig)
+    binding.play_spots(rig, at, at + BAR)
+    held = {position: h.volume for position, h in broker.held.items()}
+    killed = rig.node.call("kill", {"op_id": "op-kill", "level": "RED", "scope": "all"})
+    binding.play_spots(rig, at + BAR, at + 2 * BAR)
+
+    assert held == {9001: 400_000}
+    assert value(killed) == {"level_in_force": "RED"}
+    assert binding.closes(rig) == [
+        {"ctidTraderAccountId": "4401", "positionId": "9001", "volume": "400000"}
+    ]
+    assert broker.held == {}
+    binding.runtime(rig).stop()
+
+
+@dataclass
 class PartlyFillingHyperliquid(hyperliquid.FakeHyperliquid):
     """The fake Hyperliquid, filling an entry's IOC order at ``fill`` only."""
 

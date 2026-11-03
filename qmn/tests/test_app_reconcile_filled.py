@@ -135,6 +135,33 @@ def test_a_ctrader_position_found_by_label_keeps_its_position_id_and_the_kill_cl
     binding.runtime(rig).stop()
 
 
+def test_a_ctrader_position_found_by_label_still_reads_as_the_node_own_after_a_reconnect(
+    tmp_path: Path,
+) -> None:
+    broker = HistoryOutOfReach(binding.codec())
+    rig = binding.bound_rig(tmp_path, broker=broker)
+    binding.signed_in(rig)
+    binding.bind(rig)
+    broker.lose_answers = 1
+    binding.deploy_dummy(rig)
+    at = binding.play_until_sent(rig)
+    binding.play_spots(rig, at, at + BAR)
+    feed = next(iter(binding.runtime(rig).venues.values())).feed
+    feed._drop("the session closed")  # pyright: ignore[reportPrivateUsage]
+    binding.play_spots(rig, at + BAR, at + 3 * BAR)
+    reconciled = binding.node_rows(rig, "reconcile")
+
+    assert feed.reconnects == 1
+    assert [(r["why"], r.get("stand_down")) for r in reconciled] == [
+        ("start", None),
+        ("unknown", None),
+        ("reconnect", None),
+    ]
+    assert reconciled[2]["positions"] == [{**binding.FIRST_ENTRY_ROW, "position": "9001"}]
+    assert binding.runtime(rig).alarms == []
+    binding.runtime(rig).stop()
+
+
 def test_two_positions_with_the_order_label_keep_it_unknown_with_an_alarm_and_send_nothing(
     tmp_path: Path,
 ) -> None:
