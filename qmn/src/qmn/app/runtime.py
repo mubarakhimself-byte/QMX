@@ -1671,6 +1671,7 @@ class Runtime:
         self._thread: threading.Thread | None = None
         self._shown: dict[str, str] = {}
         self._target = Target()
+        self.board = BoardFeed(context.data / BOARD_FEED, clock_ns)
         self.paused_by_black = False
         self.reconciler = Reconciler(
             journal, context.journal_root, context.standing().tag, clock_ns, self.alarms.append
@@ -1686,7 +1687,6 @@ class Runtime:
             on_alarm=self.alarms.append,
         )
         self._paper_journal: JournalWriter | None = None
-        self.board = BoardFeed(context.data / BOARD_FEED, clock_ns)
 
     # --- the thread ---
 
