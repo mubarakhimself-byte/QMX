@@ -109,6 +109,8 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
       R4 and R5 both re-steered.
     - The relaunched expansion gets a trading-lens layer first (X0, top-down: portfolio, then style and timeframe, then market structure), and the other layers hang off it.
 
+21. **M26: the multi-instrument lens cuts across every layer** (portfolio, styles, structure, agents, techniques). He had to remind the lead; it belongs in every brief from here on. R4 and R5 re-steered. The alphaXiv MCP is now signed in and works. **R6 started** (Opus): reads the papers themselves through the MCP, top-down and multi-instrument, checks the R4 assistant's claims, and saves kept papers to his library folder `qmx-risk-sizing` → `research/R6-alphaxiv-papers/` (`T-NN-*.md`, `R6-synthesis.md`). The relaunched expansion and the mixer must carry the instrument-class lens in every layer.
+
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
 The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
