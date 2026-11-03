@@ -22,7 +22,10 @@ Text the node took from outside (a stand-down's cause, a heal's error) is quoted
 - `lookback_h` (24): how far back kill rises, protection alarms and heals count.
 - `stand_down_days` (30): how far back a stand-down still held is found.
 - `heartbeat_stale_after_s` (120): when a node's heartbeat is late. The host beats every 30 s.
-- `nodes`: the node machines to watch; every node seen by default.
+- `nodes`: the node machines to watch; every node seen by default. A node named here, or one
+  whose tail file This PC keeps, is watched even when it wrote nothing in the windows, so its
+  late heartbeat still reads Alarm.
+- `quote_chars` (500): how much of a node's outside text is quoted before an ellipsis.
 
 The cron runs every 5 minutes in UTC. Missed runs follow the trigger's catch-up setting; the gauge needs none, because the next run reads the same journal.
 

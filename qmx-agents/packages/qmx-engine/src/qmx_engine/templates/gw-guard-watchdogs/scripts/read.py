@@ -4,7 +4,12 @@ no node anything.
 Inputs, all optional, each a card setting with its default in `definition.json`: `nodes` (machine
 names; every node seen by default), `here` (this machine's place name, `pc` on This PC),
 `lookback_h` (how far back kill rises, protection alarms and heals count), `stand_down_days` (how
-far back a stand-down still held is found) and `heartbeat_stale_after_s`.
+far back a stand-down still held is found), `heartbeat_stale_after_s` and `quote_chars` (how much
+of a node's outside text is quoted before an ellipsis).
+
+The machines watched are every node in `nodes`, every server node whose tail file This PC keeps,
+every node with a row in the windows, and this machine when the trading node app beats here, so a
+quiet node that goes silent is still heard missing.
 
 It reads three things, each a read:
 
@@ -80,29 +85,34 @@ def journalled(kind, since):
 
 
 def tailed():
-    """The node rows each tail file holds, timed by the writer's own `ts_write`."""
-    found = []
+    """The node rows each tail file holds, timed by the writer's own `ts_write`, and the nodes the
+    tail files are kept for."""
+    found, kept_for = [], set()
     folder = home / "records" / "tail"
     for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
         try:
             kept = json.loads(path.read_text("utf-8"))
         except OSError, ValueError:
             continue
+        if isinstance(kept, dict) and isinstance(kept.get("node"), str):
+            kept_for.add(kept["node"])
         for record in kept.get("rows", []) if isinstance(kept, dict) else []:
             if not isinstance(record, dict) or record.get("stream") != "node":
                 continue
             written = record.get("ts_write")
             if isinstance(written, int) and not isinstance(written, bool):
                 found.append(row(stamp(written // 1_000_000), record))
-    return found
+    return found, kept_for
 
 
 def marked(text):
-    return {"text": " ".join(str(text or "").split()), "marked": MARK}
+    words = " ".join(str(text or "").split())
+    cap = int(asked["quote_chars"])
+    return {"text": words if len(words) <= cap else words[:cap] + "...", "marked": MARK}
 
 
 def said(text):
-    return json.dumps(marked(text)["text"])
+    return json.dumps(text)
 
 
 try:
@@ -113,7 +123,8 @@ except ValueError as refused:
     print(f"[QMX_FAILURE] {refused}")
     raise SystemExit(0) from None
 seen = {r["record_id"] for r in rows if r["record_id"]}
-for found in tailed():
+tail_rows, tail_nodes = tailed()
+for found in tail_rows:
     reach = held_back if found["kind"] == "stand_down" else lookback
     fresh = found["record_id"] not in seen and instant(found["at"]) >= now - reach
     if fresh and found["kind"] in ("stand_down", *LOOKBACK_KINDS):
@@ -122,10 +133,10 @@ for found in tailed():
 rows.sort(key=lambda r: (r["at"], str(r["record_id"])))
 beats = latest(home)
 
-machines = {r["machine"] for r in rows if isinstance(r["machine"], str)}
+wanted = set(asked.get("nodes") or [])
+machines = {r["machine"] for r in rows if isinstance(r["machine"], str)} | tail_nodes | wanted
 if f"app:{NODE_APP}" in beats:
     machines.add(here)
-wanted = set(asked.get("nodes") or [])
 machines = sorted(m for m in machines if not wanted or m in wanted)
 
 
@@ -247,9 +258,12 @@ def line(cause):
             )
         case "heal":
             state = "is healing now" if cause["healing"] else "healed"
+            wait = "no back-off"
+            if cause["backoff_ms"] is not None:
+                wait = f"back-off {cause['backoff_ms']} ms"
             return (
                 f"The runtime failed at {cause['at']} and {state} (restart {cause['restart']}, "
-                f"back-off {cause['backoff_ms']} ms). It said {said(cause['why']['text'])}."
+                f"{wait}). It said {said(cause['why']['text'])}."
             )
         case _:
             if cause["last_at"] is None:

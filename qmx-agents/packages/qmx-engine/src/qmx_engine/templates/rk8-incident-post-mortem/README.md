@@ -20,6 +20,8 @@ Text the node took from outside (a cause, an error, a reason) is marked `qmx.mar
 - `node`: one node machine; every node by default.
 - `lookback_h` (24): how far back an incident is looked for.
 - `around_min` (30): the minutes either side of the incident the timeline holds.
+  When the node was back is looked for from the incident up to `at`, however long it took.
+- `quote_chars` (500): how much of a node's outside text is quoted before an ellipsis.
 
 The cron runs at 00:50 UTC, after the 00:00 UTC day close (WF-04). Missed runs follow the trigger's catch-up setting; reviews catch up once (WF-14).
 

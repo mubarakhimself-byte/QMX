@@ -1892,6 +1892,53 @@ def test_the_watcher_quotes_a_nodes_outside_text_and_alarms_on_a_late_heartbeat_
     assert [t for t, _ in landed(home) if t == "proposal-card"] == []
 
 
+@pytest.mark.parametrize("inputs", [{"nodes": ["vps1"]}, None])
+def test_the_watcher_alarms_on_a_quiet_server_node_whose_host_went_silent(
+    home: Path, inputs: dict[str, Any] | None
+) -> None:
+    row = {
+        "subject": "host", "id": "vps1", "at": (NOON - timedelta(hours=2)).isoformat(),
+        "cpu_seconds": 1.0, "rss_bytes": 1, "machine_minutes": 1.0, "qmx_version": "0",
+        "kinds_digest": "x", "paused": False, "node_kinds": ["trading-node"],
+    }  # fmt: skip
+    (home / "logs").mkdir(parents=True, exist_ok=True)
+    (home / "logs" / "heartbeat-latest.json").write_text(json.dumps({"host:vps1": row}), "utf-8")
+    (home / "records" / "tail").mkdir(parents=True, exist_ok=True)
+    tail = json.dumps({"node": "vps1", "rows": []})
+    (home / "records" / "tail" / "vps1.json").write_text(tail, "utf-8")
+
+    report, _ = slow_run(home, GW, inputs, clock=Clock(NOON))
+
+    assert report.status == "passed", report.reason
+    assert [m["text"] for t, m in landed(home) if t == "note"] == [
+        "vps1 reads Alarm. No heartbeat from host:vps1 since 2025-01-02T10:00:00+00:00.\n\n"
+        "Nothing was pressed: the watcher reads and tells, and only you act."
+    ]
+
+
+def test_the_watcher_says_no_back_off_for_a_stuck_process_and_caps_outside_text(
+    home: Path,
+) -> None:
+    beat(home, NOON)
+    heal = [
+        (600, node_row("node_lifecycle", 1, {
+            "event": "stop", "what": "runtime", "restart": 2,
+            "why": f"exit_record: stuck {INJECTION}",
+        })),
+        (601, node_row("node_lifecycle", 2, {"event": "start", "what": "runtime", "restart": 2})),
+    ]  # fmt: skip
+    journal(home, "node", "q1", "node_lifecycle", heal)
+
+    report, _ = slow_run(home, GW, {"quote_chars": 20}, clock=Clock(NOON))
+
+    assert report.status == "passed", report.reason
+    assert [m["text"] for t, m in landed(home) if t == "note"] == [
+        "pc reads Watch. The runtime failed at 2025-01-02T10:00:00.000Z and healed (restart 2, "
+        'no back-off). It said "exit_record: stuck I...".\n\nNothing was pressed: the watcher '
+        "reads and tells, and only you act."
+    ]
+
+
 HEAL_DAY = [
     (480, node_row("node_lifecycle", 1, {
         "event": "stop", "what": "runtime", "restart": 1, "backoff_ms": 1000,
@@ -1928,6 +1975,25 @@ def test_the_post_mortem_names_what_restarted_why_and_when_with_receipts(home: P
     assert (note["text"], note["author"], note["proposal"]) == (
         POST_MORTEM["text"], "agent:rk8-incident-post-mortem", True,
     )  # fmt: skip
+
+
+def test_the_post_mortem_finds_a_stand_down_that_cleared_long_after_it_started(
+    home: Path,
+) -> None:
+    rows = [
+        (480, node_row("stand_down", 1, stale_feed("start"))),
+        (540, node_row("stand_down", 2, stale_feed("clear"))),
+    ]
+    journal(home, "node", "q1", "stand_down", rows)
+    note = {"title": "pc", "text": "pc stopped new entries on a stale feed.", "receipts": ["read"]}
+
+    report, printed = slow_run(
+        home, RK8, {"at": "2025-01-02T12:00:00Z"}, {"You write QMX's incident": note}
+    )
+
+    assert report.status == "passed", report.reason
+    incident = printed["read"]["findings"]["incident"]
+    assert (incident["back_at"], incident["back_after_ms"]) == ("2025-01-02T09:00:00.000Z", 3600000)
 
 
 def test_a_post_mortem_that_repeats_a_number_from_the_nodes_outside_text_lands_nothing(

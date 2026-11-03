@@ -4,12 +4,14 @@ it. Zero tokens, and it asks no node anything.
 Inputs, all optional, each a card setting with its default in `definition.json`: `node` (one
 machine; every node by default), `at` (an ISO instant: the newest incident at or before it; the
 run's clock by default), `lookback_h` (how far back before `at` an incident is looked for) and
-`around_min` (the minutes either side of it the timeline holds).
+`around_min` (the minutes either side of it the timeline holds) and `quote_chars` (how much of a
+node's outside text is quoted before an ellipsis).
 
 An incident is a heal of the node's runtime (a `node_lifecycle` `stop` row with `what: runtime`),
 a stand-down's start, a kill switch rise above GREEN or a protection alarm. The script finds the
 newest, then names what restarted or stopped, when, the node's own why, and when it was back:
-the runtime's next `start` row for a heal, the stand-down's `clear` row for a stand-down. The
+the runtime's next `start` row for a heal, the stand-down's `clear` row for a stand-down, each
+looked for from the incident up to `at`, however long it took. The
 timeline is every lifecycle, stand-down, kill, protection and reconcile row of that machine
 inside the window, and the order rows are counted. Durations are whole milliseconds between two
 rows' own times.
@@ -42,6 +44,7 @@ if asked.get("at"):
     at = datetime.fromisoformat(str(asked["at"]).replace("Z", "+00:00")).astimezone(UTC)
 lookback = timedelta(hours=float(asked["lookback_h"]))
 around = timedelta(minutes=float(asked["around_min"]))
+cap = int(asked["quote_chars"])
 
 
 def instant(text):
@@ -51,9 +54,14 @@ def instant(text):
 def facts(body):
     """The body with every outside text marked, so its words are data and its digits no receipt."""
     return {
-        name: {"text": " ".join(str(value).split()), "marked": MARK} if name in TEXT else value
+        name: {"text": quoted(value), "marked": MARK} if name in TEXT else value
         for name, value in body.items()
     }
+
+
+def quoted(value):
+    words = " ".join(str(value).split())
+    return words if len(words) <= cap else words[:cap] + "..."
 
 
 def read(kinds, start, end):
@@ -122,7 +130,11 @@ else:
     orders = read(("order",), started - around, started + around)
     body = chosen["body"]
     incident = {"id": chosen["id"], "at": chosen["at"], "node": machine, "kind": chosen["kind"]}
-    after = [r for r in timeline if r["at"] > chosen["at"]]
+    after = [
+        r
+        for r in read(("node_lifecycle", "stand_down"), started, at + timedelta(milliseconds=1))
+        if r["machine"] == machine and r["at"] > chosen["at"]
+    ]
     if chosen["kind"] == "node_lifecycle":
         back = next(
             (

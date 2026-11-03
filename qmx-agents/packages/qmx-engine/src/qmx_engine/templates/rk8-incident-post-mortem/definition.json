@@ -8,7 +8,8 @@
       "node": {"type": "string", "description": "one node machine; every node by default"},
       "at": {"type": "string", "description": "an ISO instant: the newest incident at or before it is explained; the run's clock by default"},
       "lookback_h": {"type": "number", "default": 24, "description": "hours before `at` an incident is looked for"},
-      "around_min": {"type": "number", "default": 30, "description": "minutes either side of the incident the timeline holds"}
+      "around_min": {"type": "number", "default": 30, "description": "minutes either side of the incident the timeline holds"},
+      "quote_chars": {"type": "number", "default": 500, "description": "characters of a node's outside text quoted before an ellipsis"}
     }
   },
   "outputs": {
