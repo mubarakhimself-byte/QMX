@@ -532,16 +532,23 @@ class TokenEndpoint:
 @dataclass
 class Grants:
     """The node's grant: read from its store, kept only by the live rule, refreshed by one
-    refresher with store before discard."""
+    refresher with store before discard.
+
+    The node is the store's only writer, so the grant is read once and then held in memory.
+    ``stored`` is the node's own record that it ever kept a grant; until it says so the store
+    is never read, so a node that never signed in never touches Credential Manager."""
 
     store: GrantStore
     endpoint: TokenEndpoint
     trading_profile: Callable[[], bool]
     clock_ns: Callable[[], int]
     gate: RotationGate = field(default_factory=RotationGate)
+    stored: Callable[[], bool] = lambda: True
+    remember: Callable[[bool], None] = lambda _kept: None
     _memory: Grant | None = None
-    """A refreshed grant the store refused: cTrader killed the old pair, so this one is used
-    until the store takes it."""
+    """The grant as the node holds it. A refreshed grant the store refused stays here, since
+    cTrader killed the old pair, until the store takes it."""
+    _read: bool = False
 
     @property
     def ref(self) -> SecretRef:
@@ -551,11 +558,11 @@ class Grants:
     def held(self) -> Grant | None:
         """The grant now, after the live rule: a held live-capable grant on a host out of the
         trading profile is deleted and reads as none (AD-307)."""
-        if self._memory is not None:
-            found: Grant | None = self._memory
-        else:
+        if not self._read and self.stored():
             raw = self.store.read()
-            found = None if raw is None else Grant.parse(raw)
+            self._memory = None if raw is None else Grant.parse(raw)
+            self._read = True
+        found = self._memory
         if found is not None and found.live_capable and not self.trading_profile():
             self.discard()
             return None
@@ -570,12 +577,14 @@ class Grants:
             self.store.write(grant.document())
         except OSError as error:
             return _refused("grant_not_stored", f"{self.store.name}: {error}")
-        self._memory = None
+        self._memory, self._read = grant, True
+        self.remember(True)
         return Ok(grant)
 
     def discard(self) -> None:
-        self._memory = None
+        self._memory, self._read = None, True
         self.store.delete()
+        self.remember(False)
 
     def refresh(self, app: Registration) -> Result[Grant]:
         """A new pair for the held grant. A second refresher while one is in flight is refused.

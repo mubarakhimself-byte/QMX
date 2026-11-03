@@ -273,6 +273,8 @@ KILL_LATENCY_OK_MS: Final = 2_000
 """`[node] kill_latency_ok_ms`, starting at 2,000 ms: the test trade's reduce-only close, the
 kill switch's own act, answers within this. A labelled placeholder for the risk session."""
 SIGNED_IN: Final = "signed_in"
+GRANT_KEPT: Final = "grant.ctrader.kept"
+"""The node's own record that it kept a cTrader grant; the grant store is read only after."""
 
 DoorFactory: TypeAlias = "Callable[[Store, Path], CTraderDoor]"
 
@@ -400,6 +402,8 @@ class CTraderDoor:
                 endpoint,
                 lambda: trading_profile(facts),
                 clock_ns,
+                stored=lambda: store.observed(GRANT_KEPT) is True,
+                remember=lambda kept: store.observe(GRANT_KEPT, kept, clock_ns()),
             ),
             endpoint=endpoint,
             open_wire=lambda _host: FramedWire.open(host, port=port, tls=endpoints.tls),

@@ -416,7 +416,12 @@ def codec() -> Codec:
 
 
 def bound_rig(
-    root: Path, *, live_account: bool = False, profile: bool = False, lifetime_s: int = 2_628_000
+    root: Path,
+    *,
+    live_account: bool = False,
+    profile: bool = False,
+    lifetime_s: int = 2_628_000,
+    grant: str | None = None,
 ) -> Bound:
     """A node on ``root`` with its cTrader door over the fakes, its runtime not started."""
     now = [base.LIVE_FROM - base.DAY]
@@ -424,6 +429,7 @@ def bound_rig(
     fake = FakeCTrader(codec(), live_account=live_account)
     tokens = Tokens(lifetime_s)
     memory = Memory()
+    memory.held = grant
     made: list[CTraderDoor] = []
 
     def door(store: Store, data: Path) -> CTraderDoor:
@@ -545,7 +551,7 @@ def test_a_fake_sign_in_binds_a_demo_account_and_the_venue_reads_ready(tmp_path:
     assert json.loads(cast(str, rig.grants.held))["accounts"] == [
         {"broker": "ICM", "ctid": 4401, "is_live": False, "login": 5501}
     ]
-    rig.node.runtime.stop()  # type: ignore[union-attr]
+    runtime(rig).stop()
 
 
 def test_the_self_test_lands_its_five_checks_ok_on_the_passport(tmp_path: Path) -> None:
@@ -585,7 +591,7 @@ def test_the_self_test_lands_its_five_checks_ok_on_the_passport(tmp_path: Path) 
         if row["kind"] == "order"
     ]
     assert [row["step"] for row in rows] == ["send", "filled", "close", "closed"]
-    rig.node.runtime.stop()  # type: ignore[union-attr]
+    runtime(rig).stop()
 
 
 def test_the_dummy_trades_through_the_ctrader_binding_with_its_stop_at_the_venue(
@@ -614,7 +620,14 @@ def test_the_dummy_trades_through_the_ctrader_binding_with_its_stop_at_the_venue
     venue = cast(CTraderVenue, runtime.venues[ACCOUNT].client)
     orders = [body for name, body in rig.fake.received if name == "ProtoOANewOrderReq"]
     closes = [body for name, body in rig.fake.received if name == "ProtoOAClosePositionReq"]
-    trades = base.unit_rows(cast("base.Rig", rig), "trade")  # type: ignore[arg-type]
+    trades = [
+        cast("dict[str, Json]", row["body"])
+        for row in cast(
+            "list[dict[str, Json]]",
+            value(rig.node.call("journal_tail", {"streams": ["unit"]}))["rows"],
+        )
+        if row["kind"] == "trade"
+    ]
 
     assert value(deployed)["state"] == "accepted"
     assert [(o["tradeSide"], o["volume"], o["relativeStopLoss"]) for o in orders] == [
@@ -649,7 +662,7 @@ def test_a_grant_that_can_trade_live_money_is_discarded_and_binds_nothing(tmp_pa
     }
     assert rig.grants.held is None
     assert (refused["ok"], refused["code"]) == (False, "not_signed_in")
-    assert ACCOUNT not in cast("object", rig.node.runtime).venues  # type: ignore[attr-defined]
+    assert ACCOUNT not in runtime(rig).venues
 
 
 def test_an_expired_grant_reads_expired_and_the_self_test_cannot_trade(tmp_path: Path) -> None:
@@ -689,30 +702,22 @@ def test_a_bound_session_refreshes_its_grant_and_authorises_again_with_the_new_p
     assert json.loads(cast(str, rig.grants.held))["access_token"] == "fake-a2"
     assert auths == ["fake-a1", "fake-a2"]
     assert ctrader_row(rig)["session"] == "ready"
-    rig.node.runtime.stop()  # type: ignore[union-attr]
+    runtime(rig).stop()
 
 
 def test_a_restart_binds_again_the_account_he_bound(tmp_path: Path) -> None:
     rig = bound_rig(tmp_path)
     signed_in(rig)
     bind(rig)
-    rig.node.runtime.stop()  # type: ignore[union-attr]
+    runtime(rig).stop()
     held = rig.grants.held
 
-    again = bound_rig(tmp_path)
-    again.grants.held = held
-    again.door.attach(
-        cast("object", again.node.runtime),  # type: ignore[arg-type]
-        cast("object", again.node.journal),  # type: ignore[arg-type]
-        tag="a4dqobyh",
-        machine="pc",
-        boot_epoch="e2",
-    )
+    again = bound_rig(tmp_path, grant=held)
     tick_quotes(again)
 
-    assert sorted(cast("object", again.node.runtime).venues) == [ACCOUNT]  # type: ignore[attr-defined]
+    assert sorted(runtime(again).venues) == [ACCOUNT]
     assert ctrader_row(again)["session"] == "ready"
-    again.node.runtime.stop()  # type: ignore[union-attr]
+    runtime(again).stop()
 
 
 class NoCredentialManager:
@@ -778,7 +783,7 @@ def test_under_the_shadow_stage_the_node_reads_no_grant_and_binds_nothing(
             row["session"]
             for row in cast("list[dict[str, Json]]", value(node.call("status", {}))["venues"])
         ]
-        venues = dict(cast("object", node.runtime).venues)  # type: ignore[attr-defined]
+        venues = dict(node.runtime.venues) if node.runtime is not None else None
     finally:
         node.stop()
 
